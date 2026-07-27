@@ -12,7 +12,7 @@ their boundary.
 |-------|------|--------|
 | 1 | Full bleed | Done — `444a836` |
 | 2 | Component data model | Done — `bdd4d01`, `80831c0` |
-| 3 | Single-pass renderer | Done — `<pending>` |
+| 3 | Single-pass renderer | Done — `de91249` |
 | 4 | Editor as developer tool | Not started |
 | 5 | Speed estimation | Not started |
 
