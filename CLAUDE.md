@@ -177,6 +177,19 @@ These cost real time to rediscover:
   sum a few neighbours instead. Every term derived from the cell index still has
   to be gated by `inRange`, or phantom unlit cells appear outside the gauge.
   Both of these have been fixed once already.
+- **A sampled data texture carries data in RGB only, normalised to [0, 1].**
+  Three separate traps, each of which silently produces a plausible-looking
+  wrong render rather than an error:
+  - *Alpha is not a data channel.* Pixel formats are premultiplied, so a value
+    stored in alpha comes back scaled — and a texel whose alpha happens to be 0
+    returns nothing at all. Always write 1.0 there. Three floats per texel.
+  - *The range is clamped even though the format is float.* `rgbaFloat32` keeps
+    full precision inside [0, 1] but pins anything outside it, so a width of
+    1.035 reads back as 1.0 and a type id of 2 reads back as 1. Store scaled,
+    and offset anything signed.
+  - *Values do not survive exactly.* A count of 3 comes back very slightly
+    above 3, so `k >= count` draws one item too many. Compare against a rounded
+    count.
 - **Halo width has to scale with feature size.** `halo()` is tuned for digit
   segments and its falloff is in design units, so reusing it on anything finer
   sums a dozen digit-sized lobes into one blown-out blob. The unit legends

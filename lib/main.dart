@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import 'model/dashboard.dart';
+import 'model/dev_design.dart';
+import 'model/placement.dart';
 import 'vfd/speed_source.dart';
 import 'vfd/vfd_cluster.dart';
 import 'vfd/vfd_widgets.dart';
@@ -45,8 +48,11 @@ class ClusterPage extends StatefulWidget {
 
 class _ClusterPageState extends State<ClusterPage>
     with SingleTickerProviderStateMixin {
-  late final VfdController _controller =
-      VfdController(vsync: this, maxKph: 260);
+  late final VfdController _controller = VfdController(
+    vsync: this,
+    dashboard: Dashboard.forkFrom(developmentPreset(), id: 'dev'),
+    orientation: DesignOrientation.landscape,
+  );
   final SimulatedSpeedSource _sim = SimulatedSpeedSource();
   StreamSubscription<double>? _sub;
   bool _autoDrive = true;
