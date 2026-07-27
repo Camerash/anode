@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'component_instance.dart';
 import 'component_type.dart';
+import 'design.dart';
 import 'placement.dart';
 import 'settings.dart';
 
@@ -11,28 +12,45 @@ const int kSchemaVersion = 1;
 /// A shipped design: immutable, versioned, and never edited in place. Editing
 /// one forks it into a [Dashboard].
 @immutable
-class DesignPreset {
+class DesignPreset implements Design {
   DesignPreset({
     required this.id,
     required this.name,
     required this.version,
     required Set<DesignOrientation> supportedOrientations,
     required List<ComponentInstance> components,
+    Map<DesignOrientation, double>? frameAspects,
     this.defaults = const DashboardSettings(),
   })  : supportedOrientations =
             Set<DesignOrientation>.unmodifiable(supportedOrientations),
-        components = List<ComponentInstance>.unmodifiable(components);
+        components = List<ComponentInstance>.unmodifiable(components),
+        frameAspects =
+            normaliseFrameAspects(supportedOrientations, frameAspects);
 
+  @override
   final String id;
+  @override
   final String name;
   final int version;
+  @override
   final Set<DesignOrientation> supportedOrientations;
+  @override
   final List<ComponentInstance> components;
+  final Map<DesignOrientation, double> frameAspects;
   final DashboardSettings defaults;
 
+  @override
+  DashboardSettings get renderSettings => defaults;
+
+  @override
   bool supports(DesignOrientation orientation) =>
       supportedOrientations.contains(orientation);
 
+  @override
+  double frameAspect(DesignOrientation orientation) =>
+      frameAspects[orientation] ?? kDefaultFrameAspects[orientation]!;
+
+  @override
   List<ComponentInstance> componentsIn(DesignOrientation orientation) =>
       components.where((c) => c.appearsIn(orientation)).toList();
 
@@ -43,6 +61,7 @@ class DesignPreset {
         'version': version,
         'supportedOrientations':
             supportedOrientations.map((o) => o.name).toList(),
+        'frameAspects': frameAspectsToJson(frameAspects),
         'components': components.map((c) => c.toJson()).toList(),
         'defaults': defaults.toJson(),
       };
@@ -52,6 +71,7 @@ class DesignPreset {
         name: json['name'] as String? ?? '',
         version: (json['version'] as num?)?.toInt() ?? 1,
         supportedOrientations: parseOrientations(json['supportedOrientations']),
+        frameAspects: parseFrameAspects(json['frameAspects']),
         components: parseComponents(json['components']),
         defaults: DashboardSettings.fromJson(
             (json['defaults'] as Map?)?.cast<String, Object?>() ??

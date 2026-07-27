@@ -23,6 +23,10 @@ DesignPreset developmentPreset() {
       DesignOrientation.landscape,
       DesignOrientation.portrait,
     },
+    frameAspects: const <DesignOrientation, double>{
+      DesignOrientation.landscape: 2.6,
+      DesignOrientation.portrait: 1 / 2.6,
+    },
     components: <ComponentInstance>[
       ComponentInstance(
         id: 'speed',

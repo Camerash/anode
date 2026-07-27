@@ -203,7 +203,7 @@ class _Harness extends StatefulWidget {
 class _HarnessState extends State<_Harness> with SingleTickerProviderStateMixin {
   late final VfdController _controller = VfdController(
     vsync: this,
-    dashboard: widget.dashboard,
+    design: widget.dashboard,
   )
     // Both bars fully lit, and the optical layers that would add noise to a
     // luminance profile turned off.

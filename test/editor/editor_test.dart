@@ -1,0 +1,159 @@
+import 'package:anode/editor/editor_canvas.dart';
+import 'package:anode/editor/editor_page.dart';
+import 'package:anode/model/dashboard.dart';
+import 'package:anode/model/dev_design.dart';
+import 'package:anode/model/placement.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('canvas fits authored aspect for each orientation', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorPage(dashboard: dashboard, onChanged: (_) {}),
+      ),
+    );
+
+    expect(_canvasAspect(tester), closeTo(2.6, 0.001));
+    await tester.tap(find.text('portrait'));
+    await tester.pump();
+    expect(_canvasAspect(tester), closeTo(1 / 2.6, 0.001));
+  });
+
+  testWidgets('phone landscape keeps canvas and component tools side by side', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(874, 402);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorPage(
+          dashboard: dashboard,
+          forkedFrom: 'development scaffold',
+          onChanged: (_) {},
+        ),
+      ),
+    );
+
+    final canvasRight =
+        tester.getTopRight(find.byKey(const ValueKey('editor-canvas'))).dx;
+    final toolsLeft = tester.getTopLeft(find.text('Components')).dx;
+    expect(toolsLeft, greaterThan(canvasRight));
+  });
+
+  testWidgets('drag and resize update displayed orientation only', (
+    tester,
+  ) async {
+    var dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    late StateSetter rebuild;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              rebuild = setState;
+              return Center(
+                child: SizedBox(
+                  width: 780,
+                  height: 300,
+                  child: EditorCanvas(
+                    dashboard: dashboard,
+                    orientation: DesignOrientation.landscape,
+                    selectedId: 'speed',
+                    onSelect: (_) {},
+                    onPlacementChanged: (id, placement) {
+                      final component = dashboard.components.firstWhere(
+                        (value) => value.id == id,
+                      );
+                      rebuild(() {
+                        dashboard = dashboard.withComponent(
+                          component.withPlacement(
+                            DesignOrientation.landscape,
+                            placement,
+                          ),
+                        );
+                      });
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    final portraitBefore =
+        dashboard.components.first.placements[DesignOrientation.portrait];
+    await tester.drag(
+      find.byKey(const ValueKey('canvas-speed')),
+      const Offset(30, -15),
+    );
+    await tester.pump();
+
+    var landscape =
+        dashboard.components.first.placements[DesignOrientation.landscape]!;
+    expect(landscape.offset.dx, closeTo(0.1, 0.01));
+    expect(landscape.offset.dy, closeTo(0.16, 0.01));
+    expect(
+      dashboard.components.first.placements[DesignOrientation.portrait],
+      same(portraitBefore),
+    );
+
+    await tester.drag(
+      find.byKey(const ValueKey('resize-width')),
+      const Offset(30, 0),
+    );
+    await tester.pump();
+
+    landscape =
+        dashboard.components.first.placements[DesignOrientation.landscape]!;
+    expect(landscape.size!.width, closeTo(1.235, 0.01));
+    expect(landscape.size!.height, closeTo(0.588, 0.001));
+  });
+
+  testWidgets('add menu is generated from component registry', (tester) async {
+    var dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorPage(
+          dashboard: dashboard,
+          onChanged: (value) => dashboard = value,
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Add component'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Outside temperature'));
+    await tester.pumpAndSettle();
+
+    expect(
+      dashboard.components.where((value) => value.typeId == 'outsideTemp'),
+      hasLength(1),
+    );
+    expect(find.text('Parameters'), findsOneWidget);
+    expect(find.text('celsius'), findsOneWidget);
+  });
+}
+
+double _canvasAspect(WidgetTester tester) {
+  final size = tester.getSize(find.byKey(const ValueKey('editor-canvas')));
+  return size.width / size.height;
+}

@@ -216,6 +216,11 @@ user and never auto-updated. This is copy-on-customize. Do not implement
 delta-merging against updated presets — it sounds more elegant and causes pain
 forever.
 
+Presets remain code-owned and never enter user storage. Dashboards, the active
+design reference, and global settings are persisted through `shared_preferences`.
+Editor drag writes are debounced so pointer movement does not write on every
+event.
+
 ### Capabilities
 
 Every component type declares what it needs: GPS, accelerometer, barometer,
@@ -232,6 +237,11 @@ gets its own AUTHORED layout — never a reflow of the other. Lock to supported
 orientations while a design is active. Within an orientation, absorb the aspect
 ratio spread (18:9 through iPad 4:3) with anchor-plus-offset positioning, not
 absolute coordinates.
+
+The authored frame aspect is also per orientation and lives on the design. It is
+not inferred from the device and is not one global ratio reused after rotation.
+Payloads written before this was expressible receive tolerant development
+defaults on read.
 
 ### Three settings levels
 
@@ -346,6 +356,40 @@ The editor canvas is the one place a visible frame edge is correct. Everywhere
 else an edge breaks the illusion; here you are authoring the frame, so you have
 to see where it ends. The canvas holds the target orientation's aspect
 regardless of the window shape, and scales to fit.
+
+The developer editor represents components as plain bounding boxes. It does not
+embed component shaders or create per-component raster surfaces. The selected
+box is painted last inside editor chrome only so its resize handles remain
+reachable; this does not change the component list or runtime z-order.
+
+### Model findings from the developer editor
+
+The editor exists to expose these. Keep unresolved findings visible rather than
+special-casing controls around them:
+
+- **Resolved during Stage 4:** a design could not express the authored frame
+  aspect. `frameAspects` now stores it per orientation on presets and dashboards.
+- **Unresolved:** params are global to a component id. Only placement varies by
+  orientation. A three-digit landscape readout and two-digit portrait readout
+  therefore require two component ids with mutually exclusive placements.
+- **Confirmed acceptable for current faces:** runtime z-order remains component
+  list order. Editor reordering edits that list globally; it did not need a
+  separate layer field or a per-orientation order. If overlapping instrument
+  geometry becomes a real design requirement, revisit this decision.
+- **Unresolved metadata gap:** `ParamSpec` can choose a generic control, but
+  cannot declare human-facing labels for option values, numeric step/precision,
+  or a unit suffix. The developer editor therefore exposes raw option tokens and
+  generic numeric formatting. Do not add bespoke controls; extend the schema
+  when production editor copy requires it.
+- **Unresolved tube-level gap:** filament wires are renderer-global constants
+  around the old digit locus. The component model cannot express tube geometry,
+  so moving digits exposes the mismatch. Filaments must not be attached to a
+  digit component; future design-level tube geometry should describe their
+  frame-wide placement.
+- `outsideTemp`, `phoneBattery`, and `altitude` are expressible and editable as
+  component data, but the current shader intentionally skips them. This is a
+  renderer coverage gap, not a reason to hardcode or remove them from the
+  registry.
 
 ## Performance and battery
 

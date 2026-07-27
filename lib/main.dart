@@ -3,9 +3,13 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
-import 'model/dashboard.dart';
+import 'app_state.dart';
+import 'data/design_repository.dart';
+import 'library/library_page.dart';
+import 'model/component_type.dart';
 import 'model/dev_design.dart';
 import 'model/placement.dart';
 import 'vfd/speed_source.dart';
@@ -18,29 +22,58 @@ Future<void> main() async {
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   await WakelockPlus.enable();
   final program = await ui.FragmentProgram.fromAsset('shaders/vfd.frag');
-  runApp(AnodeApp(program: program));
+  final repository = DesignRepository(await SharedPreferences.getInstance());
+  final state = AnodeState.load(
+    repository: repository,
+    presets: [developmentPreset()],
+  );
+  runApp(AnodeApp(program: program, state: state));
 }
 
-class AnodeApp extends StatelessWidget {
-  const AnodeApp({super.key, required this.program});
+class AnodeApp extends StatefulWidget {
+  const AnodeApp({
+    super.key,
+    required this.program,
+    required this.state,
+  });
 
   final ui.FragmentProgram program;
+  final AnodeState state;
 
+  @override
+  State<AnodeApp> createState() => _AnodeAppState();
+}
+
+class _AnodeAppState extends State<AnodeApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Anode',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(useMaterial3: true),
-      home: ClusterPage(program: program),
+      home: ClusterPage(program: widget.program, state: widget.state),
+      routes: <String, WidgetBuilder>{
+        '/library': (context) => LibraryPage(state: widget.state),
+      },
     );
+  }
+
+  @override
+  void dispose() {
+    widget.state.dispose();
+    super.dispose();
   }
 }
 
 class ClusterPage extends StatefulWidget {
-  const ClusterPage({super.key, required this.program});
+  const ClusterPage({
+    super.key,
+    required this.program,
+    required this.state,
+  });
 
   final ui.FragmentProgram program;
+  final AnodeState state;
 
   @override
   State<ClusterPage> createState() => _ClusterPageState();
@@ -48,11 +81,7 @@ class ClusterPage extends StatefulWidget {
 
 class _ClusterPageState extends State<ClusterPage>
     with SingleTickerProviderStateMixin {
-  late final VfdController _controller = VfdController(
-    vsync: this,
-    dashboard: Dashboard.forkFrom(developmentPreset(), id: 'dev'),
-    orientation: DesignOrientation.landscape,
-  );
+  late final VfdController _controller;
   final SimulatedSpeedSource _sim = SimulatedSpeedSource();
   StreamSubscription<double>? _sub;
   bool _autoDrive = true;
@@ -62,6 +91,13 @@ class _ClusterPageState extends State<ClusterPage>
   @override
   void initState() {
     super.initState();
+    _controller = VfdController(
+      vsync: this,
+      design: widget.state.activeDesign,
+      orientation: DesignOrientation.landscape,
+    );
+    _syncAppState();
+    widget.state.addListener(_syncAppState);
     _sub = _sim.kph.listen((v) {
       if (_autoDrive) _controller.speedKph = v;
     });
@@ -70,10 +106,19 @@ class _ClusterPageState extends State<ClusterPage>
 
   @override
   void dispose() {
+    widget.state.removeListener(_syncAppState);
     _sub?.cancel();
     _sim.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _syncAppState() {
+    _controller
+      ..design = widget.state.activeDesign
+      ..layers = widget.state.globalSettings.layers
+      ..phosphor = widget.state.activeDesign.renderSettings.phosphor;
+    if (mounted) setState(() {});
   }
 
   @override
@@ -153,6 +198,24 @@ class _ClusterPageState extends State<ClusterPage>
                   autoDrive: _autoDrive,
                   manualKph: _manualKph,
                   onAutoDriveChanged: (v) => setState(() => _autoDrive = v),
+                  onUnitChanged: (unit) =>
+                      widget.state.updateActiveComponentParam(
+                    ComponentTypes.speedDigits,
+                    'unit',
+                    unit.name,
+                  ),
+                  onPhosphorChanged: (phosphor) =>
+                      widget.state.updateActiveSettings(
+                    widget.state.activeDesign.renderSettings.copyWith(
+                      phosphorName: phosphor.name,
+                    ),
+                  ),
+                  onOpenLibrary: () =>
+                      Navigator.of(context).pushNamed<void>('/library'),
+                  onLayersChanged: (layers) =>
+                      widget.state.updateGlobalSettings(
+                    widget.state.globalSettings.copyWith(layers: layers),
+                  ),
                   onManualKphChanged: (v) => setState(() {
                     _autoDrive = false;
                     _manualKph = v;

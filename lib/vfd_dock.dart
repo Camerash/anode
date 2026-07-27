@@ -17,6 +17,10 @@ class VfdDock extends StatefulWidget {
     required this.manualKph,
     required this.onAutoDriveChanged,
     required this.onManualKphChanged,
+    required this.onUnitChanged,
+    required this.onPhosphorChanged,
+    required this.onOpenLibrary,
+    required this.onLayersChanged,
   });
 
   /// Height of the controls themselves, excluding the system inset below them.
@@ -27,6 +31,10 @@ class VfdDock extends StatefulWidget {
   final double manualKph;
   final ValueChanged<bool> onAutoDriveChanged;
   final ValueChanged<double> onManualKphChanged;
+  final ValueChanged<SpeedUnit> onUnitChanged;
+  final ValueChanged<Phosphor> onPhosphorChanged;
+  final VoidCallback onOpenLibrary;
+  final ValueChanged<VfdLayers> onLayersChanged;
 
   @override
   State<VfdDock> createState() => _VfdDockState();
@@ -85,12 +93,18 @@ class _VfdDockState extends State<VfdDock> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: <Widget>[
+                    _slot(VfdButton(
+                      label: 'LIBRARY',
+                      palette: palette,
+                      onTap: widget.onOpenLibrary,
+                    )),
+                    _slot(VfdRule(palette: palette)),
                     for (final u in SpeedUnit.values)
                       _slot(VfdButton(
                         label: u.label,
                         palette: palette,
                         lit: controller.unit == u,
-                        onTap: () => setState(() => controller.unit = u),
+                        onTap: () => widget.onUnitChanged(u),
                       )),
                     _slot(VfdRule(palette: palette)),
                     for (final p in Phosphor.all)
@@ -98,7 +112,7 @@ class _VfdDockState extends State<VfdDock> {
                         label: p.name,
                         palette: palette,
                         lit: controller.phosphor == p,
-                        onTap: () => setState(() => controller.phosphor = p),
+                        onTap: () => widget.onPhosphorChanged(p),
                       )),
                     _slot(VfdRule(palette: palette)),
                     for (final key in VfdLayers.keys)
@@ -106,10 +120,12 @@ class _VfdDockState extends State<VfdDock> {
                         label: VfdLayers.labels[key]!,
                         palette: palette,
                         lit: controller.layers[key],
-                        onTap: () => setState(
-                          () => controller.layers = controller.layers
-                              .withKey(key, !controller.layers[key]),
-                        ),
+                        onTap: () {
+                          final layers = controller.layers
+                              .withKey(key, !controller.layers[key]);
+                          setState(() => controller.layers = layers);
+                          widget.onLayersChanged(layers);
+                        },
                       )),
                   ],
                 ),

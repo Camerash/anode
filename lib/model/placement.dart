@@ -17,6 +17,45 @@ enum DesignOrientation {
   }
 }
 
+/// Development defaults for payloads written before frame aspects were stored.
+///
+/// New designs author both values explicitly. Keeping tolerant defaults lets
+/// existing dashboards survive the additive schema change.
+const Map<DesignOrientation, double> kDefaultFrameAspects =
+    <DesignOrientation, double>{
+      DesignOrientation.portrait: 1 / 2.6,
+      DesignOrientation.landscape: 2.6,
+    };
+
+Map<DesignOrientation, double> normaliseFrameAspects(
+  Set<DesignOrientation> supported,
+  Map<DesignOrientation, double>? raw,
+) => Map<DesignOrientation, double>.unmodifiable(<DesignOrientation, double>{
+  for (final orientation in supported)
+    orientation: switch (raw?[orientation]) {
+      final value? when value.isFinite && value > 0 => value,
+      _ => kDefaultFrameAspects[orientation]!,
+    },
+});
+
+Map<String, Object?> frameAspectsToJson(
+  Map<DesignOrientation, double> aspects,
+) => <String, Object?>{
+  for (final entry in aspects.entries) entry.key.name: entry.value,
+};
+
+Map<DesignOrientation, double> parseFrameAspects(Object? raw) {
+  final values = <DesignOrientation, double>{};
+  for (final entry
+      in ((raw as Map?)?.cast<String, Object?>() ?? const {}).entries) {
+    final orientation = DesignOrientation.byName(entry.key);
+    final value = (entry.value as num?)?.toDouble();
+    if (orientation == null || value == null) continue;
+    values[orientation] = value;
+  }
+  return values;
+}
+
 /// Design space is the shader's space: y-up, origin at the centre of the frame,
 /// one unit tall. A frame of aspect `a` therefore spans x in [-a/2, a/2] and y
 /// in [-0.5, 0.5].
@@ -82,18 +121,18 @@ class Placement {
       size ?? type?.defaultSize ?? const Size(1, 1);
 
   Placement copyWith({Anchor? anchor, Offset? offset, Size? size}) => Placement(
-        anchor: anchor ?? this.anchor,
-        offset: offset ?? this.offset,
-        size: size ?? this.size,
-      );
+    anchor: anchor ?? this.anchor,
+    offset: offset ?? this.offset,
+    size: size ?? this.size,
+  );
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'anchor': anchor.name,
-        'dx': offset.dx,
-        'dy': offset.dy,
-        if (size != null) 'w': size!.width,
-        if (size != null) 'h': size!.height,
-      };
+    'anchor': anchor.name,
+    'dx': offset.dx,
+    'dy': offset.dy,
+    if (size != null) 'w': size!.width,
+    if (size != null) 'h': size!.height,
+  };
 
   factory Placement.fromJson(Map<String, Object?> json) {
     final w = (json['w'] as num?)?.toDouble();

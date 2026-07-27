@@ -13,7 +13,7 @@ their boundary.
 | 1 | Full bleed | Done — `444a836` |
 | 2 | Component data model | Done — `bdd4d01`, `80831c0` |
 | 3 | Single-pass renderer | Done — `de91249` |
-| 4 | Editor as developer tool | Not started |
+| 4 | Editor as developer tool | Done |
 | 5 | Speed estimation | Not started |
 
 ---
@@ -158,25 +158,25 @@ Sampler 0 is `uData`.
 
 ---
 
-## Stage 4 — editor as developer tool — NOT STARTED
+## Stage 4 — editor as developer tool — DONE
 
 Built BEFORE the shipped presets are authored, as a forcing function on the
 data model. Plain Material widgets, no onboarding, no polish — see "Build
 order" in `CLAUDE.md`. The editor is exempt from the VFD idiom while it is a
 developer tool.
 
-- [ ] Editor route with an aspect-locked canvas. The canvas holds the target
+- [x] Editor route with an aspect-locked canvas. The canvas holds the target
       orientation's aspect regardless of the window and scales to fit, with a
       visible frame boundary — the one place a visible edge is correct.
-- [ ] Add, remove, reorder components from the `ComponentTypes` registry.
-- [ ] Drag to reposition; writes `Placement.offset` for the displayed
+- [x] Add, remove, reorder components from the `ComponentTypes` registry.
+- [x] Drag to reposition; writes `Placement.offset` for the displayed
       orientation ONLY.
-- [ ] Resize handles writing `Placement.size` (width and height independent).
-- [ ] Params rendered generically from `ParamSpec`. A param needing a bespoke
+- [x] Resize handles writing `Placement.size` (width and height independent).
+- [x] Params rendered generically from `ParamSpec`. A param needing a bespoke
       control is a finding about the model, not a reason to special-case it.
-- [ ] Orientation switcher, so both authored layouts are editable on one device.
-- [ ] Fork a preset into a dashboard, visibly.
-- [ ] **Deliverable: a written list of everything the model could not express.**
+- [x] Orientation switcher, so both authored layouts are editable on one device.
+- [x] Fork a preset into a dashboard, visibly.
+- [x] **Deliverable: a written list of everything the model could not express.**
       That list is the actual output of this stage.
 
 Already-known gaps to fold into that list:
@@ -188,9 +188,56 @@ Already-known gaps to fold into that list:
 Also outstanding from the navigation decision, which needs the model and so
 could not be built in Stage 1:
 
-- [ ] Library route reached from the dock, with `Designs` / `Settings` tabs.
+- [x] Library route reached from the dock, with `Designs` / `Settings` tabs.
       Card tap activates; a separate explicit Edit button opens the editor.
-      The dock has no Library button yet — do not ship a dead control.
+      The dock now exposes the route through a live `LIBRARY` control.
+
+### Stage 4 implementation
+
+- Plain Material editor with a box canvas; no live shader preview and no
+  per-component raster surfaces.
+- `Design` read interface lets presets and dashboards activate without silently
+  converting presets into dashboards.
+- `frameAspects` stores the authored aspect per orientation. Legacy payloads get
+  tolerant development defaults.
+- Presets stay immutable. Edit visibly creates a user-copy banner, activates the
+  fork, and adds it to the dashboard list.
+- Dashboards, active selection, and global settings persist through
+  `shared_preferences`; editor drag writes are debounced.
+- Library remains in the VFD idiom. Only the developer editor uses plain
+  Material controls.
+
+### Stage 4 data-model findings
+
+1. **Frame aspect was missing — resolved.** The model could not tell the editor
+   which aspect to lock to. It is now authored per orientation.
+2. **Per-orientation params are missing — unresolved.** Three digits in
+   landscape and two in portrait still requires two component ids with
+   mutually exclusive placements.
+3. **Explicit z-order remains absent — acceptable for current faces.** Reorder
+   edits global list order. The editor needs no second layer field; selected
+   editor chrome is lifted locally only to keep handles reachable.
+4. **Generic param presentation metadata is incomplete — unresolved.**
+   `ParamSpec` lacks option display labels, numeric step/precision, and unit
+   suffix. Raw tokens and generic formatting are adequate for this developer
+   tool. Production UI should extend the schema, not add bespoke controls.
+5. **Tube-level optical geometry is missing — unresolved.** Filament wires
+   remain global shader constants around the old digit locus. Moving components
+   exposes this immediately. Filaments belong to the frame/tube, not a digit
+   component.
+6. **Renderer coverage is narrower than the registry.** Outside temperature,
+   battery, and altitude can be added, placed, resized, and configured in the
+   editor, but the current shader skips them. Their data model is sufficient;
+   their renderer implementations are outstanding.
+
+Verification at the boundary:
+
+- `flutter analyze`: clean.
+- `flutter test`: 53 passing.
+- `integration_test/halo_compounding_test.dart`: passing on iPhone 17 Pro
+  simulator, iOS 26.3, Impeller.
+- Fresh debug launch inspected after explicit terminate; Stage 3 render remains
+  intact. Screenshot is rotated in the captured file as documented.
 
 ---
 
@@ -222,8 +269,9 @@ forward acceleration.
       emission to a `ui.Image` via `PictureRecorder.toImageSync()` on value
       change, composite grain, multiplex flicker and sheen over it every frame.
       First optimisation to reach for when profiling, not before.
-- [ ] **Filament wires are still global**, positioned around where the digits
-      used to be hardcoded (`0.11 ± 0.215`, gated to `|q.x| < 0.62`). They
+- [ ] **Filament wires are still global**, confirmed by the Stage 4 editor,
+      positioned around where the digits used to be hardcoded
+      (`0.11 ± 0.215`, gated to `|q.x| < 0.62`). They
       belong to the tube, not to a component, so they should span the frame
       rather than track a gauge. Visible as an inconsistency the moment a design
       moves the digits.
@@ -234,7 +282,8 @@ forward acceleration.
 - [ ] Baked SDF atlas for irregular glyphs. The `KM/H` and `MPH` legends are
       hand-stroked, which is fine for five glyphs and is not a route to an
       alphabet.
-- [ ] Persist global settings with `shared_preferences`. Nothing persists yet.
+- [x] Persist dashboards, active design, and global settings with
+      `shared_preferences`.
 - [ ] Dock: the right-hand readout shows live speed while the cell bar shows the
       manual target, so they disagree while the simulation runs. Fine for a
       developer tool, wrong for shipping.

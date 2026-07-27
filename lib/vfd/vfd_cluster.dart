@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../model/component_type.dart';
-import '../model/dashboard.dart';
+import '../model/design.dart';
 import '../model/placement.dart';
 import 'component_data.dart';
 import 'vfd_layers.dart';
@@ -60,18 +60,26 @@ class SegmentBank {
 class VfdController extends ChangeNotifier {
   VfdController({
     required TickerProvider vsync,
-    required Dashboard dashboard,
-    this.orientation = DesignOrientation.landscape,
-    this.aspect = 2.6,
-  }) : _dashboard = dashboard {
+    required Design design,
+    DesignOrientation orientation = DesignOrientation.landscape,
+  })  : _design = design,
+        _orientation = design.supports(orientation)
+            ? orientation
+            : design.supportedOrientations.first {
     _ticker = vsync.createTicker(_onTick)..start();
   }
 
-  final DesignOrientation orientation;
+  DesignOrientation _orientation;
+  DesignOrientation get orientation => _orientation;
+  set orientation(DesignOrientation value) {
+    if (!_design.supports(value) || value == _orientation) return;
+    _orientation = value;
+    _banks.clear();
+  }
 
   /// Aspect of the authored frame. A design declares this; it is not the
   /// device's aspect.
-  final double aspect;
+  double get aspect => _design.frameAspect(_orientation);
 
   late final Ticker _ticker;
   Duration _last = Duration.zero;
@@ -83,10 +91,14 @@ class VfdController extends ChangeNotifier {
   VfdLayers layers = const VfdLayers();
   Phosphor phosphor = Phosphor.cyanGreen;
 
-  Dashboard _dashboard;
-  Dashboard get dashboard => _dashboard;
-  set dashboard(Dashboard value) {
-    _dashboard = value;
+  Design _design;
+  Design get design => _design;
+  set design(Design value) {
+    if (identical(value, _design)) return;
+    _design = value;
+    if (!value.supports(_orientation)) {
+      _orientation = value.supportedOrientations.first;
+    }
     _banks.clear();
   }
 
@@ -103,22 +115,12 @@ class VfdController extends ChangeNotifier {
   /// The unit the first speed readout is bound to. Per-component, not global —
   /// this reads it back off the data rather than holding a second copy.
   SpeedUnit get unit {
-    for (final c in _dashboard.componentsIn(orientation)) {
+    for (final c in _design.componentsIn(orientation)) {
       if (c.typeId == ComponentTypes.speedDigits) {
         return c.effectiveParams['unit'] == 'mph' ? SpeedUnit.mph : SpeedUnit.kph;
       }
     }
     return SpeedUnit.kph;
-  }
-
-  set unit(SpeedUnit value) {
-    var next = _dashboard;
-    for (final c in _dashboard.components) {
-      if (c.typeId == ComponentTypes.speedDigits) {
-        next = next.withComponent(c.withParam('unit', value.name));
-      }
-    }
-    dashboard = next;
   }
 
   double get displaySpeed => unit.convert(speedKph);
@@ -141,7 +143,7 @@ class VfdController extends ChangeNotifier {
     final frames = <ComponentFrame>[];
     final litUnit = unit;
 
-    for (final c in _dashboard.componentsIn(orientation)) {
+    for (final c in _design.componentsIn(orientation)) {
       if (frames.length >= ComponentData.maxComponents) break;
       final type = ComponentTypes.byId(c.typeId);
       final placement = c.placements[orientation];
