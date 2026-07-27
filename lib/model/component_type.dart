@@ -67,7 +67,10 @@ abstract final class ComponentTypes {
       id: speedDigits,
       displayName: 'Speed digits',
       capabilities: <Capability>{Capability.gps},
-      defaultSize: Size(1.04, 0.84),
+      // Width is digit advance * default digit count; height is the glyph's
+      // 1.4-unit local extent at the tuned digit scale. These reproduce the
+      // authored layout exactly at the default param values.
+      defaultSize: Size(1.035, 0.588),
       params: <ParamSpec>[
         ParamSpec(
           key: 'digits',
@@ -120,7 +123,8 @@ abstract final class ComponentTypes {
       id: unitLegend,
       displayName: 'Unit legend',
       capabilities: <Capability>{},
-      defaultSize: Size(0.21, 0.19),
+      // Encloses both stacked lines: one cap height plus the line separation.
+      defaultSize: Size(0.203, 0.242),
       params: <ParamSpec>[
         ParamSpec(
           key: 'stacked',

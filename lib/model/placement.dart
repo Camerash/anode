@@ -1,6 +1,8 @@
-import 'dart:ui' show Offset;
+import 'dart:ui' show Offset, Size;
 
 import 'package:flutter/foundation.dart';
+
+import 'component_type.dart';
 
 /// Layouts are authored per orientation, never reflowed from one another.
 enum DesignOrientation {
@@ -62,35 +64,47 @@ class Placement {
   const Placement({
     this.anchor = Anchor.center,
     this.offset = Offset.zero,
-    this.scale = 1.0,
+    this.size,
   });
 
   final Anchor anchor;
   final Offset offset;
-  final double scale;
+
+  /// Extent in design units, width and height independent. Null means take the
+  /// type's default. Instrument faces are authored, not laid out, so a design
+  /// routinely needs a wide short bar or a tall narrow digit block that no
+  /// uniform scale of the default could produce.
+  final Size? size;
 
   Offset resolve(double aspect) => anchor.pointIn(aspect) + offset;
 
-  Placement copyWith({Anchor? anchor, Offset? offset, double? scale}) =>
-      Placement(
+  Size resolveSize(ComponentTypeSpec? type) =>
+      size ?? type?.defaultSize ?? const Size(1, 1);
+
+  Placement copyWith({Anchor? anchor, Offset? offset, Size? size}) => Placement(
         anchor: anchor ?? this.anchor,
         offset: offset ?? this.offset,
-        scale: scale ?? this.scale,
+        size: size ?? this.size,
       );
 
   Map<String, Object?> toJson() => <String, Object?>{
         'anchor': anchor.name,
         'dx': offset.dx,
         'dy': offset.dy,
-        'scale': scale,
+        if (size != null) 'w': size!.width,
+        if (size != null) 'h': size!.height,
       };
 
-  factory Placement.fromJson(Map<String, Object?> json) => Placement(
-        anchor: Anchor.byName(json['anchor'] as String? ?? '') ?? Anchor.center,
-        offset: Offset(
-          (json['dx'] as num?)?.toDouble() ?? 0,
-          (json['dy'] as num?)?.toDouble() ?? 0,
-        ),
-        scale: (json['scale'] as num?)?.toDouble() ?? 1.0,
-      );
+  factory Placement.fromJson(Map<String, Object?> json) {
+    final w = (json['w'] as num?)?.toDouble();
+    final h = (json['h'] as num?)?.toDouble();
+    return Placement(
+      anchor: Anchor.byName(json['anchor'] as String? ?? '') ?? Anchor.center,
+      offset: Offset(
+        (json['dx'] as num?)?.toDouble() ?? 0,
+        (json['dy'] as num?)?.toDouble() ?? 0,
+      ),
+      size: (w == null || h == null) ? null : Size(w, h),
+    );
+  }
 }

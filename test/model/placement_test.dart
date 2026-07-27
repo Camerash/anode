@@ -1,3 +1,6 @@
+import 'dart:ui' show Offset, Size;
+
+import 'package:anode/model/component_type.dart';
 import 'package:anode/model/placement.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -56,13 +59,49 @@ void main() {
     });
   });
 
+  group('independent sizing', () {
+    test('falls back to the type default when unset', () {
+      const p = Placement();
+      final type = ComponentTypes.byId(ComponentTypes.speedDigits);
+      expect(p.resolveSize(type), type!.defaultSize);
+    });
+
+    test('width and height move independently', () {
+      const p = Placement(size: Size(2.4, 0.3));
+      final type = ComponentTypes.byId(ComponentTypes.speedDigits);
+      expect(p.resolveSize(type), const Size(2.4, 0.3));
+    });
+
+    test('an unknown type still yields a usable size', () {
+      const p = Placement();
+      expect(p.resolveSize(null), const Size(1, 1));
+    });
+
+    test('size survives a json round trip and stays absent when unset', () {
+      const sized = Placement(size: Size(1.2, 0.4));
+      expect(Placement.fromJson(sized.toJson()).size, const Size(1.2, 0.4));
+
+      const unsized = Placement();
+      expect(unsized.toJson().containsKey('w'), isFalse);
+      expect(Placement.fromJson(unsized.toJson()).size, isNull);
+    });
+
+    test('a half-written size degrades to the default rather than a zero box',
+        () {
+      final p = Placement.fromJson(<String, Object?>{'w': 1.2});
+      expect(p.size, isNull);
+    });
+  });
+
   test('placement round trips through json', () {
     const p = Placement(
-        anchor: Anchor.topRight, offset: Offset(-0.25, -0.1), scale: 0.8);
+        anchor: Anchor.topRight,
+        offset: Offset(-0.25, -0.1),
+        size: Size(0.8, 0.3));
     final back = Placement.fromJson(p.toJson());
     expect(back.anchor, p.anchor);
     expect(back.offset, p.offset);
-    expect(back.scale, p.scale);
+    expect(back.size, p.size);
   });
 
   test('an unknown anchor name degrades to centre rather than throwing', () {
