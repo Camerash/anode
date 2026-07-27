@@ -68,6 +68,18 @@ class VfdLayers {
       );
 }
 
+enum SpeedUnit {
+  kph('KM/H', 1.0),
+  mph('MPH', 0.621371);
+
+  const SpeedUnit(this.label, this.fromKph);
+
+  final String label;
+  final double fromKph;
+
+  double convert(double kph) => kph * fromKph;
+}
+
 @immutable
 class Phosphor {
   const Phosphor(this.r, this.g, this.b, this.name);

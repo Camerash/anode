@@ -69,8 +69,13 @@ class VfdController extends ChangeNotifier {
   double _tiltTarget = 0;
   VfdLayers layers = const VfdLayers();
   Phosphor phosphor = Phosphor.cyanGreen;
+  SpeedUnit unit = SpeedUnit.kph;
 
+  /// The bar always tracks the underlying kph, so switching unit does not move
+  /// it. Only the digits and the lit legend change.
   double get barFraction => (speedKph / maxKph).clamp(0.0, 1.0);
+
+  double get displaySpeed => unit.convert(speedKph);
 
   set tiltTarget(double v) => _tiltTarget = v.clamp(-1.0, 1.0);
 
@@ -82,7 +87,7 @@ class VfdController extends ChangeNotifier {
     final target = layers.tiltParallax ? _tiltTarget : 0.0;
     tilt += (target - tilt) * (1.0 - math.exp(-dt / 0.18));
 
-    bank.setValue(speedKph.round());
+    bank.setValue(displaySpeed.round());
     bank.tick(dt, decay: layers.phosphorDecay);
     notifyListeners();
   }
@@ -95,11 +100,18 @@ class VfdController extends ChangeNotifier {
 }
 
 class VfdPainter extends CustomPainter {
-  VfdPainter({required this.shader, required this.controller})
-      : super(repaint: controller);
+  VfdPainter({
+    required this.shader,
+    required this.controller,
+    required this.safeRect,
+  }) : super(repaint: controller);
 
   final ui.FragmentShader shader;
   final VfdController controller;
+
+  /// Where content is laid out, in Flutter's y-down logical pixels. The render
+  /// still covers the full bounds — this only positions the authored frame.
+  final Rect safeRect;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -126,12 +138,22 @@ class VfdPainter extends CustomPainter {
       shader.setFloat(13 + i, i < b.length ? b[i] : 0.0);
     }
 
+    // Shader space is y-up; Rect is y-down.
+    shader
+      ..setFloat(37, safeRect.left)
+      ..setFloat(38, size.height - safeRect.bottom)
+      ..setFloat(39, safeRect.right)
+      ..setFloat(40, size.height - safeRect.top)
+      ..setFloat(41, controller.unit == SpeedUnit.mph ? 1.0 : 0.0);
+
     canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
   }
 
   @override
   bool shouldRepaint(covariant VfdPainter old) =>
-      old.shader != shader || old.controller != controller;
+      old.shader != shader ||
+      old.controller != controller ||
+      old.safeRect != safeRect;
 }
 
 class VfdCluster extends StatefulWidget {
@@ -139,10 +161,16 @@ class VfdCluster extends StatefulWidget {
     super.key,
     required this.program,
     required this.controller,
+    this.safeInsets,
   });
 
   final ui.FragmentProgram program;
   final VfdController controller;
+
+  /// Where content may be laid out inside this widget. Defaults to the window
+  /// padding, which is only correct when the cluster fills the window — a
+  /// parent that shrinks it (the settings panel) must pass its own insets.
+  final EdgeInsets? safeInsets;
 
   @override
   State<VfdCluster> createState() => _VfdClusterState();
@@ -159,10 +187,28 @@ class _VfdClusterState extends State<VfdCluster> {
 
   @override
   Widget build(BuildContext context) {
+    final padding = widget.safeInsets ?? MediaQuery.paddingOf(context);
+
     return RepaintBoundary(
-      child: CustomPaint(
-        painter: VfdPainter(shader: _shader, controller: widget.controller),
-        size: Size.infinite,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final size = constraints.biggest;
+          final safeRect = Rect.fromLTRB(
+            padding.left,
+            padding.top,
+            math.max(padding.left + 1, size.width - padding.right),
+            math.max(padding.top + 1, size.height - padding.bottom),
+          );
+
+          return CustomPaint(
+            painter: VfdPainter(
+              shader: _shader,
+              controller: widget.controller,
+              safeRect: safeRect,
+            ),
+            size: Size.infinite,
+          );
+        },
       ),
     );
   }

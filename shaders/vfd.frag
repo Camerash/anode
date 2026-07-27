@@ -16,8 +16,14 @@ layout(location = 9)  uniform vec4  uSegC;
 layout(location = 10) uniform vec4  uSegD;
 layout(location = 11) uniform vec4  uSegE;
 layout(location = 12) uniform vec4  uSegF;
+layout(location = 13) uniform vec2  uSafeMin;
+layout(location = 14) uniform vec2  uSafeMax;
+layout(location = 15) uniform float uUnit;
 
 out vec4 fragColor;
+
+// Aspect of the authored frame. Layout placement only; not an optical constant.
+const float DESIGN_ASPECT = 2.6;
 
 const float DS = 0.42;
 const float SEG_R = 0.055;
@@ -54,6 +60,83 @@ void addSeg(vec2 lp, vec2 a, vec2 b, float br,
   dim = max(dim, f * (1.0 - br));
 }
 
+// Legend glyphs. Etched anode shapes rather than seven-segment, stroked with the
+// same sdSeg primitive so they inherit the halo maths. Glyph-local space is a
+// unit cap height centred on the origin; the baked SDF atlas replaces this.
+const float LEG_H = 0.062;
+const float LEG_R = 0.13;
+const float LEG_ADV = 0.82;
+const float LEG_GLOW = 0.45;
+
+// Halo falloff scales with feature size. Legend strokes are roughly a third of a
+// digit segment's width and packed far tighter, so reusing halo() would sum a
+// dozen digit-sized lobes into one blown-out blob.
+float legHalo(float d) {
+  float e = max(d, 0.0);
+  return exp(-e * 70.0) * 0.42 + exp(-e * 260.0) * 0.58;
+}
+
+void legSeg(vec2 g, vec2 a, vec2 b, float br,
+            inout float glow, inout float core, inout float dim) {
+  float d = sdSeg(g, a, b, LEG_R) * LEG_H;
+  float f = smoothstep(EDGE_OUT, EDGE_IN, d);
+  glow += br * legHalo(d) * LEG_GLOW;
+  core = max(core, br * f);
+  dim = max(dim, f * (1.0 - br));
+}
+
+void glyphK(vec2 g, float br, inout float glow, inout float core, inout float dim) {
+  legSeg(g, vec2(-0.26, -0.50), vec2(-0.26, 0.50), br, glow, core, dim);
+  legSeg(g, vec2(-0.26,  0.00), vec2( 0.26, 0.50), br, glow, core, dim);
+  legSeg(g, vec2(-0.26,  0.00), vec2( 0.26, -0.50), br, glow, core, dim);
+}
+
+void glyphM(vec2 g, float br, inout float glow, inout float core, inout float dim) {
+  legSeg(g, vec2(-0.28, -0.50), vec2(-0.28, 0.50), br, glow, core, dim);
+  legSeg(g, vec2( 0.28, -0.50), vec2( 0.28, 0.50), br, glow, core, dim);
+  legSeg(g, vec2(-0.28,  0.50), vec2( 0.00, 0.02), br, glow, core, dim);
+  legSeg(g, vec2( 0.28,  0.50), vec2( 0.00, 0.02), br, glow, core, dim);
+}
+
+void glyphH(vec2 g, float br, inout float glow, inout float core, inout float dim) {
+  legSeg(g, vec2(-0.26, -0.50), vec2(-0.26, 0.50), br, glow, core, dim);
+  legSeg(g, vec2( 0.26, -0.50), vec2( 0.26, 0.50), br, glow, core, dim);
+  legSeg(g, vec2(-0.26,  0.00), vec2( 0.26, 0.00), br, glow, core, dim);
+}
+
+void glyphP(vec2 g, float br, inout float glow, inout float core, inout float dim) {
+  legSeg(g, vec2(-0.26, -0.50), vec2(-0.26, 0.50), br, glow, core, dim);
+  legSeg(g, vec2(-0.26,  0.50), vec2( 0.16, 0.50), br, glow, core, dim);
+  legSeg(g, vec2( 0.22,  0.43), vec2( 0.22, 0.14), br, glow, core, dim);
+  legSeg(g, vec2(-0.26,  0.07), vec2( 0.16, 0.07), br, glow, core, dim);
+}
+
+void glyphSlash(vec2 g, float br, inout float glow, inout float core, inout float dim) {
+  legSeg(g, vec2(-0.20, -0.50), vec2(0.20, 0.50), br, glow, core, dim);
+}
+
+// left is the legend's left edge, cy its vertical centre, both in design units.
+void addKmh(vec2 q, float left, float cy, float br,
+            inout float glow, inout float core, inout float dim) {
+  vec2 g = (q - vec2(left, cy)) / LEG_H;
+  if (sdBox(g - vec2(4.0 * LEG_ADV * 0.5, 0.0),
+            vec2(4.0 * LEG_ADV * 0.5, 0.5)) > 2.6) return;
+  glyphK(g - vec2(0.5 * LEG_ADV, 0.0), br, glow, core, dim);
+  glyphM(g - vec2(1.5 * LEG_ADV, 0.0), br, glow, core, dim);
+  glyphSlash(g - vec2(2.5 * LEG_ADV, 0.0), br, glow, core, dim);
+  glyphH(g - vec2(3.5 * LEG_ADV, 0.0), br, glow, core, dim);
+}
+
+void addMph(vec2 q, float left, float cy, float br,
+            inout float glow, inout float core, inout float dim) {
+  vec2 g = (q - vec2(left, cy)) / LEG_H;
+  if (sdBox(g - vec2(3.0 * LEG_ADV * 0.5, 0.0),
+            vec2(3.0 * LEG_ADV * 0.5, 0.5)) > 2.6) return;
+  glyphM(g - vec2(0.5 * LEG_ADV, 0.0), br, glow, core, dim);
+  glyphP(g - vec2(1.5 * LEG_ADV, 0.0), br, glow, core, dim);
+  glyphH(g - vec2(2.5 * LEG_ADV, 0.0), br, glow, core, dim);
+}
+
 void addDigit(vec2 q, vec2 c, vec4 s0, vec4 s1,
               inout float glow, inout float core, inout float dim) {
   vec2 lp = (q - c) / DS;
@@ -70,7 +153,13 @@ void addDigit(vec2 q, vec2 c, vec4 s0, vec4 s1,
 void main() {
   vec2 fc = FlutterFragCoord().xy;
   vec2 flipped = vec2(fc.x, uSize.y - fc.y);
-  vec2 uv = (flipped - 0.5 * uSize) / uSize.y;
+
+  // Contain-fit the authored frame inside the safe rect. Placement only — no
+  // mask and no clamp, so halo, sheen and grain still spill past it.
+  vec2 safeSize = uSafeMax - uSafeMin;
+  vec2 safeCenter = 0.5 * (uSafeMin + uSafeMax);
+  float fitScale = min(safeSize.x / DESIGN_ASPECT, safeSize.y);
+  vec2 uv = (flipped - safeCenter) / fitScale;
 
   float lBloom = uLayers.x;
   float lUnlit = uLayers.y;
@@ -87,19 +176,31 @@ void main() {
   addDigit(q, vec2( 0.000, 0.11), uSegC, uSegD, glow, core, dim);
   addDigit(q, vec2( 0.345, 0.11), uSegE, uSegF, glow, core, dim);
 
+  // Stacked unit legends to the right of the digits. The inactive one stays
+  // visible as unlit phosphor.
+  addKmh(q, 0.58, 0.200, 1.0 - uUnit, glow, core, dim);
+  addMph(q, 0.58, 0.020, uUnit, glow, core, dim);
+
   vec2 bp = q - vec2(0.0, -0.33);
   float cell = 0.098;
   float n = 20.0;
   float bx = bp.x + n * cell * 0.5;
-  float idx = floor(bx / cell);
-  float lx = mod(bx, cell) - cell * 0.5;
-  float inRange = step(0.0, idx) * step(idx, n - 1.0);
-  float lit = inRange * step(idx + 0.5, uBar * n);
-  float dBar = sdBox(vec2(lx, bp.y), vec2(cell * 0.29, 0.042));
-  float fBar = smoothstep(EDGE_OUT, EDGE_IN, dBar);
-  glow += lit * halo(dBar);
-  core = max(core, lit * fBar);
-  dim = max(dim, inRange * fBar * (1.0 - lit));
+  // Each cell is evaluated against its own centre rather than a mod() cell-local
+  // coordinate, and neighbours are accumulated, so halos bleed across cell
+  // boundaries and past the ends of the strip instead of being capped per cell.
+  // inRange still gates every derived term, or phantom unlit cells appear.
+  float base = floor(bx / cell);
+  for (int k = -3; k <= 3; k++) {
+    float idx = base + float(k);
+    float inRange = step(0.0, idx) * step(idx, n - 1.0);
+    float lit = inRange * step(idx + 0.5, uBar * n);
+    float lx = bx - (idx + 0.5) * cell;
+    float dBar = sdBox(vec2(lx, bp.y), vec2(cell * 0.29, 0.042));
+    float fBar = smoothstep(EDGE_OUT, EDGE_IN, dBar);
+    glow += lit * halo(dBar);
+    core = max(core, lit * fBar);
+    dim = max(dim, inRange * fBar * (1.0 - lit));
+  }
 
   vec3 col = vec3(0.013, 0.017, 0.016) + uPhosphor * 0.010;
 
