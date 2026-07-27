@@ -94,4 +94,11 @@ class Phosphor {
   static const red = Phosphor(1.00, 0.21, 0.12, 'Red');
 
   static const List<Phosphor> all = <Phosphor>[cyanGreen, amber, red];
+
+  static Phosphor byName(String name) {
+    for (final p in all) {
+      if (p.name == name) return p;
+    }
+    return cyanGreen;
+  }
 }

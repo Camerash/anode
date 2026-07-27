@@ -1,0 +1,92 @@
+import 'dart:convert';
+import 'package:anode/model/component_instance.dart';
+import 'package:anode/model/component_type.dart';
+import 'package:anode/model/dashboard.dart';
+import 'package:anode/model/placement.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'fixtures.dart';
+
+void main() {
+  test('a fork snapshots the preset wholesale', () {
+    final p = preset();
+    final d = Dashboard.forkFrom(p, id: 'dash.1');
+
+    expect(d.components.map((c) => c.id), p.components.map((c) => c.id));
+    expect(d.supportedOrientations, p.supportedOrientations);
+    expect(d.settings.phosphorName, 'Amber');
+  });
+
+  test('the fork records provenance and nothing more', () {
+    final d = Dashboard.forkFrom(preset(version: 3), id: 'dash.1');
+    expect(d.sourcePresetId, 'preset.classic');
+    expect(d.sourcePresetVersion, 3);
+    expect(d.forkedAt, isNotNull);
+  });
+
+  test('editing a fork leaves the source preset untouched', () {
+    final p = preset();
+    final before = jsonEncode(p.toJson());
+
+    final d = Dashboard.forkFrom(p, id: 'dash.1')
+        .withComponent(digits().withParam('digits', 4))
+        .withoutComponent('bar')
+        .copyWith(name: 'My Classic');
+
+    expect(d.components.map((c) => c.id), <String>['digits']);
+    expect(d.components.first.effectiveParams['digits'], 4);
+    expect(jsonEncode(p.toJson()), before);
+  });
+
+  test('moving a component in the fork does not move it in the preset', () {
+    final p = preset();
+    final d = Dashboard.forkFrom(p, id: 'dash.1');
+
+    final moved = d.withComponent(
+      d.components.first.withPlacement(
+        DesignOrientation.portrait,
+        const Placement(anchor: Anchor.topLeft, offset: Offset(0.4, -0.1)),
+      ),
+    );
+
+    expect(
+      moved.components.first.placements[DesignOrientation.portrait]!.anchor,
+      Anchor.topLeft,
+    );
+    expect(
+      p.components.first.placements[DesignOrientation.portrait]!.anchor,
+      Anchor.center,
+    );
+  });
+
+  test('dropping a component from one orientation keeps the other', () {
+    final d = Dashboard.forkFrom(preset(), id: 'dash.1');
+    final edited = d.withComponent(
+      d.components.first.withPlacement(DesignOrientation.portrait, null),
+    );
+
+    final c = edited.components.first;
+    expect(c.appearsIn(DesignOrientation.portrait), isFalse);
+    expect(c.appearsIn(DesignOrientation.landscape), isTrue);
+    expect(edited.componentsIn(DesignOrientation.portrait), isEmpty);
+    expect(edited.componentsIn(DesignOrientation.landscape), hasLength(2));
+  });
+
+  test('reordering is stable and does not lose components', () {
+    final d = Dashboard.forkFrom(preset(), id: 'dash.1');
+    final reordered = d.reorderComponent(0, 1);
+    expect(reordered.components.map((c) => c.id), <String>['bar', 'digits']);
+    expect(reordered.components, hasLength(d.components.length));
+  });
+
+  test('a map handed to the constructor cannot be mutated afterwards', () {
+    final params = <String, Object?>{'digits': 3};
+    final c = ComponentInstance(
+        id: 'd', typeId: ComponentTypes.speedDigits, params: params);
+
+    params['digits'] = 1;
+
+    expect(c.params['digits'], 3);
+    expect(() => c.params['digits'] = 2, throwsUnsupportedError);
+  });
+}
