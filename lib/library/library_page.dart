@@ -1,5 +1,3 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
@@ -7,13 +5,14 @@ import '../editor/editor_page.dart';
 import '../model/dashboard.dart';
 import '../model/design_preset.dart';
 import '../vfd/prism_widgets.dart';
+import '../vfd/vfd_render_assets.dart';
 import '../vfd/vfd_widgets.dart';
 
 class LibraryPage extends StatelessWidget {
-  const LibraryPage({super.key, required this.state, this.program});
+  const LibraryPage({super.key, required this.state, this.renderAssets});
 
   final AnodeState state;
-  final ui.FragmentProgram? program;
+  final VfdRenderAssets? renderAssets;
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +44,11 @@ class LibraryPage extends StatelessWidget {
             listenable: state,
             builder: (context, _) => TabBarView(
               children: <Widget>[
-                _DesignsTab(state: state, palette: palette, program: program),
+                _DesignsTab(
+                  state: state,
+                  palette: palette,
+                  renderAssets: renderAssets,
+                ),
                 _SettingsTab(state: state, palette: palette),
               ],
             ),
@@ -60,12 +63,12 @@ class _DesignsTab extends StatelessWidget {
   const _DesignsTab({
     required this.state,
     required this.palette,
-    required this.program,
+    required this.renderAssets,
   });
 
   final AnodeState state;
   final VfdPalette palette;
-  final ui.FragmentProgram? program;
+  final VfdRenderAssets? renderAssets;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -129,7 +132,7 @@ class _DesignsTab extends StatelessWidget {
         builder: (context) => EditorPage(
           dashboard: dashboard,
           forkedFrom: forkedFrom,
-          program: program,
+          renderAssets: renderAssets,
           soundEnabled: state.globalSettings.soundEnabled,
           hapticsEnabled: state.globalSettings.hapticsEnabled,
           onChanged: state.updateDashboard,
@@ -177,6 +180,7 @@ class _DesignCard extends StatelessWidget {
                 label: 'Edit',
                 palette: palette,
                 role: PrismRole.compact,
+                span: PrismSpan.one,
                 onPressed: onEdit,
               ),
             ],
@@ -220,6 +224,7 @@ class _SettingsTab extends StatelessWidget {
             label: 'Sound',
             palette: palette,
             lit: state.globalSettings.soundEnabled,
+            span: PrismSpan.one,
             onPressed: () => state.updateGlobalSettings(
               state.globalSettings.copyWith(
                 soundEnabled: !state.globalSettings.soundEnabled,
@@ -230,6 +235,7 @@ class _SettingsTab extends StatelessWidget {
             label: 'Haptics',
             palette: palette,
             lit: state.globalSettings.hapticsEnabled,
+            span: PrismSpan.one,
             onPressed: () => state.updateGlobalSettings(
               state.globalSettings.copyWith(
                 hapticsEnabled: !state.globalSettings.hapticsEnabled,

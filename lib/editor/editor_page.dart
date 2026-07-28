@@ -1,5 +1,3 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 
 import '../actions/action_registry.dart';
@@ -12,6 +10,7 @@ import '../model/placement.dart';
 import '../model/variant.dart';
 import '../model/vfd_module.dart';
 import '../vfd/prism_widgets.dart';
+import '../vfd/vfd_render_assets.dart';
 import '../vfd/vfd_widgets.dart';
 import 'editor_canvas.dart';
 import 'effect_panel.dart';
@@ -23,7 +22,7 @@ class EditorPage extends StatefulWidget {
     required this.dashboard,
     required this.onChanged,
     this.forkedFrom,
-    this.program,
+    this.renderAssets,
     this.soundEnabled = true,
     this.hapticsEnabled = true,
     this.actionRegistry,
@@ -32,7 +31,7 @@ class EditorPage extends StatefulWidget {
   final Dashboard dashboard;
   final ValueChanged<Dashboard> onChanged;
   final String? forkedFrom;
-  final ui.FragmentProgram? program;
+  final VfdRenderAssets? renderAssets;
   final bool soundEnabled;
   final bool hapticsEnabled;
   final ActionRegistry? actionRegistry;
@@ -95,6 +94,7 @@ class _EditorPageState extends State<EditorPage> {
             lit: value == _orientation,
             selected: value == _orientation,
             role: PrismRole.compact,
+            span: PrismSpan.two,
             style: _dashboard.settings.prismStyle,
             soundEnabled: widget.soundEnabled,
             hapticsEnabled: widget.hapticsEnabled,
@@ -149,7 +149,7 @@ class _EditorPageState extends State<EditorPage> {
       }),
       onPlacementChanged: _setPlacement,
       onModulePlacementChanged: _setModulePlacement,
-      program: widget.program,
+      renderAssets: widget.renderAssets,
     ),
   );
 
@@ -341,6 +341,7 @@ class _EditorSidebar extends StatelessWidget {
                   label: 'Add component',
                   palette: _palette,
                   role: PrismRole.compact,
+                  span: PrismSpan.two,
                   style: dashboard.settings.prismStyle,
                   onPressed: () {},
                 ),
@@ -351,6 +352,7 @@ class _EditorSidebar extends StatelessWidget {
               label: 'Add module',
               palette: _palette,
               role: PrismRole.compact,
+              span: PrismSpan.two,
               style: dashboard.settings.prismStyle,
               soundEnabled: soundEnabled,
               hapticsEnabled: hapticsEnabled,
@@ -372,6 +374,7 @@ class _EditorSidebar extends StatelessWidget {
                   lit: module.id == selectedModuleId,
                   selected: module.id == selectedModuleId,
                   role: PrismRole.compact,
+                  span: PrismSpan.two,
                   style: dashboard.settings.prismStyle,
                   soundEnabled: soundEnabled,
                   hapticsEnabled: hapticsEnabled,
@@ -384,6 +387,7 @@ class _EditorSidebar extends StatelessWidget {
                   label: 'Remove ${module.name}',
                   palette: _palette,
                   role: PrismRole.compact,
+                  span: PrismSpan.three,
                   style: dashboard.settings.prismStyle,
                   soundEnabled: soundEnabled,
                   hapticsEnabled: hapticsEnabled,
@@ -419,9 +423,10 @@ class _EditorSidebar extends StatelessWidget {
           ReorderableDragStartListener(
             index: index,
             child: PrismButton(
-              label: '≡',
+              label: 'Move',
               palette: _palette,
               role: PrismRole.compact,
+              span: PrismSpan.one,
               style: dashboard.settings.prismStyle,
               onPressed: () {},
             ),
@@ -435,6 +440,7 @@ class _EditorSidebar extends StatelessWidget {
               lit: component.id == selectedId,
               selected: component.id == selectedId,
               role: PrismRole.compact,
+              span: PrismSpan.two,
               style: dashboard.settings.prismStyle,
               soundEnabled: soundEnabled,
               hapticsEnabled: hapticsEnabled,
@@ -447,6 +453,7 @@ class _EditorSidebar extends StatelessWidget {
             palette: _palette,
             lit: visible,
             role: PrismRole.compact,
+            span: PrismSpan.one,
             style: dashboard.settings.prismStyle,
             soundEnabled: soundEnabled,
             hapticsEnabled: hapticsEnabled,
@@ -454,9 +461,10 @@ class _EditorSidebar extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           PrismButton(
-            label: '×',
+            label: 'Remove',
             palette: _palette,
             role: PrismRole.compact,
+            span: PrismSpan.one,
             style: dashboard.settings.prismStyle,
             soundEnabled: soundEnabled,
             hapticsEnabled: hapticsEnabled,

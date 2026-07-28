@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +9,7 @@ import '../model/dashboard.dart';
 import '../model/placement.dart';
 import '../model/vfd_module.dart';
 import '../vfd/vfd_cluster.dart';
+import '../vfd/vfd_render_assets.dart';
 
 class EditorCanvas extends StatelessWidget {
   const EditorCanvas({
@@ -21,7 +21,7 @@ class EditorCanvas extends StatelessWidget {
     required this.onPlacementChanged,
     this.selectedModuleId,
     this.onModulePlacementChanged,
-    this.program,
+    this.renderAssets,
   });
 
   final Dashboard dashboard;
@@ -33,7 +33,7 @@ class EditorCanvas extends StatelessWidget {
   final String? selectedModuleId;
   final void Function(String moduleId, Placement placement)?
   onModulePlacementChanged;
-  final ui.FragmentProgram? program;
+  final VfdRenderAssets? renderAssets;
 
   @override
   Widget build(BuildContext context) {
@@ -58,9 +58,9 @@ class EditorCanvas extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: <Widget>[
-                  if (program != null)
+                  if (renderAssets != null)
                     _LiveVfdPreview(
-                      program: program!,
+                      renderAssets: renderAssets!,
                       dashboard: dashboard,
                       orientation: orientation,
                     ),
@@ -68,7 +68,7 @@ class EditorCanvas extends StatelessWidget {
                     dashboard: dashboard,
                     orientation: orientation,
                     selectedId: selectedId,
-                    livePreview: program != null,
+                    livePreview: renderAssets != null,
                     onSelect: onSelect,
                     onPlacementChanged: onPlacementChanged,
                   ),
@@ -395,12 +395,12 @@ class _ModuleOverlay extends StatelessWidget {
 
 class _LiveVfdPreview extends StatefulWidget {
   const _LiveVfdPreview({
-    required this.program,
+    required this.renderAssets,
     required this.dashboard,
     required this.orientation,
   });
 
-  final ui.FragmentProgram program;
+  final VfdRenderAssets renderAssets;
   final Dashboard dashboard;
   final DesignOrientation orientation;
 
@@ -432,7 +432,7 @@ class _LiveVfdPreviewState extends State<_LiveVfdPreview>
 
   @override
   Widget build(BuildContext context) => VfdCluster(
-    program: widget.program,
+    renderAssets: widget.renderAssets,
     controller: _controller,
     safeInsets: EdgeInsets.zero,
   );

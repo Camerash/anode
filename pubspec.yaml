@@ -24,5 +24,14 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/shaders/prism_glyph_sdf.png
+    - assets/fonts/OFL-Barlow.txt
+  fonts:
+    - family: Barlow Condensed
+      fonts:
+        - asset: assets/fonts/BarlowCondensed-MediumItalic.ttf
+          weight: 500
+          style: italic
   shaders:
     - shaders/vfd.frag

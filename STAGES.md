@@ -123,13 +123,13 @@ Layout, mirrored between `component_data.dart` and `vfd.frag`:
     texel 7:        module height, glass grain, filament strength
     texel 8:        Prism pressed, filament variant code, spare
     texel 9:        Prism bevel, face opacity, inactive luminosity
-    texel 10 + 3k:  digit k segments 0..2
-    texel 11 + 3k:  digit k segments 3..5
-    texel 12 + 3k:  digit k segment 6, spare, spare
+    texels 10..21:  digit segment payload, or 24 Prism glyph indices
 
 `paramA` is digit count, cell count, or lit unit index depending on type.
-`paramB` is the bar's fill fraction. The segment buffer keeps a stride of
-eight — seven segments plus a spare for a future decimal point.
+For Prism rows it carries rendered glyph count. `paramB` is the bar's fill
+fraction. The segment buffer keeps a stride of eight — seven segments plus a
+spare for a future decimal point. Prism rows reuse those same RGB slots; texture
+dimensions and the sixteen-component limit do not change.
 
 ### Known constraint: `decodeImageFromPixelsSync` is Impeller-only
 
@@ -256,9 +256,10 @@ could not be built in Stage 1:
 12. **Action state binding is missing — unresolved.** A Prism component has one
     tap action and static lamp/label params. It cannot yet bind light or legend
     to media state, or declare long-press/double-press/release actions.
-13. **Arbitrary shader Prism legends await the SDF atlas.** Label data persists
-    and Flutter Prism controls render labels, but instrument Prism bodies have
-    no arbitrary glyph renderer yet. This is renderer coverage, not a model gap.
+13. **Arbitrary shader Prism legends — resolved.** One app-wide Barlow SDF
+    atlas and glyph indices packed into existing component payload slots now
+    render labels in the shared pass. The 24-glyph ASCII visual fallback does
+    not truncate or rewrite persisted source labels.
 
 Verification at the boundary:
 
@@ -323,6 +324,21 @@ handcrafted digit variant was authored during it.
       surface.
 - [x] Sound and haptics are simple app-wide preferences initially; no
       per-design sound packs.
+- [x] Fidelity refinement against physical automotive switch reference:
+      integrated static socket, near-square smoked cap, thin asymmetric
+      chamfer, hard neutral glints, dark inactive face, and cap-only travel.
+- [x] Remove status lamp and cyan face fill. Active state backlights the
+      dashboard-coloured legend with only a faint internal diffuser wash;
+      selection/focus uses external locator ticks.
+- [x] Add explicit one-/two-/three-unit Flutter spans and bundled Barlow
+      Condensed Medium Italic switch legends. Reduced motion keeps immediate
+      state feedback without spatial animation.
+- [x] Add checked-in deterministic Barlow SDF atlas. Shader Prism rows reuse
+      digit payload slots for up to 24 glyph indices; unsupported text degrades
+      visually while full model data survives.
+- [x] Keep `PrismStyle` JSON compatible while bounding and relabelling its four
+      controls as cap depth, smoke density, inactive legend, and active
+      backlight.
 
 #### Editor and runtime interaction
 
@@ -360,15 +376,18 @@ handcrafted digit variant was authored during it.
       `integration_test/halo_compounding_test.dart`.
 - [x] Add device tests for mixed-colour halo compounding, component inheritance,
       and shader-rendered Prism press/light state.
+- [x] Expand Prism device guard for atlas legend output, localized light, dark
+      face, fixed socket, moving cap, and opaque filament-wire occlusion.
 - [x] End extension in its own reviewed commit. Stop before Stage 5.
 
 Extension verification:
 
 - `flutter analyze`: clean.
-- `flutter test`: 71 passing.
+- `flutter test`: 80 passing, including deterministic Prism state golden.
 - `integration_test/halo_compounding_test.dart`: four tests passing on iPhone
   17 Pro simulator, iOS 26.3, Impeller — original seam guard, mixed-colour halo
-  compounding, dashboard/module/component inheritance, and Prism light/press.
+  compounding, dashboard/module/component inheritance, and physical Prism
+  body/light/press/legend/filament occlusion.
 - The integration harness forces its documented 780×300 render target with an
   `OverflowBox`; simulator portrait constraints can no longer silently
   invalidate its 300 px/design-unit measurement.
@@ -414,9 +433,10 @@ forward acceleration.
       The full-screen `Listener` is a desktop and development affordance and
       must not survive onto the instrument. Explicit interactive component hit
       regions are allowed; root gestures are not.
-- [ ] Baked SDF atlas for irregular glyphs. The `KM/H` and `MPH` legends are
-      hand-stroked, which is fine for five glyphs and is not a route to an
-      alphabet. Arbitrary instrument Prism labels now depend on this too.
+- [ ] Extend SDF rendering to irregular VFD anode glyphs and icons. Stage 4 now
+      ships a Barlow atlas for Prism switch legends; `KM/H` and `MPH` remain
+      hand-stroked, and warning icons/14-segment alphabets need a distinct
+      authored atlas contract.
 - [ ] Declarative action-state binding for interactive components: media/trip
       state -> Prism lamp/legend, plus any proven need for long press or release
       actions. Do not persist callbacks.

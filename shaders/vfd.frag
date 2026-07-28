@@ -19,6 +19,7 @@ layout(location = 10) uniform vec2  uDataSize;
 // component data is packed into a small texture instead. Sampled at exact texel
 // centres, which returns the stored value under either filter mode.
 uniform sampler2D uData;
+uniform sampler2D uPrismGlyphs;
 
 out vec4 fragColor;
 
@@ -38,6 +39,8 @@ const float SIZE_SCALE = 8.0;
 const float TYPE_SCALE = 8.0;
 const float COUNT_SCALE = 64.0;
 const float EFFECT_SCALE = 2.0;
+const float PRISM_GLYPH_COUNT = 43.0;
+const vec2 PRISM_ATLAS_GRID = vec2(8.0, 6.0);
 
 float decodePosition(float s) { return (s - 0.5) * 2.0 * POSITION_RANGE; }
 vec2 decodePosition(vec2 s) { return (s - 0.5) * 2.0 * POSITION_RANGE; }
@@ -230,35 +233,106 @@ void addLegendComponent(vec2 q, vec2 c, vec2 sz, float unit,
   addMph(q, left, c.y - sep * 0.5, unit, lh, glow, core, dim);
 }
 
-void addPrismComponent(vec2 q, vec2 c, vec2 sz, float lit, float pressed,
-                       vec3 style,
-                       inout float glow, inout float core, inout float dim) {
+float prismGlyphSample(float row, float glyphIndex, vec2 cellUv) {
+  float payloadTexel = HEADER_TEXELS + floor(glyphIndex / 3.0);
+  vec3 packed = fetch(row, payloadTexel).rgb;
+  float channel = mod(glyphIndex, 3.0);
+  float encoded = channel < 0.5
+      ? packed.r
+      : (channel < 1.5 ? packed.g : packed.b);
+  float atlasIndex = floor(encoded * (PRISM_GLYPH_COUNT - 1.0) + 0.5);
+  vec2 atlasCell = vec2(
+    mod(atlasIndex, PRISM_ATLAS_GRID.x),
+    floor(atlasIndex / PRISM_ATLAS_GRID.x)
+  );
+  return texture(
+    uPrismGlyphs,
+    (atlasCell + clamp(cellUv, 0.0, 1.0)) / PRISM_ATLAS_GRID
+  ).r;
+}
+
+void addPrismComponent(
+  vec2 q, vec2 c, vec2 sz, float glyphCount, float row,
+  float lit, float pressed, vec3 style,
+  inout float glow, inout float core,
+  inout vec3 prismSurface, inout float prismSurfaceMask,
+  inout float prismOcclusion
+) {
   vec2 halfSize = sz * 0.5;
-  float bevelScale = clamp(style.x / 0.12, 0.25, 2.0);
-  float faceScale = clamp(style.y / 0.78, 0.0, 2.0);
-  float inactiveScale = clamp(style.z / 0.18, 0.0, 4.0);
-  vec2 pressOffset = vec2(0.0, -sz.y * 0.08 * pressed);
-  float back = sdBox(
-    q - c - vec2(0.0, -sz.y * 0.055 * bevelScale),
-    halfSize
+  float depthScale = clamp(style.x / 0.12, 0.55, 1.45);
+  float smoke = clamp(style.y, 0.60, 0.95);
+  float inactiveScale = clamp(style.z / 0.18, 0.0, 2.8);
+  vec2 pressOffset = vec2(0.0, -sz.y * 0.07 * pressed);
+
+  vec2 socketP = q - c;
+  float socketD = sdBox(socketP, halfSize);
+  float socketFill = smoothstep(EDGE_OUT, EDGE_IN, socketD);
+  float pocketD = sdBox(socketP, halfSize * vec2(0.94, 0.88));
+  float pocketFill = smoothstep(EDGE_OUT, EDGE_IN, pocketD);
+
+  vec2 capP = q - c - pressOffset;
+  vec2 capHalf = halfSize * vec2(0.88, 0.78);
+  float capD = sdBox(capP, capHalf);
+  float capFill = smoothstep(EDGE_OUT, EDGE_IN, capD);
+  vec2 faceHalf = capHalf * vec2(
+    0.88 - 0.035 * depthScale,
+    0.68 - 0.055 * depthScale
   );
-  float face = sdBox(
-    q - c - pressOffset,
-    halfSize * vec2(1.0 - 0.12 * bevelScale, 1.0 - 0.24 * bevelScale)
+  float faceD = sdBox(capP - vec2(0.0, sz.y * 0.015), faceHalf);
+  float faceFill = smoothstep(EDGE_OUT, EDGE_IN, faceD);
+  float bevelFill = max(capFill - faceFill, 0.0);
+
+  vec3 surface = vec3(0.0);
+  surface = mix(surface, vec3(0.010, 0.012, 0.011), socketFill);
+  surface = mix(surface, vec3(0.002, 0.003, 0.003), pocketFill);
+  vec3 sideColour = mix(
+    vec3(0.080, 0.092, 0.087),
+    vec3(0.022, 0.027, 0.025),
+    clamp((capP.y / max(capHalf.y, 0.001) + 1.0) * 0.5, 0.0, 1.0)
   );
-  float faceFill = smoothstep(EDGE_OUT, EDGE_IN, face);
-  float bevelFill = smoothstep(EDGE_OUT, EDGE_IN, back)
-                  - smoothstep(EDGE_OUT, EDGE_IN, face);
-  glow += lit * halo(face) * 0.72;
-  core = max(
-    core,
-    (lit * faceFill * 0.82 + lit * bevelFill * 0.28) * faceScale
+  surface = mix(surface, sideColour, bevelFill);
+  vec3 faceColour = mix(
+    vec3(0.034, 0.041, 0.038),
+    vec3(0.008, 0.011, 0.010),
+    smoke
   );
-  dim = max(
-    dim,
-    (faceFill * (1.0 - step(0.001, lit)) * 0.28 + bevelFill * 0.18)
-      * inactiveScale
+  surface = mix(surface, faceColour, faceFill);
+
+  float topEdge = (1.0 - smoothstep(0.0, 0.0032, abs(capP.y - faceHalf.y)))
+                * step(abs(capP.x), faceHalf.x);
+  float leftEdge = (1.0 - smoothstep(0.0, 0.0022, abs(capP.x + faceHalf.x)))
+                 * step(abs(capP.y), faceHalf.y);
+  surface += vec3(0.34, 0.37, 0.35) * topEdge * 0.45;
+  surface += vec3(0.20, 0.23, 0.21) * leftEdge * 0.22;
+
+  float count = clamp(floor(glyphCount + 0.5), 0.0, 24.0);
+  float advance = min(
+    faceHalf.x * 2.0 / max(count, 1.0),
+    faceHalf.y * 0.92
   );
+  float glyphHeight = min(faceHalf.y * 1.58, advance * 1.85);
+  float textWidth = count * advance;
+  float textIndex = floor((capP.x + textWidth * 0.5) / max(advance, 0.001));
+  float inTextX = step(0.0, textIndex) * step(textIndex, count - 1.0);
+  float inTextY = step(abs(capP.y), glyphHeight * 0.5);
+  vec2 cellUv = vec2(
+    (capP.x + textWidth * 0.5 - textIndex * advance) / max(advance, 0.001),
+    0.5 - capP.y / max(glyphHeight, 0.001)
+  );
+  float sdf = prismGlyphSample(row, max(textIndex, 0.0), cellUv);
+  float glyphCore = smoothstep(0.48, 0.56, sdf) * inTextX * inTextY;
+  float glyphHalo = smoothstep(0.36, 0.50, sdf) * inTextX * inTextY;
+
+  float isActive = step(0.001, lit);
+  surface += vec3(0.30, 0.32, 0.31)
+           * glyphCore * (1.0 - isActive) * inactiveScale;
+  glow += glyphHalo * lit * 0.68;
+  core = max(core, glyphCore * lit * 0.88);
+  core = max(core, faceFill * lit * 0.025);
+
+  prismSurface += surface;
+  prismSurfaceMask = max(prismSurfaceMask, socketFill);
+  prismOcclusion = max(prismOcclusion, socketFill);
 }
 
 void main() {
@@ -283,7 +357,11 @@ void main() {
   substrate += uPhosphor * (uLayers.x + uLayers.y + uLayers.z) * 0.000000001;
 
   vec3 emission = vec3(0.0);
+  vec3 prismEmission = vec3(0.0);
   vec3 unlitDelta = vec3(0.0);
+  vec3 prismSurface = vec3(0.0);
+  float prismSurfaceMask = 0.0;
+  float prismOcclusion = 0.0;
   float filamentMask = 0.0;
   float grainStrength = uGrain * (1.0 - step(0.5, uCount));
 
@@ -318,8 +396,8 @@ void main() {
       addLegendComponent(q, c, sz, count, glow, core, dim);
     } else if (type < TYPE_PRISM + 0.5) {
       addPrismComponent(
-        q, c, sz, params.b * EFFECT_SCALE, pressed, prismStyle,
-        glow, core, dim
+        q, c, sz, count, row, params.b * EFFECT_SCALE, pressed, prismStyle,
+        glow, core, prismSurface, prismSurfaceMask, prismOcclusion
       );
     }
 
@@ -331,7 +409,11 @@ void main() {
 
     vec3 em = phosphor * glow * opticalA.y * 1.15
             + mix(phosphor, vec3(1.0), 0.55) * core * 1.30;
-    emission += em * meshF * mux * opticalA.x * coating;
+    if (type < TYPE_PRISM - 0.5) {
+      emission += em * meshF * mux * opticalA.x * coating;
+    } else {
+      prismEmission += em * mux * opticalA.x;
+    }
 
     vec3 unlitCol = mix(vec3(0.085, 0.095, 0.090), phosphor * 0.13, 0.40);
     unlitDelta += (unlitCol - substrate) * dim * opticalB.y;
@@ -362,6 +444,9 @@ void main() {
   }
 
   vec3 col = substrate + unlitDelta + emission;
+  col = mix(col, prismSurface, clamp(prismSurfaceMask, 0.0, 1.0));
+  col += prismEmission;
+  filamentMask *= 1.0 - clamp(prismOcclusion, 0.0, 1.0);
   col = mix(col, col * 0.50 + vec3(0.040, 0.024, 0.010), filamentMask);
 
   float sheen = smoothstep(0.85, 0.0, abs(uv.x - uTilt * 0.85 + uv.y * 0.55));

@@ -27,7 +27,7 @@ class VfdDock extends StatelessWidget {
     required this.onProfileChanged,
   });
 
-  static const double height = 260;
+  static const double height = 264;
 
   final VfdController controller;
   final DashboardSettings settings;
@@ -50,7 +50,7 @@ class VfdDock extends StatelessWidget {
       child: Column(
         children: <Widget>[
           SizedBox(
-            height: 50,
+            height: 54,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
               child: Row(
@@ -60,6 +60,7 @@ class VfdDock extends StatelessWidget {
                     palette: palette,
                     lit: autoDrive,
                     role: PrismRole.compact,
+                    span: PrismSpan.one,
                     style: settings.prismStyle,
                     soundEnabled: preferences.soundEnabled,
                     hapticsEnabled: preferences.hapticsEnabled,
@@ -83,6 +84,7 @@ class VfdDock extends StatelessWidget {
                       lit: controller.unit == unit,
                       enabled: editable,
                       role: PrismRole.compact,
+                      span: PrismSpan.one,
                       style: settings.prismStyle,
                       soundEnabled: preferences.soundEnabled,
                       hapticsEnabled: preferences.hapticsEnabled,
@@ -94,6 +96,7 @@ class VfdDock extends StatelessWidget {
                     label: 'Library',
                     palette: palette,
                     role: PrismRole.compact,
+                    span: PrismSpan.one,
                     style: settings.prismStyle,
                     soundEnabled: preferences.soundEnabled,
                     hapticsEnabled: preferences.hapticsEnabled,
@@ -106,6 +109,7 @@ class VfdDock extends StatelessWidget {
                       palette: palette,
                       lit: true,
                       role: PrismRole.compact,
+                      span: PrismSpan.two,
                       style: settings.prismStyle,
                       soundEnabled: preferences.soundEnabled,
                       hapticsEnabled: preferences.hapticsEnabled,

@@ -12,6 +12,8 @@ import '../model/optical_profile.dart';
 import '../model/placement.dart';
 import '../model/vfd_module.dart';
 import 'component_data.dart';
+import 'prism_glyphs.dart';
+import 'vfd_render_assets.dart';
 import 'vfd_types.dart';
 
 class SegmentBank {
@@ -258,6 +260,7 @@ class VfdController extends ChangeNotifier {
               profile: profile,
               moduleProfile: moduleProfile,
               prismLit: params['lit'] == true ? 1 : 0,
+              prismGlyphs: PrismGlyphs.encode(params['label'] as String? ?? ''),
             ),
           );
 
@@ -289,6 +292,7 @@ class VfdController extends ChangeNotifier {
     double paramA = 0,
     double paramB = 0,
     double prismLit = 0,
+    List<double>? prismGlyphs,
     List<double>? segments,
   }) {
     final module = _moduleGeometry(component);
@@ -330,6 +334,7 @@ class VfdController extends ChangeNotifier {
       prismFaceOpacity: _design.renderSettings.prismStyle.faceOpacity,
       prismInactiveLuminosity:
           _design.renderSettings.prismStyle.inactiveLuminosity,
+      prismGlyphs: prismGlyphs,
       segments: segments,
     );
   }
@@ -366,11 +371,13 @@ class VfdController extends ChangeNotifier {
 class VfdPainter extends CustomPainter {
   VfdPainter({
     required this.shader,
+    required this.prismGlyphAtlas,
     required this.controller,
     required this.safeRect,
   }) : super(repaint: controller);
 
   final ui.FragmentShader shader;
+  final ui.Image prismGlyphAtlas;
   final VfdController controller;
 
   /// Where content is laid out, in Flutter's y-down logical pixels. The render
@@ -407,7 +414,8 @@ class VfdPainter extends CustomPainter {
       ..setFloat(17, controller.componentCount.toDouble())
       ..setFloat(18, ComponentData.texelsPerComponent.toDouble())
       ..setFloat(19, ComponentData.maxComponents.toDouble())
-      ..setImageSampler(0, data);
+      ..setImageSampler(0, data)
+      ..setImageSampler(1, prismGlyphAtlas);
 
     canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
   }
@@ -415,6 +423,7 @@ class VfdPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant VfdPainter old) =>
       old.shader != shader ||
+      old.prismGlyphAtlas != prismGlyphAtlas ||
       old.controller != controller ||
       old.safeRect != safeRect;
 }
@@ -422,12 +431,12 @@ class VfdPainter extends CustomPainter {
 class VfdCluster extends StatefulWidget {
   const VfdCluster({
     super.key,
-    required this.program,
+    required this.renderAssets,
     required this.controller,
     this.safeInsets,
   });
 
-  final ui.FragmentProgram program;
+  final VfdRenderAssets renderAssets;
   final VfdController controller;
 
   /// Where content may be laid out inside this widget. Defaults to the window
@@ -440,7 +449,8 @@ class VfdCluster extends StatefulWidget {
 }
 
 class _VfdClusterState extends State<VfdCluster> {
-  late final ui.FragmentShader _shader = widget.program.fragmentShader();
+  late final ui.FragmentShader _shader = widget.renderAssets.program
+      .fragmentShader();
 
   @override
   void dispose() {
@@ -466,6 +476,7 @@ class _VfdClusterState extends State<VfdCluster> {
           return CustomPaint(
             painter: VfdPainter(
               shader: _shader,
+              prismGlyphAtlas: widget.renderAssets.prismGlyphAtlas,
               controller: widget.controller,
               safeRect: safeRect,
             ),

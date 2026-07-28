@@ -28,6 +28,26 @@ void main() {
     expect(disabled.withStrength(3, spec).strength, 2);
   });
 
+  test('legacy Prism style values remain readable without migration', () {
+    final style = PrismStyle.fromJson(<String, Object?>{
+      'bevelDepth': 0.4,
+      'faceOpacity': 0.2,
+      'inactiveLuminosity': 1,
+      'activeLuminosity': 0,
+    });
+
+    expect(style.bevelDepth, 0.4);
+    expect(style.faceOpacity, 0.2);
+    expect(style.inactiveLuminosity, 1);
+    expect(style.activeLuminosity, 0);
+    expect(style.toJson().keys, <String>[
+      'bevelDepth',
+      'faceOpacity',
+      'inactiveLuminosity',
+      'activeLuminosity',
+    ]);
+  });
+
   test('sparse optical inheritance resolves dashboard module component', () {
     final baseline = OpticalProfile(
       phosphorName: 'Cyan-green',

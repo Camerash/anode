@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:anode/vfd/component_data.dart';
+import 'package:anode/vfd/prism_glyphs.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Values chosen to be unrepresentable in 8 bits, so a silent downconversion of
@@ -113,6 +114,53 @@ void main() {
     for (var i = 0; i < ComponentData.floatsPerComponent; i++) {
       expect(floats[i], inInclusiveRange(0.0, 1.0), reason: 'float $i');
     }
+  });
+
+  test('Prism rows reuse segment payload for glyph indices', () {
+    final glyphs = PrismGlyphs.encode('RESET 50%');
+    final floats = ComponentData.pack(<ComponentFrame>[
+      ComponentFrame(
+        type: ShaderType.prism,
+        centerX: 0,
+        centerY: 0,
+        width: 0.7,
+        height: 0.24,
+        paramA: 63,
+        prismGlyphs: glyphs,
+      ),
+    ]);
+
+    expect(
+      floats[6],
+      closeTo(ComponentData.encodeCount(glyphs.length.toDouble()), 1e-7),
+    );
+    final payload = ComponentData.headerTexels * 4;
+    for (var i = 0; i < glyphs.length; i++) {
+      final offset = payload + (i ~/ 3) * 4 + i % 3;
+      expect(floats[offset], closeTo(glyphs[i], 1e-7));
+    }
+    expect(floats[payload + (glyphs.length ~/ 3) * 4 + 2], 0);
+  });
+
+  test('Prism payload length clamps to atlas capacity', () {
+    final floats = ComponentData.pack(<ComponentFrame>[
+      ComponentFrame(
+        type: ShaderType.prism,
+        centerX: 0,
+        centerY: 0,
+        width: 0.7,
+        height: 0.24,
+        prismGlyphs: List<double>.filled(40, 0.5),
+      ),
+    ]);
+
+    expect(
+      floats[6],
+      closeTo(
+        ComponentData.encodeCount(PrismGlyphs.maxVisibleGlyphs.toDouble()),
+        1e-7,
+      ),
+    );
   });
 
   test('alpha is 1 everywhere, including unused rows', () {

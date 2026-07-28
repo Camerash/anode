@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,6 +16,7 @@ import 'vfd/speed_source.dart';
 import 'vfd/design_action_overlay.dart';
 import 'vfd/prism_widgets.dart';
 import 'vfd/vfd_cluster.dart';
+import 'vfd/vfd_render_assets.dart';
 import 'vfd/vfd_widgets.dart';
 import 'vfd_dock.dart';
 
@@ -24,19 +24,19 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   await WakelockPlus.enable();
-  final program = await ui.FragmentProgram.fromAsset('shaders/vfd.frag');
+  final renderAssets = await VfdRenderAssets.load();
   final repository = DesignRepository(await SharedPreferences.getInstance());
   final state = AnodeState.load(
     repository: repository,
     presets: [developmentPreset()],
   );
-  runApp(AnodeApp(program: program, state: state));
+  runApp(AnodeApp(renderAssets: renderAssets, state: state));
 }
 
 class AnodeApp extends StatefulWidget {
-  const AnodeApp({super.key, required this.program, required this.state});
+  const AnodeApp({super.key, required this.renderAssets, required this.state});
 
-  final ui.FragmentProgram program;
+  final VfdRenderAssets renderAssets;
   final AnodeState state;
 
   @override
@@ -50,10 +50,10 @@ class _AnodeAppState extends State<AnodeApp> {
       title: 'Anode',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(useMaterial3: true),
-      home: ClusterPage(program: widget.program, state: widget.state),
+      home: ClusterPage(renderAssets: widget.renderAssets, state: widget.state),
       routes: <String, WidgetBuilder>{
         '/library': (context) =>
-            LibraryPage(state: widget.state, program: widget.program),
+            LibraryPage(state: widget.state, renderAssets: widget.renderAssets),
       },
     );
   }
@@ -61,14 +61,19 @@ class _AnodeAppState extends State<AnodeApp> {
   @override
   void dispose() {
     widget.state.dispose();
+    widget.renderAssets.dispose();
     super.dispose();
   }
 }
 
 class ClusterPage extends StatefulWidget {
-  const ClusterPage({super.key, required this.program, required this.state});
+  const ClusterPage({
+    super.key,
+    required this.renderAssets,
+    required this.state,
+  });
 
-  final ui.FragmentProgram program;
+  final VfdRenderAssets renderAssets;
   final AnodeState state;
 
   @override
@@ -171,7 +176,7 @@ class _ClusterPageState extends State<ClusterPage>
                 onPointerHover: (e) => drive(e.localPosition),
                 onPointerMove: (e) => drive(e.localPosition),
                 child: VfdCluster(
-                  program: widget.program,
+                  renderAssets: widget.renderAssets,
                   controller: _controller,
                   safeInsets: clusterInsets,
                 ),
@@ -198,6 +203,7 @@ class _ClusterPageState extends State<ClusterPage>
                   palette: VfdPalette.of(_controller.phosphor),
                   lit: _dockOpen,
                   role: PrismRole.compact,
+                  span: PrismSpan.one,
                   style: widget.state.activeDesign.renderSettings.prismStyle,
                   soundEnabled: widget.state.globalSettings.soundEnabled,
                   hapticsEnabled: widget.state.globalSettings.hapticsEnabled,

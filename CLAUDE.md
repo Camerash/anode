@@ -433,16 +433,26 @@ sitting on the substrate breaks the illusion exactly the way a crisp vector gear
 does, and these surfaces sit directly on top of the render.
 
 - The primary control primitive is the **Prism button**: smoked acrylic with a
-  dark face, transparent trapezoidal bevel edges, hard perimeter reflections,
-  and visible extrusion. It comes from moulded automotive switchgear, not
-  generic frosted-glass or glassmorphism UI.
+  dark face, an integrated recessed mounting socket, thin transparent chamfer,
+  hard neutral perimeter reflections, and visible extrusion. It comes from
+  moulded automotive switchgear, not generic frosted-glass or glassmorphism UI.
 - Enabled and pressed are independent states. An active button rests raised and
   lit; an inactive button rests raised and dark; pointer-down depresses either
-  one temporarily. Depth motion transforms the face rather than changing layout.
+  one temporarily. Only the cap translates by seven percent of its height; the
+  socket and layout never scale or move. Reduced-motion mode applies the same
+  state immediately.
 - The active light follows the dashboard phosphor colour. Component optical
-  overrides never recolour the surrounding panel.
-- Legends are uppercase and letterspaced. Prefer a word to an icon — `RUN` and
-  `HOLD` read more period-correct than a play triangle.
+  overrides never recolour the surrounding panel. Illumination belongs to the
+  backlit legend plus a faint internal diffuser wash; no status dot and no
+  cyan-filled face.
+- Prism legends use the bundled Barlow Condensed Medium Italic switchgear face,
+  uppercase with restrained tracking. Prefer a word to an icon — `RUN` and
+  `HOLD` read more period-correct than a play triangle. Flutter and shader
+  renderers share a 24-glyph ASCII visual contract; unsupported characters
+  degrade to `?` without rewriting persisted text.
+- Flutter control widths are physical one-, two-, or three-unit spans. Text
+  never invents an arbitrary cap width. Selection and keyboard focus use
+  external locator ticks so neither can masquerade as the active lamp.
 - Anything showing a quantity uses the segmented cell bar on the same rule as
   the gauge: cell `i` is lit when `(i + 0.5) / n <= fraction`. A continuous
   Material slider does not belong on this substrate.
@@ -461,7 +471,10 @@ Use shared button semantics with two renderers:
   sound, and haptics.
 - A prism design component is data-driven geometry inside the existing shared
   VFD render pass. It receives state through the controller/data texture so its
-  light compounds correctly with neighbouring emission.
+  light compounds correctly with neighbouring emission. Its Barlow legend
+  samples one app-wide SDF atlas; glyph indices reuse the component row's digit
+  payload and require no per-button surface. Its opaque socket masks module
+  filament wires.
 
 Do not force both through one renderer. Do not give design components their own
 widgets or fragment surfaces.
@@ -570,10 +583,11 @@ special-casing controls around them:
   action state, declare long-press/double-press behaviour, or choose separate
   press/release actions. Play/pause state feedback will require a declarative
   state binding rather than callbacks in design data.
-- **Renderer-only gap:** arbitrary Prism legends are persisted but are not drawn
-  by the shader until the planned SDF glyph atlas exists. Flutter Prism controls
-  draw their labels normally; instrument Prism bodies already render and press
-  in the shared pass.
+- **Resolved during the Prism fidelity refinement:** shader Prism components
+  render their arbitrary persisted labels through a shared Barlow SDF atlas.
+  The visual subset is uppercase ASCII UI text, 24 glyphs maximum; unsupported
+  glyphs render `?` and longer labels render 21 glyphs plus `...`, while the full
+  source string remains persisted.
 - `outsideTemp`, `phoneBattery`, and `altitude` are expressible and editable as
   component data, but the current shader intentionally skips them. This is a
   renderer coverage gap, not a reason to hardcode or remove them from the
@@ -755,13 +769,13 @@ Near term, roughly in order:
   optical profiles, lightweight VFD modules, revisioned component variants,
   interactive action bindings, and editor-wide Prism controls. Complete and
   review this before Stage 5 or shipped preset authoring.
-- **Irregular glyphs via a baked SDF atlas.** Real clusters have etched anode
-  shapes that are not seven-segment: `MPH`, fuel pump icons, arrows, `ANTI-LOCK`,
-  `CHECK ENGINE`, 14-segment alphanumerics. Author them as SVG, bake to an SDF
-  texture at build time, sample in the shader via `setImageSampler`. One path for
-  fonts, icons and warning legends, all inheriting the same halo maths. The
-  `KM/H` and `MPH` legends are currently hand-stroked from `sdSeg` paths, which
-  is fine for five glyphs and is not a route to an alphabet.
+- **Extend the SDF contract to irregular VFD glyphs.** Stage 4 now has a baked
+  Barlow atlas for physical Prism switch legends. Real VFD anodes still need
+  etched shapes that are not that switch font: fuel pump icons, arrows,
+  `ANTI-LOCK`, `CHECK ENGINE`, and 14-segment alphanumerics. Author them as SVG,
+  bake them beside or into a dedicated anode atlas, and preserve their own halo
+  maths. `KM/H` and `MPH` remain hand-stroked from `sdSeg`, which is fine for
+  five glyphs and is not a route to that broader library.
 - **Trip computer.** The answer to the density problem, so it is not optional
   polish. See "The density problem".
 - **Shipped presets**, authored last, against a model the editor has proven.

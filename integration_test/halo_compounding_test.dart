@@ -9,6 +9,7 @@ import 'package:anode/model/placement.dart';
 import 'package:anode/model/settings.dart';
 import 'package:anode/model/vfd_module.dart';
 import 'package:anode/vfd/vfd_cluster.dart';
+import 'package:anode/vfd/vfd_render_assets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -85,11 +86,13 @@ void main() {
     );
   }
 
-  late ui.FragmentProgram program;
+  late VfdRenderAssets renderAssets;
 
   setUpAll(() async {
-    program = await ui.FragmentProgram.fromAsset('shaders/vfd.frag');
+    renderAssets = await VfdRenderAssets.load();
   });
+
+  tearDownAll(() => renderAssets.dispose());
 
   /// Renders one configuration and returns the luminance profile along the
   /// horizontal centre line of the bars.
@@ -117,7 +120,7 @@ void main() {
                   width: 780,
                   height: 300,
                   child: _Harness(
-                    program: program,
+                    renderAssets: renderAssets,
                     dashboard: dashboardWith(left: left, right: right),
                   ),
                 ),
@@ -179,7 +182,7 @@ void main() {
                   height: 300,
                   child: _Harness(
                     key: harnessKey,
-                    program: program,
+                    renderAssets: renderAssets,
                     dashboard: dashboard,
                   ),
                 ),
@@ -269,6 +272,47 @@ void main() {
   ) {
     final offset = (y * capture.width + x) * 4;
     return capture.pixels.sublist(offset, offset + 3);
+  }
+
+  int regionLuminance(
+    ({Uint8List pixels, int width, int height}) capture,
+    ui.Rect region,
+  ) {
+    var total = 0;
+    final left = region.left.floor().clamp(0, capture.width);
+    final top = region.top.floor().clamp(0, capture.height);
+    final right = region.right.ceil().clamp(0, capture.width);
+    final bottom = region.bottom.ceil().clamp(0, capture.height);
+    for (var y = top; y < bottom; y++) {
+      for (var x = left; x < right; x++) {
+        final offset = (y * capture.width + x) * 4;
+        total += capture.pixels[offset];
+        total += capture.pixels[offset + 1];
+        total += capture.pixels[offset + 2];
+      }
+    }
+    return total;
+  }
+
+  int regionDifference(
+    ({Uint8List pixels, int width, int height}) first,
+    ({Uint8List pixels, int width, int height}) second,
+    ui.Rect region,
+  ) {
+    var total = 0;
+    final left = region.left.floor().clamp(0, first.width);
+    final top = region.top.floor().clamp(0, first.height);
+    final right = region.right.ceil().clamp(0, first.width);
+    final bottom = region.bottom.ceil().clamp(0, first.height);
+    for (var y = top; y < bottom; y++) {
+      for (var x = left; x < right; x++) {
+        final offset = (y * first.width + x) * 4;
+        total += (first.pixels[offset] - second.pixels[offset]).abs();
+        total += (first.pixels[offset + 1] - second.pixels[offset + 1]).abs();
+        total += (first.pixels[offset + 2] - second.pixels[offset + 2]).abs();
+      }
+    }
+    return total;
   }
 
   testWidgets('halos compound across a component boundary with no seam', (
@@ -401,18 +445,35 @@ void main() {
     expect(right[1], greaterThan(left[1]));
   });
 
-  testWidgets('shader Prism light and press states both change output', (
+  testWidgets('shader Prism has physical body, atlas legend, and cap travel', (
     tester,
   ) async {
-    Dashboard prism(bool lit) => Dashboard(
+    Dashboard prism({
+      required bool lit,
+      String label = 'RESET',
+      double filament = 0,
+      bool backdrop = false,
+    }) => Dashboard(
       id: 'prism',
       name: 'Prism',
       supportedOrientations: <DesignOrientation>{DesignOrientation.landscape},
       components: <ComponentInstance>[
+        if (backdrop)
+          ComponentInstance(
+            id: 'backdrop',
+            typeId: ComponentTypes.speedBar,
+            params: const <String, Object?>{'cells': 1, 'maxKph': 100.0},
+            placements: const <DesignOrientation, Placement>{
+              DesignOrientation.landscape: Placement(
+                offset: Offset(0, 0.11),
+                size: Size(2.4, 0.08),
+              ),
+            },
+          ),
         ComponentInstance(
           id: 'button',
           typeId: ComponentTypes.prismButton,
-          params: <String, Object?>{'label': 'RESET', 'lit': lit},
+          params: <String, Object?>{'label': label, 'lit': lit},
           placements: const <DesignOrientation, Placement>{
             DesignOrientation.landscape: Placement(size: Size(0.7, 0.24)),
           },
@@ -421,47 +482,85 @@ void main() {
       settings: DashboardSettings(
         opticalProfile: OpticalProfile(
           effects: <String, EffectSetting>{
-            for (final id in <String>[
-              EffectIds.glassGrain,
-              EffectIds.filamentWires,
-              EffectIds.tiltParallax,
-            ])
-              id: const EffectSetting(strength: 0, resumeStrength: 1),
+            EffectIds.glassGrain: const EffectSetting(
+              strength: 0,
+              resumeStrength: 1,
+            ),
+            EffectIds.filamentWires: EffectSetting(
+              strength: filament,
+              resumeStrength: 1,
+            ),
+            EffectIds.tiltParallax: const EffectSetting(
+              strength: 0,
+              resumeStrength: 1,
+            ),
           },
         ),
       ),
     );
 
-    final off = await capture(tester, prism(false));
-    final lit = await capture(tester, prism(true));
+    final off = await capture(tester, prism(lit: false));
+    final lit = await capture(tester, prism(lit: true));
     final pressed = await capture(
       tester,
-      prism(true),
+      prism(lit: true),
       pressedComponentId: 'button',
     );
-    int luminanceSum(Uint8List pixels) {
-      var total = 0;
-      for (var i = 0; i < pixels.length; i += 4) {
-        total += pixels[i] + pixels[i + 1] + pixels[i + 2];
-      }
-      return total;
-    }
+    final blank = await capture(tester, prism(lit: true, label: ''));
+    final filamentOff = await capture(
+      tester,
+      prism(lit: false, label: '', filament: 0, backdrop: true),
+    );
+    final filamentOn = await capture(
+      tester,
+      prism(lit: false, label: '', filament: 1, backdrop: true),
+    );
 
-    var pressedDifference = 0;
-    for (var i = 0; i < lit.pixels.length; i += 4) {
-      pressedDifference += (lit.pixels[i] - pressed.pixels[i]).abs();
-      pressedDifference += (lit.pixels[i + 1] - pressed.pixels[i + 1]).abs();
-      pressedDifference += (lit.pixels[i + 2] - pressed.pixels[i + 2]).abs();
-    }
-    expect(luminanceSum(lit.pixels), greaterThan(luminanceSum(off.pixels)));
-    expect(pressedDifference, greaterThan(1000));
+    const legendRegion = ui.Rect.fromLTWH(315, 130, 150, 40);
+    const quietFaceRegion = ui.Rect.fromLTWH(350, 119, 80, 10);
+    const leftSocketRegion = ui.Rect.fromLTWH(285, 114, 10, 72);
+    const capRegion = ui.Rect.fromLTWH(300, 119, 180, 62);
+
+    expect(
+      regionLuminance(lit, legendRegion),
+      greaterThan(regionLuminance(off, legendRegion)),
+    );
+    expect(regionDifference(lit, blank, legendRegion), greaterThan(5000));
+    final quietAverage =
+        regionLuminance(lit, quietFaceRegion) /
+        (quietFaceRegion.width * quietFaceRegion.height * 3);
+    expect(quietAverage, lessThan(90));
+
+    final socketDifference = regionDifference(lit, pressed, leftSocketRegion);
+    final capDifference = regionDifference(lit, pressed, capRegion);
+    expect(capDifference, greaterThan(1000));
+    expect(socketDifference, lessThan(capDifference ~/ 8));
+
+    const insideWireRegion = ui.Rect.fromLTWH(370, 110, 40, 80);
+    const outsideWireRegion = ui.Rect.fromLTWH(220, 110, 40, 80);
+    final insideDifference = regionDifference(
+      filamentOff,
+      filamentOn,
+      insideWireRegion,
+    );
+    final outsideDifference = regionDifference(
+      filamentOff,
+      filamentOn,
+      outsideWireRegion,
+    );
+    expect(outsideDifference, greaterThan(200));
+    expect(insideDifference, lessThan(outsideDifference ~/ 10));
   });
 }
 
 class _Harness extends StatefulWidget {
-  const _Harness({super.key, required this.program, required this.dashboard});
+  const _Harness({
+    super.key,
+    required this.renderAssets,
+    required this.dashboard,
+  });
 
-  final ui.FragmentProgram program;
+  final VfdRenderAssets renderAssets;
   final Dashboard dashboard;
 
   @override
@@ -487,7 +586,7 @@ class _HarnessState extends State<_Harness>
 
   @override
   Widget build(BuildContext context) => VfdCluster(
-    program: widget.program,
+    renderAssets: widget.renderAssets,
     controller: _controller,
     safeInsets: EdgeInsets.zero,
   );

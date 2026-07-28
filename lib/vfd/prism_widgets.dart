@@ -1,12 +1,28 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../model/optical_profile.dart';
+import 'prism_glyphs.dart';
 import 'vfd_widgets.dart';
 
+part 'prism_painters.dart';
+
 enum PrismRole { compact, standard, primary }
+
+enum PrismSpan { one, two, three }
+
+abstract final class PrismMetrics {
+  static double height(PrismRole role) => switch (role) {
+    PrismRole.compact => 44,
+    PrismRole.standard => 54,
+    PrismRole.primary => 66,
+  };
+
+  static double width(PrismRole role, PrismSpan span) {
+    final height = PrismMetrics.height(role);
+    return height * (1.18 + span.index);
+  }
+}
 
 class PrismButton extends StatefulWidget {
   const PrismButton({
@@ -19,6 +35,7 @@ class PrismButton extends StatefulWidget {
     this.selected = false,
     this.enabled = true,
     this.role = PrismRole.standard,
+    this.span = PrismSpan.one,
     this.style = const PrismStyle(),
     this.soundEnabled = true,
     this.hapticsEnabled = true,
@@ -32,6 +49,7 @@ class PrismButton extends StatefulWidget {
   final bool selected;
   final bool enabled;
   final PrismRole role;
+  final PrismSpan span;
   final PrismStyle style;
   final bool soundEnabled;
   final bool hapticsEnabled;
@@ -42,20 +60,16 @@ class PrismButton extends StatefulWidget {
 
 class _PrismButtonState extends State<PrismButton> {
   bool _pressed = false;
+  bool _focused = false;
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
     final enabled = widget.enabled && widget.onPressed != null;
-    final height = switch (widget.role) {
-      PrismRole.compact => 38.0,
-      PrismRole.standard => 54.0,
-      PrismRole.primary => 66.0,
-    };
-    final horizontal = switch (widget.role) {
-      PrismRole.compact => 10.0,
-      PrismRole.standard => 14.0,
-      PrismRole.primary => 18.0,
-    };
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final pressDuration = reduceMotion
+        ? Duration.zero
+        : Duration(milliseconds: _pressed ? 45 : 95);
 
     return Semantics(
       button: true,
@@ -69,6 +83,8 @@ class _PrismButtonState extends State<PrismButton> {
         mouseCursor: enabled
             ? SystemMouseCursors.click
             : SystemMouseCursors.basic,
+        onShowFocusHighlight: (value) => setState(() => _focused = value),
+        onShowHoverHighlight: (value) => setState(() => _hovered = value),
         actions: <Type, Action<Intent>>{
           ActivateIntent: CallbackAction<ActivateIntent>(
             onInvoke: (_) {
@@ -84,34 +100,52 @@ class _PrismButtonState extends State<PrismButton> {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: enabled ? _activate : null,
-            child: AnimatedScale(
-              scale: _pressed ? 0.985 : 1,
-              duration: Duration(milliseconds: _pressed ? 55 : 105),
-              curve: Curves.easeOutQuart,
-              child: AnimatedSlide(
-                offset: Offset(0, _pressed ? 0.045 : 0),
-                duration: Duration(milliseconds: _pressed ? 55 : 105),
-                curve: Curves.easeOutQuart,
-                child: SizedBox(
-                  height: height,
-                  child: CustomPaint(
-                    painter: _PrismPainter(
-                      palette: widget.palette,
-                      style: widget.style,
-                      lit: widget.lit,
-                      selected: widget.selected,
-                      enabled: enabled,
-                      pressed: _pressed,
-                    ),
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: horizontal,
-                        vertical: 8,
+            child: SizedBox(
+              key: const ValueKey('prism-housing'),
+              width: PrismMetrics.width(widget.role, widget.span),
+              height: PrismMetrics.height(widget.role),
+              child: Stack(
+                fit: StackFit.expand,
+                clipBehavior: Clip.none,
+                children: <Widget>[
+                  RepaintBoundary(
+                    child: CustomPaint(
+                      painter: _PrismHousingPainter(
+                        palette: widget.palette,
+                        selected: widget.selected,
+                        focused: _focused,
+                        hovered: _hovered,
+                        enabled: enabled,
                       ),
-                      child: _label(),
                     ),
                   ),
-                ),
+                  AnimatedSlide(
+                    key: const ValueKey('prism-cap'),
+                    offset: Offset(0, _pressed ? 0.07 : 0),
+                    duration: pressDuration,
+                    curve: Curves.easeOutQuart,
+                    child: RepaintBoundary(
+                      child: CustomPaint(
+                        painter: _PrismCapPainter(
+                          palette: widget.palette,
+                          style: widget.style,
+                          lit: widget.lit,
+                          enabled: enabled,
+                          pressed: _pressed,
+                        ),
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            widget.role == PrismRole.compact ? 8 : 10,
+                            9,
+                            widget.role == PrismRole.compact ? 8 : 10,
+                            12,
+                          ),
+                          child: _label(enabled),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -120,39 +154,40 @@ class _PrismButtonState extends State<PrismButton> {
     );
   }
 
-  Widget _label() => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: <Widget>[
-      _StatusLamp(lit: widget.lit, palette: widget.palette),
-      const SizedBox(width: 7),
-      Flexible(
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              VfdLegend(
-                widget.label,
-                palette: widget.palette,
-                lit: widget.lit,
-                size: widget.role == PrismRole.compact ? 9 : 10,
-              ),
-              if (widget.value != null) ...<Widget>[
-                const SizedBox(height: 3),
-                VfdLegend(
-                  widget.value!,
-                  palette: widget.palette,
-                  lit: widget.lit,
-                  size: 9,
-                ),
-              ],
-            ],
-          ),
+  Widget _label(bool enabled) => FittedBox(
+    fit: BoxFit.scaleDown,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        PrismLegend(
+          widget.label,
+          palette: widget.palette,
+          lit: widget.lit,
+          enabled: enabled,
+          inactiveLuminosity: widget.style.inactiveLuminosity,
+          size: switch (widget.role) {
+            PrismRole.compact => 12,
+            PrismRole.standard => 14,
+            PrismRole.primary => 16,
+          },
         ),
-      ),
-    ],
+        if (widget.value != null) ...<Widget>[
+          const SizedBox(height: 1),
+          PrismLegend(
+            widget.value!,
+            palette: widget.palette,
+            lit: widget.lit,
+            enabled: enabled,
+            inactiveLuminosity: widget.style.inactiveLuminosity,
+            size: switch (widget.role) {
+              PrismRole.compact => 9,
+              PrismRole.standard => 11,
+              PrismRole.primary => 13,
+            },
+          ),
+        ],
+      ],
+    ),
   );
 
   void _setPressed(bool value) {
@@ -172,143 +207,56 @@ class _PrismButtonState extends State<PrismButton> {
   }
 }
 
-class _StatusLamp extends StatelessWidget {
-  const _StatusLamp({required this.lit, required this.palette});
+class PrismLegend extends StatelessWidget {
+  const PrismLegend(
+    this.text, {
+    super.key,
+    required this.palette,
+    required this.lit,
+    required this.enabled,
+    required this.inactiveLuminosity,
+    required this.size,
+  });
 
-  final bool lit;
+  final String text;
   final VfdPalette palette;
+  final bool lit;
+  final bool enabled;
+  final double inactiveLuminosity;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
-    final color = palette.state(lit);
-    return Container(
-      width: 6,
-      height: 6,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: color.withValues(alpha: lit ? 1 : 0.24),
-        boxShadow: lit
-            ? <BoxShadow>[
-                BoxShadow(
-                  color: color.withValues(alpha: 0.72),
-                  blurRadius: 7,
-                  spreadRadius: 1,
-                ),
+    final active = palette.lit;
+    final neutral = Color.lerp(const Color(0xFFAEB6B1), palette.unlit, 0.12)!;
+    final inactiveAlpha = (0.24 + inactiveLuminosity * 0.9).clamp(0.18, 0.68);
+    final color = lit
+        ? active.withValues(alpha: enabled ? 1 : 0.48)
+        : neutral.withValues(alpha: enabled ? inactiveAlpha : 0.24);
+
+    return Text(
+      PrismGlyphs.displayText(text),
+      maxLines: 1,
+      overflow: TextOverflow.clip,
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        color: color,
+        fontFamily: 'Barlow Condensed',
+        fontSize: size,
+        fontStyle: FontStyle.italic,
+        fontWeight: FontWeight.w500,
+        decoration: TextDecoration.none,
+        letterSpacing: 1.05,
+        height: 0.94,
+        shadows: lit
+            ? <Shadow>[
+                Shadow(color: active.withValues(alpha: 0.72), blurRadius: 7),
+                Shadow(color: active.withValues(alpha: 0.24), blurRadius: 14),
               ]
             : null,
       ),
     );
   }
-}
-
-class _PrismPainter extends CustomPainter {
-  const _PrismPainter({
-    required this.palette,
-    required this.style,
-    required this.lit,
-    required this.selected,
-    required this.enabled,
-    required this.pressed,
-  });
-
-  final VfdPalette palette;
-  final PrismStyle style;
-  final bool lit;
-  final bool selected;
-  final bool enabled;
-  final bool pressed;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final depth = math.max(3.0, size.height * style.bevelDepth);
-    final bounds = Offset.zero & size;
-    final back = Path()
-      ..moveTo(depth, 0)
-      ..lineTo(size.width - depth, 0)
-      ..lineTo(size.width, size.height - depth)
-      ..lineTo(size.width - depth, size.height)
-      ..lineTo(depth, size.height)
-      ..lineTo(0, size.height - depth)
-      ..close();
-    canvas.drawPath(
-      back,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[
-            const Color(0xFF9BA6A2).withValues(alpha: enabled ? 0.38 : 0.18),
-            const Color(0xFF111615).withValues(alpha: 0.96),
-            const Color(0xFF6C7672).withValues(alpha: enabled ? 0.42 : 0.16),
-          ],
-        ).createShader(bounds),
-    );
-
-    final face = Rect.fromLTRB(
-      depth,
-      depth * 0.72,
-      size.width - depth,
-      size.height - depth,
-    );
-    final light = palette.lit;
-    canvas.drawRect(
-      face,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[
-            Color.lerp(
-              const Color(0xFF202826),
-              light,
-              lit ? 0.15 * style.activeLuminosity : 0,
-            )!.withValues(alpha: style.faceOpacity),
-            Color.lerp(
-              const Color(0xFF080B0A),
-              light,
-              lit ? 0.08 * style.activeLuminosity : 0,
-            )!.withValues(alpha: 0.98),
-          ],
-        ).createShader(face),
-    );
-
-    final edge = selected ? palette.lit : palette.unlit;
-    canvas.drawRect(
-      face,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = selected ? 1.6 : 0.8
-        ..color = edge.withValues(alpha: selected ? 0.9 : 0.42),
-    );
-
-    if (lit) {
-      canvas.drawRect(
-        face,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7)
-          ..color = light.withValues(alpha: 0.26),
-      );
-    }
-
-    canvas.drawLine(
-      face.topLeft,
-      face.topRight,
-      Paint()
-        ..strokeWidth = pressed ? 0.6 : 1.2
-        ..color = const Color(0xFFD9E0DE).withValues(alpha: 0.34),
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _PrismPainter oldDelegate) =>
-      oldDelegate.lit != lit ||
-      oldDelegate.selected != selected ||
-      oldDelegate.enabled != enabled ||
-      oldDelegate.pressed != pressed ||
-      oldDelegate.palette != palette ||
-      oldDelegate.style != style;
 }
 
 class PrismPanel extends StatelessWidget {

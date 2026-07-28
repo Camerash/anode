@@ -75,27 +75,31 @@ class PrismStyleEditor extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         _control(
-          label: 'Bevel depth',
+          label: 'Cap depth',
           value: style.bevelDepth,
-          max: 0.3,
+          min: 0.06,
+          max: 0.18,
           onChanged: (value) => onChanged(style.copyWith(bevelDepth: value)),
         ),
         _control(
-          label: 'Face opacity',
+          label: 'Smoke density',
           value: style.faceOpacity,
-          max: 1,
+          min: 0.60,
+          max: 0.95,
           onChanged: (value) => onChanged(style.copyWith(faceOpacity: value)),
         ),
         _control(
-          label: 'Inactive luminosity',
+          label: 'Inactive legend',
           value: style.inactiveLuminosity,
-          max: 1,
+          min: 0,
+          max: 0.5,
           onChanged: (value) =>
               onChanged(style.copyWith(inactiveLuminosity: value)),
         ),
         _control(
-          label: 'Active luminosity',
+          label: 'Active backlight',
           value: style.activeLuminosity,
+          min: 0.25,
           max: 2,
           onChanged: (value) =>
               onChanged(style.copyWith(activeLuminosity: value)),
@@ -107,6 +111,7 @@ class PrismStyleEditor extends StatelessWidget {
   Widget _control({
     required String label,
     required double value,
+    required double min,
     required double max,
     required ValueChanged<double> onChanged,
   }) => Padding(
@@ -125,30 +130,32 @@ class PrismStyleEditor extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             PrismButton(
-              label: '−',
+              label: '-',
               palette: _palette,
               role: PrismRole.compact,
+              span: PrismSpan.one,
               style: style,
               soundEnabled: soundEnabled,
               hapticsEnabled: hapticsEnabled,
-              onPressed: () => onChanged((value - 0.01).clamp(0, max)),
+              onPressed: () => onChanged((value - 0.01).clamp(min, max)),
             ),
             const SizedBox(width: 6),
             PrismButton(
               label: '+',
               palette: _palette,
               role: PrismRole.compact,
+              span: PrismSpan.one,
               style: style,
               soundEnabled: soundEnabled,
               hapticsEnabled: hapticsEnabled,
-              onPressed: () => onChanged((value + 0.01).clamp(0, max)),
+              onPressed: () => onChanged((value + 0.01).clamp(min, max)),
             ),
           ],
         ),
         const SizedBox(height: 7),
         VfdCellBar(
           value: value,
-          min: 0,
+          min: min,
           max: max,
           cells: 24,
           palette: _palette,
@@ -208,6 +215,7 @@ class _EffectPanelState extends State<EffectPanel> {
                     lit: _effective.effect(id).enabled,
                     enabled: false,
                     role: PrismRole.standard,
+                    span: PrismSpan.two,
                     style: widget.prismStyle,
                     onPressed: null,
                   ),
@@ -248,6 +256,7 @@ class _EffectPanelState extends State<EffectPanel> {
                 lit: overridden,
                 enabled: widget.editable,
                 role: PrismRole.compact,
+                span: PrismSpan.two,
                 style: widget.prismStyle,
                 soundEnabled: widget.soundEnabled,
                 hapticsEnabled: widget.hapticsEnabled,
@@ -276,6 +285,7 @@ class _EffectPanelState extends State<EffectPanel> {
                 selected: _effective.phosphorName == phosphor.name,
                 enabled: enabled,
                 role: PrismRole.compact,
+                span: phosphor.name.length > 7 ? PrismSpan.two : PrismSpan.one,
                 style: widget.prismStyle,
                 soundEnabled: widget.soundEnabled,
                 hapticsEnabled: widget.hapticsEnabled,
@@ -289,8 +299,11 @@ class _EffectPanelState extends State<EffectPanel> {
 
   Widget _effectGrid() => LayoutBuilder(
     builder: (context, constraints) {
-      const columns = 3;
       const gap = 8.0;
+      final preferred = PrismMetrics.width(PrismRole.standard, PrismSpan.two);
+      final columns = ((constraints.maxWidth + gap) / (preferred + gap))
+          .floor()
+          .clamp(1, 3);
       final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
       return Wrap(
         spacing: gap,
@@ -310,6 +323,7 @@ class _EffectPanelState extends State<EffectPanel> {
                 lit: _effective.effect(spec.id).enabled,
                 selected: _selectedSpec.id == spec.id,
                 role: PrismRole.standard,
+                span: PrismSpan.two,
                 style: widget.prismStyle,
                 soundEnabled: widget.soundEnabled,
                 hapticsEnabled: widget.hapticsEnabled,
@@ -347,6 +361,7 @@ class _EffectPanelState extends State<EffectPanel> {
                 lit: overridden,
                 enabled: widget.editable,
                 role: PrismRole.compact,
+                span: PrismSpan.two,
                 style: widget.prismStyle,
                 soundEnabled: widget.soundEnabled,
                 hapticsEnabled: widget.hapticsEnabled,
@@ -363,6 +378,7 @@ class _EffectPanelState extends State<EffectPanel> {
               lit: setting.enabled,
               enabled: editable,
               role: PrismRole.compact,
+              span: PrismSpan.one,
               style: widget.prismStyle,
               soundEnabled: widget.soundEnabled,
               hapticsEnabled: widget.hapticsEnabled,
@@ -418,10 +434,11 @@ class _EffectPanelState extends State<EffectPanel> {
               ),
             ),
             PrismButton(
-              label: '−',
+              label: '-',
               palette: _palette,
               enabled: editable,
               role: PrismRole.compact,
+              span: PrismSpan.one,
               style: widget.prismStyle,
               soundEnabled: widget.soundEnabled,
               hapticsEnabled: widget.hapticsEnabled,
@@ -438,6 +455,7 @@ class _EffectPanelState extends State<EffectPanel> {
               palette: _palette,
               enabled: editable,
               role: PrismRole.compact,
+              span: PrismSpan.one,
               style: widget.prismStyle,
               soundEnabled: widget.soundEnabled,
               hapticsEnabled: widget.hapticsEnabled,

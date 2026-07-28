@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'prism_glyphs.dart';
+
 /// Shader-side component type ids, mirrored in `vfd.frag`.
 abstract final class ShaderType {
   static const double none = 0;
@@ -43,8 +45,10 @@ class ComponentFrame {
     this.prismBevelDepth = 0.12,
     this.prismFaceOpacity = 0.78,
     this.prismInactiveLuminosity = 0.18,
+    List<double>? prismGlyphs,
     List<double>? segments,
-  }) : segments = segments ?? const <double>[];
+  }) : prismGlyphs = prismGlyphs ?? const <double>[],
+       segments = segments ?? const <double>[];
 
   final double type;
   final double centerX;
@@ -79,6 +83,9 @@ class ComponentFrame {
   final double prismBevelDepth;
   final double prismFaceOpacity;
   final double prismInactiveLuminosity;
+
+  /// Normalised indices into the shared Prism glyph atlas.
+  final List<double> prismGlyphs;
 
   /// Seven-segment brightness with a stride of eight — seven segments plus one
   /// spare for a future decimal point.
@@ -136,9 +143,7 @@ abstract final class ComponentData {
   /// texel 7: module height, glass grain, filament
   /// texel 8: prism pressed, filament variant code, spare
   /// texel 9: prism bevel, face opacity, inactive luminosity
-  /// texel 10 + 3k: digit k segments 0..2
-  /// texel 11 + 3k: digit k segments 3..5
-  /// texel 12 + 3k: digit k segment 6, spare, spare
+  /// texel 10..21: digit segment payload, or up to 24 Prism glyph indices
   static const int headerTexels = 10;
   static const int texelsPerDigit = 3;
   static const int texelsPerComponent =
@@ -164,6 +169,10 @@ abstract final class ComponentData {
     for (var i = 0; i < count; i++) {
       final f = frames[i];
       final base = i * floatsPerComponent;
+      final prismGlyphCount = f.prismGlyphs.length.clamp(
+        0,
+        PrismGlyphs.maxVisibleGlyphs,
+      );
 
       out[base + 0] = encodeType(f.type);
       out[base + 1] = encodePosition(f.centerX);
@@ -171,7 +180,9 @@ abstract final class ComponentData {
 
       out[base + 4] = encodeSize(f.width);
       out[base + 5] = encodeSize(f.height);
-      out[base + 6] = encodeCount(f.paramA);
+      out[base + 6] = encodeCount(
+        f.type == ShaderType.prism ? prismGlyphCount.toDouble() : f.paramA,
+      );
 
       // Already a fraction in [0, 1]; stored raw.
       out[base + 8] = f.paramB;
@@ -205,13 +216,20 @@ abstract final class ComponentData {
       out[base + 37] = _store(f.prismFaceOpacity);
       out[base + 38] = _store(f.prismInactiveLuminosity);
 
-      for (var d = 0; d < maxDigits; d++) {
-        final texel = base + (headerTexels + d * texelsPerDigit) * 4;
-        for (var s = 0; s < 7; s++) {
-          final source = d * segmentStride + s;
-          final value = source < f.segments.length ? f.segments[source] : 0.0;
-          // Three data slots per texel, so segment s lands in texel s ~/ 3.
-          out[texel + (s ~/ 3) * 4 + (s % 3)] = value;
+      if (f.type == ShaderType.prism) {
+        for (var glyph = 0; glyph < prismGlyphCount; glyph++) {
+          final texel = base + (headerTexels + glyph ~/ 3) * 4;
+          out[texel + glyph % 3] = _store(f.prismGlyphs[glyph]);
+        }
+      } else {
+        for (var d = 0; d < maxDigits; d++) {
+          final texel = base + (headerTexels + d * texelsPerDigit) * 4;
+          for (var s = 0; s < 7; s++) {
+            final source = d * segmentStride + s;
+            final value = source < f.segments.length ? f.segments[source] : 0.0;
+            // Three data slots per texel, so segment s lands in texel s ~/ 3.
+            out[texel + (s ~/ 3) * 4 + (s % 3)] = value;
+          }
         }
       }
     }
