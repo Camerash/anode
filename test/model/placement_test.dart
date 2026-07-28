@@ -96,6 +96,40 @@ void main() {
     );
   });
 
+  group('adaptive axis sizing', () {
+    test('horizontal span tracks frame width while preserving insets', () {
+      const placement = Placement(
+        size: Size(0.4, 0.2),
+        horizontalSpan: AxisSpan(startInset: 0.2, endInset: 0.3),
+      );
+
+      expect(placement.resolveSizeForAspect(2.6, null), const Size(2.1, 0.2));
+      expect(placement.resolveSizeForAspect(1.6, null), const Size(1.1, 0.2));
+      expect(placement.resolve(2.6).dx, closeTo(-0.05, 1e-9));
+    });
+
+    test('vertical span tracks frame height while preserving insets', () {
+      const placement = Placement(
+        size: Size(0.4, 0.2),
+        verticalSpan: AxisSpan(startInset: 0.1, endInset: 0.25),
+      );
+
+      expect(placement.resolveSizeForAspect(2.6, null), const Size(0.4, 0.65));
+      expect(placement.resolve(2.6).dy, closeTo(0.075, 1e-9));
+    });
+
+    test('span axes survive json independently', () {
+      const placement = Placement(
+        horizontalSpan: AxisSpan(startInset: 0.2, endInset: 0.3),
+      );
+      final back = Placement.fromJson(placement.toJson());
+
+      expect(back.horizontalSpan?.startInset, 0.2);
+      expect(back.horizontalSpan?.endInset, 0.3);
+      expect(back.verticalSpan, isNull);
+    });
+  });
+
   test('placement round trips through json', () {
     const p = Placement(
       anchor: Anchor.topRight,

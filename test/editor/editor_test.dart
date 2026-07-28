@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:anode/editor/editor_canvas.dart';
 import 'package:anode/editor/editor_page.dart';
 import 'package:anode/model/component_type.dart';
@@ -30,7 +32,7 @@ void main() {
     expect(_canvasAspect(tester), closeTo(1 / 2.6, 0.001));
   });
 
-  testWidgets('drawer overlays canvas and selection does not open it', (
+  testWidgets('drawer pushes canvas and selection does not open it', (
     tester,
   ) async {
     await _setViewport(tester, const Size(874, 402));
@@ -44,24 +46,46 @@ void main() {
     final canvasBefore = tester.getSize(
       find.byKey(const ValueKey('editor-canvas')),
     );
-    final drawerClosed = tester.getTopLeft(
-      find.byKey(const ValueKey('mechanical-drawer')),
-    );
+    final workspace = find.byKey(const ValueKey('mechanical-push-drawer'));
+    final drawerClosed = tester.getTopLeft(workspace);
 
     await tester.tap(find.byKey(const ValueKey('canvas-speed')));
     await tester.pump();
+    expect(tester.getTopLeft(workspace), drawerClosed);
     expect(
-      tester.getTopLeft(find.byKey(const ValueKey('mechanical-drawer'))),
-      drawerClosed,
+      tester.getSize(find.byKey(const ValueKey('editor-canvas'))),
+      canvasBefore,
     );
 
     await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     expect(
-      tester.getSize(find.byKey(const ValueKey('editor-canvas'))),
-      canvasBefore,
+      tester.getSize(find.byKey(const ValueKey('editor-canvas'))).width,
+      lessThan(canvasBefore.width),
     );
+  });
+
+  testWidgets('portrait service bay pushes upward with same frame aspect', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(393, 852));
+    final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorPage(dashboard: dashboard, onChanged: (_) {}),
+      ),
+    );
+
+    expect(find.text('PORTRAIT · 0.385:1'), findsOneWidget);
+    final before = tester.getSize(find.byKey(const ValueKey('editor-canvas')));
+    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+    final after = tester.getSize(find.byKey(const ValueKey('editor-canvas')));
+
+    expect(after.height, lessThan(before.height));
+    expect(after.width / after.height, closeTo(1 / 2.6, 0.002));
   });
 
   testWidgets('drag and edge resize update displayed orientation only', (
@@ -153,6 +177,165 @@ void main() {
       dashboard.components.first.placements[DesignOrientation.portrait],
       same(portraitBefore),
     );
+  });
+
+  testWidgets('first resize remains linear across repeated gesture updates', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(900, 500));
+    var dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    late StateSetter rebuild;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: SizedBox(
+            width: 828,
+            height: 348,
+            child: StatefulBuilder(
+              builder: (context, setState) {
+                rebuild = setState;
+                return EditorCanvas(
+                  dashboard: dashboard,
+                  orientation: DesignOrientation.landscape,
+                  selectedId: 'speed',
+                  onSelect: (_) {},
+                  onPlacementChanged: (id, placement) {
+                    final component = dashboard.components.firstWhere(
+                      (value) => value.id == id,
+                    );
+                    rebuild(() {
+                      dashboard = dashboard.withComponent(
+                        component.withPlacement(
+                          DesignOrientation.landscape,
+                          placement,
+                        ),
+                      );
+                    });
+                  },
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final component = dashboard.components.first;
+    final placement = component.placements[DesignOrientation.landscape]!;
+    final initial = placement.resolveSize(
+      ComponentTypes.byId(component.typeId),
+      variant: component.effectiveVariant,
+    );
+    final handle = find.byKey(const ValueKey('resize-width'));
+    final gesture = await tester.startGesture(tester.getCenter(handle));
+    await gesture.moveBy(const Offset(10, 0));
+    await tester.pump();
+    await gesture.moveBy(const Offset(10, 0));
+    await tester.pump();
+    await gesture.moveBy(const Offset(10, 0));
+    await tester.pump();
+    await gesture.up();
+
+    final resized =
+        dashboard.components.first.placements[DesignOrientation.landscape]!;
+    expect(resized.size!.width, closeTo(initial.width + 0.1, 0.002));
+  });
+
+  testWidgets('component remains draggable through dimmed off-frame area', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(900, 500));
+    var dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    final component = dashboard.components.first;
+    final initial = component.placements[DesignOrientation.landscape]!;
+    dashboard = dashboard.withComponent(
+      component.withPlacement(
+        DesignOrientation.landscape,
+        initial.copyWith(offset: const Offset(-1, 0)),
+      ),
+    );
+    late StateSetter rebuild;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: SizedBox(
+            width: 828,
+            height: 348,
+            child: StatefulBuilder(
+              builder: (context, setState) {
+                rebuild = setState;
+                return EditorCanvas(
+                  dashboard: dashboard,
+                  orientation: DesignOrientation.landscape,
+                  selectedId: component.id,
+                  onSelect: (_) {},
+                  onPlacementChanged: (id, placement) {
+                    rebuild(() {
+                      dashboard = dashboard.withComponent(
+                        dashboard.components
+                            .firstWhere((value) => value.id == id)
+                            .withPlacement(
+                              DesignOrientation.landscape,
+                              placement,
+                            ),
+                      );
+                    });
+                  },
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final componentRect = tester.getRect(
+      find.byKey(ValueKey('canvas-${component.id}')),
+    );
+    final frameRect = tester.getRect(
+      find.byKey(const ValueKey('editor-canvas')),
+    );
+    final outsidePoint = Offset(
+      math.max(componentRect.left + 8, frameRect.left - 12),
+      componentRect.center.dy,
+    );
+    expect(outsidePoint.dx, lessThan(frameRect.left));
+
+    await tester.dragFrom(outsidePoint, const Offset(30, 0));
+    await tester.pump();
+    final moved =
+        dashboard.components.first.placements[DesignOrientation.landscape]!;
+    expect(moved.offset.dx, closeTo(-0.9, 0.002));
+  });
+
+  testWidgets('adaptive frame follows available editor viewport aspect', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(900, 500));
+    final source = Dashboard.forkFrom(developmentPreset(), id: 'adaptive');
+    final dashboard = source.copyWith(
+      supportedOrientations: const <DesignOrientation>{
+        DesignOrientation.landscape,
+      },
+      frameSpecs: const <DesignOrientation, FrameSpec>{
+        DesignOrientation.landscape: FrameSpec(
+          referenceAspect: 2.6,
+          mode: FrameAspectMode.adaptive,
+        ),
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorPage(dashboard: dashboard, onChanged: (_) {}),
+      ),
+    );
+
+    final aspect = _canvasAspect(tester);
+    expect(aspect, closeTo(900 / 452, 0.02));
+    expect(aspect, isNot(closeTo(2.6, 0.01)));
   });
 
   testWidgets('add selector is generated from component registry', (

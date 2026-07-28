@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../mechanical/mechanical_flip_tray.dart';
+import '../mechanical/mechanical_pager.dart';
 import '../mechanical/prism_selector_bank.dart';
 import '../model/optical_profile.dart';
 import '../vfd/prism_widgets.dart';
@@ -45,6 +46,8 @@ class EffectPanel extends StatefulWidget {
 
 class _EffectPanelState extends State<EffectPanel> {
   String? _selectedChannel;
+  final MechanicalPagerController _channelPager = MechanicalPagerController();
+  int _channelPageCapacity = 1;
 
   OpticalProfile get _effective =>
       widget.baseProfile.apply(widget.overrides ?? OpticalOverrides());
@@ -70,33 +73,42 @@ class _EffectPanelState extends State<EffectPanel> {
   }
 
   @override
+  void dispose() {
+    _channelPager.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) => PrismPanel(
     palette: _palette,
     padding: const EdgeInsets.all(10),
     child: LayoutBuilder(
       builder: (context, constraints) {
-        final rows = constraints.maxHeight >= 292 ? 2 : 1;
-        final bankHeight =
-            rows * PrismMetrics.height(PrismRole.standard) + (rows - 1) * 6;
-        final trayHeight = (constraints.maxHeight - bankHeight - 31).clamp(
-          0.0,
-          150.0,
-        );
+        final detailOpen = _selectedChannel != null;
+        final detailHeight = detailOpen
+            ? (constraints.maxHeight * 0.42).clamp(118.0, 150.0)
+            : 0.0;
+        final rowHeight = PrismMetrics.height(PrismRole.standard);
+        final availableBankHeight =
+            constraints.maxHeight - 31 - detailHeight - (detailOpen ? 8 : 0);
+        final rows = ((availableBankHeight + 6) / (rowHeight + 6))
+            .floor()
+            .clamp(1, 3);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             VfdLegend(widget.title, palette: _palette, lit: true, size: 12),
             const SizedBox(height: 8),
-            _channelBank(rows),
-            const SizedBox(height: 8),
-            SizedBox(height: trayHeight, child: _detailTray()),
+            _channelBank(rows, columns: constraints.maxWidth >= 360 ? 3 : 2),
+            if (detailOpen) const SizedBox(height: 8),
+            _detailTray(detailHeight),
           ],
         );
       },
     ),
   );
 
-  Widget _channelBank(int rows) {
+  Widget _channelBank(int rows, {required int columns}) {
     final choices = <PrismSelectorChoice<String>>[
       PrismSelectorChoice<String>(
         value: _phosphorChannel,
@@ -113,12 +125,15 @@ class _EffectPanelState extends State<EffectPanel> {
           enabled: EffectSpecs.byId(spec.id) != null,
         ),
     ];
+    _channelPageCapacity = rows * columns;
     return PrismSelectorBank<String>(
       choices: choices,
       selected: _selectedChannel,
+      controller: _channelPager,
       palette: _palette,
       prismStyle: widget.prismStyle,
       rows: rows,
+      columns: columns,
       role: PrismRole.standard,
       soundEnabled: widget.soundEnabled,
       hapticsEnabled: widget.hapticsEnabled,
@@ -127,19 +142,18 @@ class _EffectPanelState extends State<EffectPanel> {
     );
   }
 
-  Widget _detailTray() => LayoutBuilder(
-    builder: (context, constraints) => MechanicalFlipTray(
-      open: _selectedChannel != null,
-      height: constraints.maxHeight,
-      palette: _palette,
-      soundEnabled: widget.soundEnabled,
-      hapticsEnabled: widget.hapticsEnabled,
-      child: Padding(
-        padding: const EdgeInsets.all(9),
-        child: _selectedChannel == _phosphorChannel
-            ? _phosphorDetail()
-            : _effectDetail(_selectedEffect),
-      ),
+  Widget _detailTray(double height) => MechanicalFlipTray(
+    open: _selectedChannel != null,
+    height: height,
+    collapseWhenClosed: true,
+    palette: _palette,
+    soundEnabled: widget.soundEnabled,
+    hapticsEnabled: widget.hapticsEnabled,
+    child: Padding(
+      padding: const EdgeInsets.all(9),
+      child: _selectedChannel == _phosphorChannel
+          ? _phosphorDetail()
+          : _effectDetail(_selectedEffect),
     ),
   );
 
@@ -347,7 +361,19 @@ class _EffectPanelState extends State<EffectPanel> {
   );
 
   void _selectChannel(String id) {
-    setState(() => _selectedChannel = _selectedChannel == id ? null : id);
+    final next = _selectedChannel == id ? null : id;
+    setState(() => _selectedChannel = next);
+    if (next == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final index = <String>[
+        _phosphorChannel,
+        ..._effectSpecs.map((spec) => spec.id),
+      ].indexOf(next);
+      if (index >= 0) {
+        _channelPager.jumpTo(index ~/ _channelPageCapacity);
+      }
+    });
   }
 
   void _toggleOverride(EffectSpec spec, bool overridden) {
@@ -441,17 +467,15 @@ class _PrismStyleEditorState extends State<PrismStyleEditor> {
           onSelected: (id) =>
               setState(() => _selected = _selected == id ? null : id),
         ),
-        const SizedBox(height: 8),
-        SizedBox(
+        if (_selected != null) const SizedBox(height: 8),
+        MechanicalFlipTray(
+          open: _selected != null,
           height: 140,
-          child: MechanicalFlipTray(
-            open: _selected != null,
-            height: 140,
-            palette: _palette,
-            soundEnabled: widget.soundEnabled,
-            hapticsEnabled: widget.hapticsEnabled,
-            child: _styleDetail(),
-          ),
+          collapseWhenClosed: true,
+          palette: _palette,
+          soundEnabled: widget.soundEnabled,
+          hapticsEnabled: widget.hapticsEnabled,
+          child: _styleDetail(),
         ),
       ],
     ),

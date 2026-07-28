@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../app_state.dart';
@@ -5,27 +8,35 @@ import '../editor/editor_page.dart';
 import '../mechanical/hard_cut_route.dart';
 import '../mechanical/mechanical_pager.dart';
 import '../mechanical/prism_selector_bank.dart';
+import '../mechanical/vfd_editable_field.dart';
 import '../model/dashboard.dart';
+import '../model/design.dart';
 import '../model/design_preset.dart';
 import '../model/optical_profile.dart';
 import '../vfd/prism_widgets.dart';
 import '../vfd/vfd_render_assets.dart';
 import '../vfd/vfd_widgets.dart';
 
-enum _LibrarySection { designs, settings }
+enum LibrarySection { templates, designs, settings }
 
 class LibraryPage extends StatefulWidget {
-  const LibraryPage({super.key, required this.state, this.renderAssets});
+  const LibraryPage({
+    super.key,
+    required this.state,
+    this.renderAssets,
+    this.initialSection = LibrarySection.templates,
+  });
 
   final AnodeState state;
   final VfdRenderAssets? renderAssets;
+  final LibrarySection initialSection;
 
   @override
   State<LibraryPage> createState() => _LibraryPageState();
 }
 
 class _LibraryPageState extends State<LibraryPage> {
-  _LibrarySection _section = _LibrarySection.designs;
+  late LibrarySection _section = widget.initialSection;
 
   VfdPalette get _palette => VfdPalette.of(
     widget.state.activeDesign.renderSettings.opticalProfile.phosphor,
@@ -42,10 +53,10 @@ class _LibraryPageState extends State<LibraryPage> {
             SizedBox(height: 48, child: _topRail(context)),
             Padding(
               padding: const EdgeInsets.all(8),
-              child: PrismSelectorBank<_LibrarySection>(
-                choices: <PrismSelectorChoice<_LibrarySection>>[
-                  for (final section in _LibrarySection.values)
-                    PrismSelectorChoice<_LibrarySection>(
+              child: PrismSelectorBank<LibrarySection>(
+                choices: <PrismSelectorChoice<LibrarySection>>[
+                  for (final section in LibrarySection.values)
+                    PrismSelectorChoice<LibrarySection>(
                       value: section,
                       label: section.name,
                       lit: section == _section,
@@ -55,7 +66,7 @@ class _LibraryPageState extends State<LibraryPage> {
                 palette: _palette,
                 prismStyle: widget.state.activeDesign.renderSettings.prismStyle,
                 rows: 1,
-                columns: 2,
+                columns: 3,
                 role: PrismRole.compact,
                 soundEnabled: widget.state.globalSettings.soundEnabled,
                 hapticsEnabled: widget.state.globalSettings.hapticsEnabled,
@@ -63,20 +74,38 @@ class _LibraryPageState extends State<LibraryPage> {
                 onSelected: (value) => setState(() => _section = value),
               ),
             ),
-            Expanded(
-              child: _section == _LibrarySection.designs
-                  ? _DesignsBank(
-                      state: widget.state,
-                      palette: _palette,
-                      renderAssets: widget.renderAssets,
-                    )
-                  : _SettingsBank(state: widget.state, palette: _palette),
-            ),
+            Expanded(child: _sectionBody()),
           ],
         ),
       ),
     ),
   );
+
+  Widget _sectionBody() => switch (_section) {
+    LibrarySection.templates => _DesignBank(
+      designs: widget.state.presets,
+      emptyLabel: 'No templates',
+      state: widget.state,
+      palette: _palette,
+      onActivate: (design) =>
+          widget.state.activatePreset(design as DesignPreset),
+      onClone: _requestClone,
+    ),
+    LibrarySection.designs => _DesignBank(
+      designs: widget.state.dashboards,
+      emptyLabel: 'No user designs · clone a template',
+      state: widget.state,
+      palette: _palette,
+      onActivate: (design) =>
+          widget.state.activateDashboard(design as Dashboard),
+      onClone: _requestClone,
+      onEdit: (design) => _openEditor(design as Dashboard),
+    ),
+    LibrarySection.settings => _SettingsBank(
+      state: widget.state,
+      palette: _palette,
+    ),
+  };
 
   Widget _topRail(BuildContext context) => PrismPanel(
     palette: _palette,
@@ -99,130 +128,214 @@ class _LibraryPageState extends State<LibraryPage> {
       ],
     ),
   );
-}
 
-class _DesignsBank extends StatelessWidget {
-  const _DesignsBank({
-    required this.state,
-    required this.palette,
-    required this.renderAssets,
-  });
-
-  final AnodeState state;
-  final VfdPalette palette;
-  final VfdRenderAssets? renderAssets;
-
-  @override
-  Widget build(BuildContext context) {
-    final cards = <Widget>[
-      for (final preset in state.presets) _presetCard(context, preset),
-      for (final dashboard in state.dashboards)
-        _dashboardCard(context, dashboard),
-    ];
-    if (cards.isEmpty) {
-      return Center(child: VfdLegend('No designs', palette: palette, size: 12));
-    }
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: MechanicalPager(
-        pages: cards,
-        palette: palette,
-        prismStyle: state.activeDesign.renderSettings.prismStyle,
-        soundEnabled: state.globalSettings.soundEnabled,
-        hapticsEnabled: state.globalSettings.hapticsEnabled,
-        semanticLabel: 'Design',
+  Future<void> _requestClone(Design source) async {
+    final name = await Navigator.of(context).push<String>(
+      hardCutRoute<String>(
+        (_) => _ClonePromptPage(
+          sourceName: source.name,
+          palette: _palette,
+          prismStyle: widget.state.activeDesign.renderSettings.prismStyle,
+          soundEnabled: widget.state.globalSettings.soundEnabled,
+          hapticsEnabled: widget.state.globalSettings.hapticsEnabled,
+        ),
       ),
     );
+    if (!mounted || name == null) return;
+    final trimmed = name.trim();
+    final dashboard = switch (source) {
+      DesignPreset preset => widget.state.forkPreset(
+        preset,
+        name: trimmed.isEmpty ? '${preset.name} copy' : trimmed,
+      ),
+      Dashboard design => widget.state.cloneDashboard(
+        design,
+        name: trimmed.isEmpty ? '${design.name} copy' : trimmed,
+      ),
+      _ => throw StateError('Unsupported design source ${source.runtimeType}'),
+    };
+    if (!mounted) return;
+    _openEditor(dashboard);
   }
 
-  Widget _presetCard(BuildContext context, DesignPreset preset) => _DesignCard(
-    name: preset.name,
-    detail: 'Immutable development scaffold · v${preset.version}',
-    active: state.isActive(DesignKind.preset, preset.id),
-    palette: palette,
-    prismStyle: state.activeDesign.renderSettings.prismStyle,
-    soundEnabled: state.globalSettings.soundEnabled,
-    hapticsEnabled: state.globalSettings.hapticsEnabled,
-    onActivate: () => state.activatePreset(preset),
-    onEdit: () => _editPreset(context, preset),
-  );
-
-  Widget _dashboardCard(BuildContext context, Dashboard dashboard) =>
-      _DesignCard(
-        name: dashboard.name,
-        detail: _dashboardDetail(dashboard),
-        active: state.isActive(DesignKind.dashboard, dashboard.id),
-        palette: palette,
-        prismStyle: state.activeDesign.renderSettings.prismStyle,
-        soundEnabled: state.globalSettings.soundEnabled,
-        hapticsEnabled: state.globalSettings.hapticsEnabled,
-        onActivate: () => state.activateDashboard(dashboard),
-        onEdit: () => _openEditor(context, dashboard),
-      );
-
-  String _dashboardDetail(Dashboard dashboard) {
-    final source = dashboard.sourcePresetId;
-    if (source == null) return 'User dashboard';
-    return 'User dashboard · forked from $source v${dashboard.sourcePresetVersion}';
-  }
-
-  void _editPreset(BuildContext context, DesignPreset preset) {
-    final dashboard = state.forkPreset(preset);
-    _openEditor(
-      context,
-      dashboard,
-      forkedFrom: '${preset.name} v${preset.version}',
-    );
-  }
-
-  void _openEditor(
-    BuildContext context,
-    Dashboard dashboard, {
-    String? forkedFrom,
-  }) {
+  void _openEditor(Dashboard dashboard) {
     Navigator.of(context).push<void>(
       hardCutRoute<void>(
         (_) => EditorPage(
           dashboard: dashboard,
-          forkedFrom: forkedFrom,
-          renderAssets: renderAssets,
-          soundEnabled: state.globalSettings.soundEnabled,
-          hapticsEnabled: state.globalSettings.hapticsEnabled,
-          onChanged: state.updateDashboard,
+          renderAssets: widget.renderAssets,
+          soundEnabled: widget.state.globalSettings.soundEnabled,
+          hapticsEnabled: widget.state.globalSettings.hapticsEnabled,
+          onChanged: widget.state.updateDashboard,
         ),
       ),
     );
   }
 }
 
+class _DesignBank extends StatelessWidget {
+  const _DesignBank({
+    required this.designs,
+    required this.emptyLabel,
+    required this.state,
+    required this.palette,
+    required this.onActivate,
+    required this.onClone,
+    this.onEdit,
+  });
+
+  final List<Design> designs;
+  final String emptyLabel;
+  final AnodeState state;
+  final VfdPalette palette;
+  final ValueChanged<Design> onActivate;
+  final ValueChanged<Design> onClone;
+  final ValueChanged<Design>? onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    if (designs.isEmpty) {
+      return Center(child: VfdLegend(emptyLabel, palette: palette, size: 12));
+    }
+    return Padding(
+      padding: const EdgeInsets.all(10),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const gap = 8.0;
+          const cardHeight = 142.0;
+          final columns = constraints.maxWidth >= 720 ? 2 : 1;
+          final rows = math.max(
+            1,
+            ((constraints.maxHeight + gap) / (cardHeight + gap)).floor(),
+          );
+          final pages = paginateCompleteRows(
+            designs,
+            columns: columns,
+            rows: rows,
+          );
+          return MechanicalPager(
+            pages: <Widget>[
+              for (final page in pages)
+                _DesignPage(
+                  designs: page,
+                  columns: columns,
+                  cardHeight: cardHeight,
+                  gap: gap,
+                  state: state,
+                  palette: palette,
+                  onActivate: onActivate,
+                  onClone: onClone,
+                  onEdit: onEdit,
+                ),
+            ],
+            palette: palette,
+            prismStyle: state.activeDesign.renderSettings.prismStyle,
+            soundEnabled: state.globalSettings.soundEnabled,
+            hapticsEnabled: state.globalSettings.hapticsEnabled,
+            semanticLabel: 'Design page',
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DesignPage extends StatelessWidget {
+  const _DesignPage({
+    required this.designs,
+    required this.columns,
+    required this.cardHeight,
+    required this.gap,
+    required this.state,
+    required this.palette,
+    required this.onActivate,
+    required this.onClone,
+    required this.onEdit,
+  });
+
+  final List<Design> designs;
+  final int columns;
+  final double cardHeight;
+  final double gap;
+  final AnodeState state;
+  final VfdPalette palette;
+  final ValueChanged<Design> onActivate;
+  final ValueChanged<Design> onClone;
+  final ValueChanged<Design>? onEdit;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final cardWidth = (constraints.maxWidth - (columns - 1) * gap) / columns;
+      return Align(
+        alignment: Alignment.topCenter,
+        child: Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: <Widget>[
+            for (final design in designs)
+              SizedBox(
+                width: cardWidth,
+                height: cardHeight,
+                child: _DesignCard(
+                  design: design,
+                  active: state.isActive(
+                    design is DesignPreset
+                        ? DesignKind.preset
+                        : DesignKind.dashboard,
+                    design.id,
+                  ),
+                  palette: palette,
+                  prismStyle: state.activeDesign.renderSettings.prismStyle,
+                  soundEnabled: state.globalSettings.soundEnabled,
+                  hapticsEnabled: state.globalSettings.hapticsEnabled,
+                  onActivate: () => onActivate(design),
+                  onClone: () => onClone(design),
+                  onEdit: onEdit == null ? null : () => onEdit!(design),
+                ),
+              ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
 class _DesignCard extends StatelessWidget {
   const _DesignCard({
-    required this.name,
-    required this.detail,
+    required this.design,
     required this.active,
     required this.palette,
     required this.prismStyle,
     required this.soundEnabled,
     required this.hapticsEnabled,
     required this.onActivate,
-    required this.onEdit,
+    required this.onClone,
+    this.onEdit,
   });
 
-  final String name;
-  final String detail;
+  final Design design;
   final bool active;
   final VfdPalette palette;
   final PrismStyle prismStyle;
   final bool soundEnabled;
   final bool hapticsEnabled;
   final VoidCallback onActivate;
-  final VoidCallback onEdit;
+  final VoidCallback onClone;
+  final VoidCallback? onEdit;
+
+  String get _detail => switch (design) {
+    DesignPreset preset => 'Immutable template · v${preset.version}',
+    Dashboard dashboard when dashboard.sourcePresetId != null =>
+      'User design · from ${dashboard.sourcePresetId}',
+    _ => 'User design',
+  };
 
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
     selected: active,
-    label: '$name. $detail',
+    label: '${design.name}. $_detail',
     onTap: onActivate,
     child: GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -236,30 +349,23 @@ class _DesignCard extends StatelessWidget {
           ),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              VfdLegend(name, palette: palette, lit: active, size: 18),
-              const SizedBox(height: 10),
-              VfdLegend(detail, palette: palette, size: 11),
-              if (active) ...<Widget>[
-                const SizedBox(height: 9),
-                VfdLegend('Active', palette: palette, lit: true, size: 11),
-              ],
+              VfdLegend(design.name, palette: palette, lit: active, size: 16),
+              const SizedBox(height: 6),
+              VfdLegend(_detail, palette: palette, size: 10),
               const Spacer(),
-              Align(
-                alignment: Alignment.bottomRight,
-                child: PrismButton(
-                  label: 'Edit',
-                  palette: palette,
-                  role: PrismRole.standard,
-                  span: PrismSpan.one,
-                  style: prismStyle,
-                  soundEnabled: soundEnabled,
-                  hapticsEnabled: hapticsEnabled,
-                  onPressed: onEdit,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: <Widget>[
+                  _action('Clone', onClone),
+                  if (onEdit != null) ...<Widget>[
+                    const SizedBox(width: 6),
+                    _action('Edit', onEdit!),
+                  ],
+                ],
               ),
             ],
           ),
@@ -267,6 +373,100 @@ class _DesignCard extends StatelessWidget {
       ),
     ),
   );
+
+  Widget _action(String label, VoidCallback callback) => PrismButton(
+    label: label,
+    palette: palette,
+    role: PrismRole.compact,
+    style: prismStyle,
+    soundEnabled: soundEnabled,
+    hapticsEnabled: hapticsEnabled,
+    onPressed: callback,
+  );
+}
+
+class _ClonePromptPage extends StatefulWidget {
+  const _ClonePromptPage({
+    required this.sourceName,
+    required this.palette,
+    required this.prismStyle,
+    required this.soundEnabled,
+    required this.hapticsEnabled,
+  });
+
+  final String sourceName;
+  final VfdPalette palette;
+  final PrismStyle prismStyle;
+  final bool soundEnabled;
+  final bool hapticsEnabled;
+
+  @override
+  State<_ClonePromptPage> createState() => _ClonePromptPageState();
+}
+
+class _ClonePromptPageState extends State<_ClonePromptPage> {
+  late String _name = '${widget.sourceName} copy';
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: const Color(0xFF020403),
+    child: SafeArea(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: PrismPanel(
+            palette: widget.palette,
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                VfdLegend(
+                  'Clone ${widget.sourceName}?',
+                  palette: widget.palette,
+                  lit: true,
+                  size: 16,
+                ),
+                const SizedBox(height: 14),
+                VfdEditableField(
+                  label: 'New design name',
+                  value: _name,
+                  palette: widget.palette,
+                  onChanged: (value) => _name = value,
+                  onSubmitted: (value) => Navigator.of(context).pop(value),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: <Widget>[
+                    _button('Cancel', () => Navigator.of(context).pop()),
+                    const SizedBox(width: 8),
+                    _button(
+                      'Clone',
+                      () => Navigator.of(context).pop(_name),
+                      lit: true,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _button(String label, VoidCallback callback, {bool lit = false}) =>
+      PrismButton(
+        label: label,
+        palette: widget.palette,
+        lit: lit,
+        role: PrismRole.standard,
+        style: widget.prismStyle,
+        soundEnabled: widget.soundEnabled,
+        hapticsEnabled: widget.hapticsEnabled,
+        onPressed: callback,
+      );
 }
 
 class _SettingsBank extends StatelessWidget {
@@ -322,6 +522,21 @@ class _SettingsBank extends StatelessWidget {
               }
             },
           ),
+          if (kDebugMode) ...<Widget>[
+            const SizedBox(height: 14),
+            VfdLegend('Development', palette: palette, lit: true, size: 12),
+            const SizedBox(height: 8),
+            PrismButton(
+              label: 'Debug bench',
+              palette: palette,
+              role: PrismRole.standard,
+              span: PrismSpan.two,
+              style: state.activeDesign.renderSettings.prismStyle,
+              soundEnabled: state.globalSettings.soundEnabled,
+              hapticsEnabled: state.globalSettings.hapticsEnabled,
+              onPressed: () => Navigator.of(context).pushNamed<void>('/debug'),
+            ),
+          ],
         ],
       ),
     ),

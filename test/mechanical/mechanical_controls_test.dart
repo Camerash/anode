@@ -1,5 +1,6 @@
 import 'package:anode/mechanical/mechanical_flip_tray.dart';
 import 'package:anode/mechanical/mechanical_pager.dart';
+import 'package:anode/mechanical/mechanical_push_drawer.dart';
 import 'package:anode/model/optical_profile.dart';
 import 'package:anode/vfd/vfd_widgets.dart';
 import 'package:flutter/material.dart';
@@ -155,6 +156,93 @@ void main() {
     rebuild(() => open = true);
     await tester.pump();
     expect(tester.widget<Opacity>(find.byType(Opacity)).opacity, 1);
+  });
+
+  testWidgets('collapsing tray occupies zero height while closed', (
+    tester,
+  ) async {
+    var open = false;
+    late StateSetter rebuild;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            rebuild = setState;
+            return Column(
+              children: <Widget>[
+                MechanicalFlipTray(
+                  open: open,
+                  height: 140,
+                  collapseWhenClosed: true,
+                  palette: palette,
+                  soundEnabled: false,
+                  hapticsEnabled: false,
+                  child: const Text('DETAIL'),
+                ),
+                const SizedBox(key: ValueKey('after-collapsed'), height: 20),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('after-collapsed'))).dy,
+      0,
+    );
+    rebuild(() => open = true);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('after-collapsed'))).dy,
+      140,
+    );
+  });
+
+  testWidgets('push drawer consumes right-side workspace when open', (
+    tester,
+  ) async {
+    var open = false;
+    late StateSetter rebuild;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: SizedBox(
+            width: 500,
+            height: 300,
+            child: StatefulBuilder(
+              builder: (context, setState) {
+                rebuild = setState;
+                return MechanicalPushDrawer(
+                  open: open,
+                  edge: MechanicalDrawerEdge.right,
+                  extent: 180,
+                  palette: palette,
+                  soundEnabled: false,
+                  hapticsEnabled: false,
+                  onOpenChanged: (value) => rebuild(() => open = value),
+                  content: const SizedBox(key: ValueKey('drawer-content')),
+                  drawer: const Text('DRAWER'),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSize(find.byKey(const ValueKey('drawer-content'))).width,
+      500,
+    );
+    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+    expect(
+      tester.getSize(find.byKey(const ValueKey('drawer-content'))).width,
+      320,
+    );
   });
 
   testWidgets('segmented bar snaps values and exposes slider semantics', (

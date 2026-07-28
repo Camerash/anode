@@ -48,7 +48,7 @@ void main() {
     );
   });
 
-  test('a component type this build does not know is dropped, not thrown', () {
+  test('a component type this build does not know is preserved', () {
     final json = preset().toJson();
     (json['components'] as List).add(<String, Object?>{
       'id': 'mystery',
@@ -58,7 +58,12 @@ void main() {
     });
 
     final back = DesignPreset.fromJson(reencode(json));
-    expect(back.components.map((c) => c.id), <String>['digits', 'bar']);
+    expect(back.components.map((c) => c.id), <String>[
+      'digits',
+      'bar',
+      'mystery',
+    ]);
+    expect(back.components.last.typeId, 'gauge.from.the.future');
   });
 
   test('an unknown orientation key is ignored, known ones survive', () {

@@ -33,6 +33,7 @@ class PrismSelectorBank<T> extends StatelessWidget {
     required this.palette,
     required this.prismStyle,
     required this.onSelected,
+    this.controller,
     this.rows = 2,
     this.columns,
     this.role = PrismRole.compact,
@@ -46,6 +47,7 @@ class PrismSelectorBank<T> extends StatelessWidget {
   final VfdPalette palette;
   final PrismStyle prismStyle;
   final ValueChanged<T> onSelected;
+  final MechanicalPagerController? controller;
   final int rows;
   final int? columns;
   final PrismRole role;
@@ -86,6 +88,7 @@ class PrismSelectorBank<T> extends StatelessWidget {
           ],
           palette: palette,
           prismStyle: prismStyle,
+          controller: controller,
           soundEnabled: soundEnabled,
           hapticsEnabled: hapticsEnabled,
           semanticLabel: semanticLabel,

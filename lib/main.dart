@@ -2,16 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'actions/action_registry.dart';
 import 'app_state.dart';
 import 'data/design_repository.dart';
+import 'debug/debug_workbench_page.dart';
 import 'library/library_page.dart';
 import 'mechanical/hard_cut_route.dart';
-import 'mechanical/vfd_annunciator.dart';
-import 'model/component_type.dart';
 import 'model/dev_design.dart';
 import 'model/placement.dart';
 import 'vfd/speed_source.dart';
@@ -20,7 +20,6 @@ import 'vfd/prism_widgets.dart';
 import 'vfd/vfd_cluster.dart';
 import 'vfd/vfd_render_assets.dart';
 import 'vfd/vfd_widgets.dart';
-import 'vfd_dock.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -60,8 +59,21 @@ class _AnodeAppState extends State<AnodeApp> {
       home: ClusterPage(renderAssets: widget.renderAssets, state: widget.state),
       onGenerateRoute: (settings) {
         if (settings.name == '/library') {
+          final initial = settings.arguments is LibrarySection
+              ? settings.arguments! as LibrarySection
+              : LibrarySection.templates;
           return hardCutRoute<void>(
             (_) => LibraryPage(
+              state: widget.state,
+              renderAssets: widget.renderAssets,
+              initialSection: initial,
+            ),
+            settings: settings,
+          );
+        }
+        if (settings.name == '/debug' && kDebugMode) {
+          return hardCutRoute<void>(
+            (_) => DebugWorkbenchPage(
               state: widget.state,
               renderAssets: widget.renderAssets,
             ),
@@ -101,10 +113,6 @@ class _ClusterPageState extends State<ClusterPage>
   final SimulatedSpeedSource _sim = SimulatedSpeedSource();
   StreamSubscription<double>? _sub;
   late final ActionRegistry _actions;
-  bool _autoDrive = true;
-  bool _dockOpen = false;
-  double _manualKph = 95;
-  String? _annunciation;
 
   @override
   void initState() {
@@ -125,9 +133,8 @@ class _ClusterPageState extends State<ClusterPage>
     );
     widget.state.addListener(_syncAppState);
     _sub = _sim.kph.listen((v) {
-      if (_autoDrive) _controller.speedKph = v;
+      _controller.speedKph = v;
     });
-    _controller.speedKph = _manualKph;
   }
 
   @override
@@ -144,16 +151,13 @@ class _ClusterPageState extends State<ClusterPage>
     if (mounted) setState(() {});
   }
 
-  void _openLibrary() => Navigator.of(context).pushNamed<void>('/library');
+  void _openLibrary() => Navigator.of(
+    context,
+  ).pushNamed<void>('/library', arguments: LibrarySection.templates);
 
-  void _customize() {
-    final source = widget.state.activeDesign;
-    final dashboard = widget.state.customizeActiveDesign();
-    setState(() {
-      _annunciation =
-          'Forked ${source.name}. User dashboard ${dashboard.name} active.';
-    });
-  }
+  void _openSettings() => Navigator.of(
+    context,
+  ).pushNamed<void>('/library', arguments: LibrarySection.settings);
 
   @override
   Widget build(BuildContext context) {
@@ -161,15 +165,13 @@ class _ClusterPageState extends State<ClusterPage>
     _controller.reduceMotion = reduceMotion;
 
     final windowPadding = MediaQuery.paddingOf(context);
-
-    // Reserving the dock's height out of the safe rect is what keeps the band
-    // honest: the contain-fit shrinks it uniformly and re-centres it, so the
-    // aspect never changes and nothing reflows. The substrate still reaches
-    // every edge behind the controls.
-    final dockExtent = _dockOpen ? VfdDock.height + windowPadding.bottom : 0.0;
-    final clusterInsets = windowPadding.copyWith(
-      bottom: _dockOpen ? dockExtent : windowPadding.bottom,
-    );
+    final windowSize = MediaQuery.sizeOf(context);
+    final currentOrientation = windowSize.width >= windowSize.height
+        ? DesignOrientation.landscape
+        : DesignOrientation.portrait;
+    if (widget.state.activeDesign.supports(currentOrientation)) {
+      _controller.orientation = currentOrientation;
+    }
 
     return ColoredBox(
       color: const Color(0xFF000000),
@@ -191,7 +193,7 @@ class _ClusterPageState extends State<ClusterPage>
                 child: VfdCluster(
                   renderAssets: widget.renderAssets,
                   controller: _controller,
-                  safeInsets: clusterInsets,
+                  safeInsets: windowPadding,
                 ),
               );
             },
@@ -201,11 +203,11 @@ class _ClusterPageState extends State<ClusterPage>
             orientation: _controller.orientation,
             controller: _controller,
             registry: _actions,
-            safeInsets: clusterInsets,
+            safeInsets: windowPadding,
           ),
           // Content insets to the safe area; the background does not.
           Padding(
-            padding: clusterInsets,
+            padding: windowPadding,
             child: Align(
               alignment: Alignment.bottomRight,
               child: Padding(
@@ -214,68 +216,16 @@ class _ClusterPageState extends State<ClusterPage>
                   // Auto-hide after a few seconds is still to come.
                   label: 'SET',
                   palette: VfdPalette.of(_controller.phosphor),
-                  lit: _dockOpen,
                   role: PrismRole.compact,
                   span: PrismSpan.one,
                   style: widget.state.activeDesign.renderSettings.prismStyle,
                   soundEnabled: widget.state.globalSettings.soundEnabled,
                   hapticsEnabled: widget.state.globalSettings.hapticsEnabled,
-                  onPressed: () => setState(() => _dockOpen = !_dockOpen),
+                  onPressed: _openSettings,
                 ),
               ),
             ),
           ),
-          if (_dockOpen)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Padding(
-                padding: EdgeInsets.only(bottom: windowPadding.bottom),
-                child: VfdDock(
-                  controller: _controller,
-                  settings: widget.state.activeDesign.renderSettings,
-                  preferences: widget.state.globalSettings,
-                  editable: widget.state.activeDesignEditable,
-                  autoDrive: _autoDrive,
-                  manualKph: _manualKph,
-                  onAutoDriveChanged: (v) => setState(() => _autoDrive = v),
-                  onUnitChanged: (unit) =>
-                      widget.state.updateActiveComponentParam(
-                        ComponentTypes.speedDigits,
-                        'unit',
-                        unit.name,
-                      ),
-                  onOpenLibrary: _openLibrary,
-                  onCustomize: _customize,
-                  onProfileChanged: (profile) =>
-                      widget.state.updateEditableActiveSettings(
-                        widget.state.activeDesign.renderSettings.copyWith(
-                          opticalProfile: profile,
-                        ),
-                      ),
-                  onManualKphChanged: (v) => setState(() {
-                    _autoDrive = false;
-                    _manualKph = v;
-                    _controller.speedKph = v;
-                  }),
-                ),
-              ),
-            ),
-          if (_annunciation case final message?)
-            Positioned(
-              left: windowPadding.left + 12,
-              right: windowPadding.right + 12,
-              top: windowPadding.top + 12,
-              child: VfdAnnunciator(
-                message: message,
-                palette: VfdPalette.of(_controller.phosphor),
-                prismStyle: widget.state.activeDesign.renderSettings.prismStyle,
-                soundEnabled: widget.state.globalSettings.soundEnabled,
-                hapticsEnabled: widget.state.globalSettings.hapticsEnabled,
-                onAcknowledge: () => setState(() => _annunciation = null),
-              ),
-            ),
         ],
       ),
     );

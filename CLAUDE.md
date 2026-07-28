@@ -144,12 +144,13 @@ continue past the glass. Any vignette is a gentle falloff, never an edge.
 
 Content insets to safe area; the background does not. System UI is hidden.
 
-An authored frame declares an aspect and is **contain-fitted inside the safe
-rect**: the fit picks whichever axis is tighter, the frame is centred on the safe
-rect, and nothing is ever cropped to it. The safe rect governs placement only —
-there is no mask and no clamp, so halo, sheen and grain keep evaluating across
-the full fragment bounds and spill past both the safe rect and the screen edge.
-Content therefore never bleeds off; light always does.
+Each orientation owns a `FrameSpec`. Fixed is the default: its authored
+reference aspect is **contain-fitted inside the safe rect**, picking the tighter
+axis and centring the frame. Adaptive is explicit opt-in: the frame resolves to
+the current window aspect within its selected portrait or landscape
+orientation. Neither mode crops or clamps component placement. The safe rect
+governs placement only, so halo, sheen, and grain keep evaluating across the
+full fragment bounds and spill past both the frame and screen edge.
 
 Halo compounding is already correct — `glow` accumulates additively. Brightness
 is governed by the tonemap, which is deliberately compressive so overlapping
@@ -355,17 +356,20 @@ is solved.
 
 ### Orientation
 
-Layouts are NOT responsive. These are designed instrument faces, not web pages. A
-design declares which orientations it supports, and each supported orientation
-gets its own AUTHORED layout — never a reflow of the other. Lock to supported
-orientations while a design is active. Within an orientation, absorb the aspect
-ratio spread (18:9 through iPad 4:3) with anchor-plus-offset positioning, not
-absolute coordinates.
+Portrait and landscape remain separate AUTHORED layouts, never reflows of one
+another. A nullable design-level orientation lock chooses portrait-only or
+landscape-only; neither lock active means both are supported. This is design
+metadata, not an OS/device orientation request. The app itself stays resizable
+and supports all iPad orientations and Split View.
 
-The authored frame aspect is also per orientation and lives on the design. It is
-not inferred from the device and is not one global ratio reused after rotation.
-Payloads written before this was expressible receive tolerant development
-defaults on read.
+Fixed-aspect designs are the default because automotive reference faces have
+physical proportions. Their authored aspect is never inferred from the device;
+runtime and editor contain-fit it. Adaptive designs are opt-in and resolve one
+orientation's frame against the current window aspect. Anchor-plus-offset
+positions remain stable against edges as aspect changes. Each placement axis
+may also use explicit start/end span insets when an element must stretch with an
+adaptive frame. Fixed sizing remains valid in either frame mode; span sizing is
+not forced onto fixed designs.
 
 ### Authored and device settings
 
@@ -409,26 +413,22 @@ almost anything else on that screen.
 
 Keep the screen awake. Hide system UI.
 
-### Runtime controls dock in the dead space
+### Runtime screen has no configuration dock
 
-Contain-fitting an authored frame into an arbitrary screen leaves empty tube
-above and below the design band. That dead space belongs to no design, so it is
-where the effect toggles, phosphor, unit and demo-mode controls live. They never
-resize the render, never occlude the band, and never change its aspect.
+Active dashboard is the instrument, not a live configuration surface. `SET`
+opens Library Settings directly. Dashboard optics, Prism style, components, and
+placement change only in the design editor. Debug-only `RUN`, manual speed, and
+unit controls live in a separate workbench route and never mutate persisted
+design state.
 
-**Nothing may resize the cluster to make room for chrome.** Anchor-plus-offset
-positions resolve against the aspect ratio, so shrinking the cluster moves every
-component — a panel taking a third of the screen means you are tuning and
-authoring against a frame that never ships. A settings sheet that pushed the
-cluster aside was built and removed for exactly this reason; the objection is
-not that it occluded the render, it is that it silently changed the layout.
-
-If a surface genuinely needs more room than the dead space offers, scale the
-whole rendered frame uniformly and letterbox it. Never reflow it.
+Fixed frames always scale uniformly and letterbox. Editor service chrome may
+reduce available preview space, but it must recompute the same contain fit; it
+never changes authored coordinates or frame aspect. Adaptive frames alone
+resolve a new aspect from current editor/window bounds.
 
 ### Config UI is in the VFD idiom
 
-Every user-facing control surface — the dock, the Library, Settings — is drawn
+Every user-facing control surface — editor, Library, and Settings — is drawn
 in the tube's visual language, not Material's. A stock switch or a filled chip
 sitting on the substrate breaks the illusion exactly the way a crisp vector gear
 does, and these surfaces sit directly on top of the render.
@@ -496,9 +496,10 @@ an override updates the selected component live. The panel itself continues to
 use dashboard styling. Keep context labels visible so selecting a component
 cannot silently change what identical controls mean.
 
-An immutable preset exposes effect values read-only. `CUSTOMIZE` performs the
-same explicit, visible fork as Edit before any value can change. Never silently
-fork a preset on a slider drag.
+An immutable template can activate or clone only. Clone opens a confirmation
+surface with optional naming, then creates and activates a dashboard before
+opening the editor. User designs can activate, clone, or edit. Never silently
+fork from Edit or from a slider drag.
 
 ### Mechanical UI contract
 
@@ -515,8 +516,8 @@ The whole app is switchgear, not a Material app wearing a VFD theme:
   configured click/haptic.
 - Hidden service surfaces move as mechanisms. A drawer releases its latch for
   20ms, travels linearly for 130ms, and hard-seats for 30ms. An optical fascia
-  flips about its top hinge in 150ms while retaining its full closed-layout
-  height. Reduced-motion resolves either state immediately.
+  flips about its top hinge in 150ms and occupies exactly zero layout height
+  while closed. Reduced-motion resolves either state immediately.
 - Continuous direct manipulation remains for component drag/resize and
   segmented strength bars. This is not content navigation and must not acquire
   fling or inertial behaviour.
@@ -544,19 +545,15 @@ surfaces. Press state goes through the render controller and keeps
 Pointer-drag tilt remains a desktop and development affordance only. On device,
 tilt comes from the gravity vector.
 
-Library, Settings, and editing sit behind one deliberate path:
+Library, Settings, and editing sit behind explicit controls:
 
-    cluster --gear--> dock --[Library]--> hard-cut switch bank
-                                          [ Designs | Settings ]
+    cluster --SET--> Library(Settings)
+    cluster action --> Library(Templates | Designs | Settings)
 
-Tapping a design card activates it; opening the editor requires the card's
-separate, explicit Edit button, so nothing is editable in fewer than three
-deliberate taps. A design's explicit media or trip-computer buttons do not open
-editing or navigation accidentally.
-
-Edit on a shipped preset forks it. The Library is where copy-on-customize
-becomes legible to the user, and the fork must be visible when it happens
-rather than discovered later.
+Template card tap activates; `CLONE` confirms and optionally names a new user
+design before opening its editor. User-design card tap activates; `CLONE` and
+`EDIT` are separate actions. A design's media or trip-computer buttons do not
+open editing or navigation accidentally.
 
 There is deliberately **no motion lock**. Everything stays reachable at any
 speed; this was considered and rejected as paternalistic, and the three-tap
@@ -565,13 +562,17 @@ depth already rules out accidental entry.
 ### The editor is its own route
 
 Editing needs persistent chrome that tuning does not, so it gets a dedicated
-screen: an aspect-locked canvas plus a component list and inspector, with an
-orientation switcher choosing which authored layout is being edited.
+screen: a contain-fit authored canvas plus a component list and inspector. On
+entry, current window orientation is selected when supported; otherwise the
+only supported orientation is selected. The top switch chooses which independent
+authored layout is edited.
 
-The editor canvas is the one place a visible frame edge is correct. Everywhere
-else an edge breaks the illusion; here you are authoring the frame, so you have
-to see where it ends. The canvas holds the target orientation's aspect
-regardless of the window shape, and scales to fit.
+The editor canvas is the one place a visible frame edge is correct. Fixed mode
+holds its reference aspect regardless of window shape and scales to fit.
+Adaptive mode uses current available-window aspect. Matte outside the double
+boundary dims rendered component portions without clipping their hit regions;
+off-frame elements remain selectable, draggable, and resizable. `BRING IN`
+recentres a fully lost item without changing size.
 
 The editor uses one live, shared render of the whole design plus non-painting
 selection/drag/resize overlays. It does not embed component shaders or create
@@ -580,10 +581,16 @@ so handles remain reachable; this does not change component list order or
 runtime z-order.
 
 The 48px top rail contains only `BACK`, dashboard identity, and orientation.
-Every other control lives in a manually latched right-side service drawer that
-overlays the canvas. Opening the drawer, selecting a part, and switching
-sections must never resize, reflow, or rescale the authored frame. The closed
-drawer leaves a 44px triangular latch target.
+Every other control lives in one manually latched service bay. In portrait it
+pushes up from the bottom and consumes 33–50% of route height; in landscape it
+pushes from the right. Opening it reduces available preview bounds, then
+re-contain-fits the same authored frame. It never changes authored coordinates,
+fixed aspect, or element size. The closed bay leaves a 44px triangular latch.
+
+Canvas camera has explicit `EDIT` and `NAV` modes. Edit gives one-pointer
+drag/resize exclusively to elements. Nav gives pan and pinch zoom exclusively
+to the camera, with 1×–4× limits and `FIT` restoring identity. Camera transforms
+never write placement.
 
 Right, bottom, and bottom-right resize handles retain small visual grips but
 have 44x44 touch regions. Edge resizing applies one pointer delta, not the old
@@ -598,8 +605,15 @@ unclamped to the frame.
 The editor exists to expose these. Keep unresolved findings visible rather than
 special-casing controls around them:
 
-- **Resolved during Stage 4:** a design could not express the authored frame
-  aspect. `frameAspects` now stores it per orientation on presets and dashboards.
+- **Resolved during Stage 4 follow-up:** `FrameSpec` stores per-orientation
+  reference aspect plus fixed/adaptive mode. Fixed is default; adaptive resolves
+  current window aspect.
+- **Resolved during Stage 4 follow-up:** placement axes can independently use
+  fixed size or start/end span insets. This supports adaptive width/height
+  without introducing another component hierarchy.
+- **Resolved during Stage 4 follow-up:** imported unknown component types remain
+  serialized instead of being silently dropped. Renderer/editor availability is
+  separate from lossless design transport.
 - **Unresolved:** params are global to a component id. Only placement varies by
   orientation. A three-digit landscape readout and two-digit portrait readout
   therefore require two component ids with mutually exclusive placements.

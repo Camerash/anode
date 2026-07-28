@@ -3,10 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../actions/action_registry.dart';
-import '../mechanical/mechanical_drawer.dart';
 import '../mechanical/mechanical_pager.dart';
+import '../mechanical/mechanical_push_drawer.dart';
 import '../mechanical/prism_selector_bank.dart';
-import '../mechanical/vfd_annunciator.dart';
 import '../mechanical/vfd_editable_field.dart';
 import '../model/action_binding.dart';
 import '../model/component_instance.dart';
@@ -31,7 +30,6 @@ class EditorPage extends StatefulWidget {
     super.key,
     required this.dashboard,
     required this.onChanged,
-    this.forkedFrom,
     this.renderAssets,
     this.soundEnabled = true,
     this.hapticsEnabled = true,
@@ -40,7 +38,6 @@ class EditorPage extends StatefulWidget {
 
   final Dashboard dashboard;
   final ValueChanged<Dashboard> onChanged;
-  final String? forkedFrom;
   final VfdRenderAssets? renderAssets;
   final bool soundEnabled;
   final bool hapticsEnabled;
@@ -52,14 +49,29 @@ class EditorPage extends StatefulWidget {
 
 class _EditorPageState extends State<EditorPage> {
   late Dashboard _dashboard = widget.dashboard;
-  late DesignOrientation _orientation = _dashboard.supportedOrientations.first;
+  late DesignOrientation _orientation =
+      _dashboard.supports(DesignOrientation.portrait)
+      ? DesignOrientation.portrait
+      : _dashboard.supportedOrientations.first;
+  bool _initialOrientationResolved = false;
   String? _selectedId;
   String? _selectedModuleId;
   bool _drawerOpen = false;
-  bool _showForkNotice = true;
 
   VfdPalette get _palette =>
       VfdPalette.of(_dashboard.settings.opticalProfile.phosphor);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialOrientationResolved) return;
+    _initialOrientationResolved = true;
+    final size = MediaQuery.sizeOf(context);
+    final current = size.width > size.height
+        ? DesignOrientation.landscape
+        : DesignOrientation.portrait;
+    if (_dashboard.supports(current)) _orientation = current;
+  }
 
   @override
   Widget build(BuildContext context) => ColoredBox(
@@ -121,76 +133,74 @@ class _EditorPageState extends State<EditorPage> {
   );
 
   Widget _workspace(BoxConstraints constraints) {
-    final drawerWidth = math.min(380.0, constraints.maxWidth - 16);
-    return Stack(
+    final portrait = _orientation == DesignOrientation.portrait;
+    final windowAspect =
+        constraints.maxWidth / math.max(1, constraints.maxHeight);
+    final adaptiveAspect = orientViewportAspect(windowAspect, _orientation);
+    final maxExtent = portrait
+        ? math.max(160.0, constraints.maxHeight - 120)
+        : math.max(240.0, constraints.maxWidth - 60);
+    final drawerExtent = portrait
+        ? math.min(
+            maxExtent,
+            (constraints.maxHeight * 0.42).clamp(220, 420).toDouble(),
+          )
+        : math.min(
+            maxExtent,
+            (constraints.maxWidth * 0.38).clamp(280, 420).toDouble(),
+          );
+    final canvas = Padding(
+      padding: const EdgeInsets.all(4),
+      child: EditorCanvas(
+        dashboard: _dashboard,
+        orientation: _orientation,
+        adaptiveAspect: adaptiveAspect,
+        selectedId: _selectedId,
+        selectedModuleId: _selectedModuleId,
+        onSelect: _selectComponent,
+        onPlacementChanged: _setPlacement,
+        onModulePlacementChanged: _setModulePlacement,
+        renderAssets: widget.renderAssets,
+      ),
+    );
+    return MechanicalPushDrawer(
       key: const ValueKey('editor-workspace'),
-      fit: StackFit.expand,
-      children: <Widget>[
-        Padding(
-          padding: const EdgeInsets.all(4),
-          child: EditorCanvas(
-            dashboard: _dashboard,
-            orientation: _orientation,
-            selectedId: _selectedId,
-            selectedModuleId: _selectedModuleId,
-            onSelect: _selectComponent,
-            onPlacementChanged: _setPlacement,
-            onModulePlacementChanged: _setModulePlacement,
-            renderAssets: widget.renderAssets,
-          ),
+      open: _drawerOpen,
+      edge: portrait ? MechanicalDrawerEdge.bottom : MechanicalDrawerEdge.right,
+      extent: drawerExtent,
+      palette: _palette,
+      soundEnabled: widget.soundEnabled,
+      hapticsEnabled: widget.hapticsEnabled,
+      onOpenChanged: (open) => setState(() => _drawerOpen = open),
+      content: canvas,
+      drawer: _EditorServicePanel(
+        dashboard: _dashboard,
+        orientation: _orientation,
+        frameAspect: _dashboard.frameAspect(
+          _orientation,
+          viewportAspect: adaptiveAspect,
         ),
-        if (widget.forkedFrom != null && _showForkNotice)
-          Positioned(
-            left: 12,
-            top: 12,
-            width: math.min(420, constraints.maxWidth - 24),
-            child: VfdAnnunciator(
-              message: 'Forked from ${widget.forkedFrom}. Editing user copy.',
-              palette: _palette,
-              prismStyle: _dashboard.settings.prismStyle,
-              soundEnabled: widget.soundEnabled,
-              hapticsEnabled: widget.hapticsEnabled,
-              onAcknowledge: () => setState(() => _showForkNotice = false),
-            ),
-          ),
-        Positioned(
-          top: 0,
-          bottom: 0,
-          right: 0,
-          child: MechanicalDrawer(
-            open: _drawerOpen,
-            width: drawerWidth,
-            palette: _palette,
-            soundEnabled: widget.soundEnabled,
-            hapticsEnabled: widget.hapticsEnabled,
-            onOpenChanged: (open) => setState(() => _drawerOpen = open),
-            child: _EditorServicePanel(
-              dashboard: _dashboard,
-              orientation: _orientation,
-              selectedId: _selectedId,
-              selectedModuleId: _selectedModuleId,
-              palette: _palette,
-              soundEnabled: widget.soundEnabled,
-              hapticsEnabled: widget.hapticsEnabled,
-              actionRegistry:
-                  widget.actionRegistry ?? ActionRegistry.forAuthoring(),
-              onSelectComponent: _selectComponent,
-              onSelectModule: _selectModule,
-              onAddComponent: _addComponent,
-              onAddModule: _addModule,
-              onRemoveComponent: _removeComponent,
-              onRemoveModule: _removeModule,
-              onMoveComponent: _moveComponent,
-              onVisibilityChanged: _setVisibility,
-              onComponentChanged: _replaceComponent,
-              onDashboardChanged: _replaceDashboard,
-              onFrameAspectChanged: _setFrameAspect,
-              onPlacementChanged: _setPlacement,
-              onModulePlacementChanged: _setModulePlacement,
-            ),
-          ),
-        ),
-      ],
+        selectedId: _selectedId,
+        selectedModuleId: _selectedModuleId,
+        palette: _palette,
+        soundEnabled: widget.soundEnabled,
+        hapticsEnabled: widget.hapticsEnabled,
+        actionRegistry: widget.actionRegistry ?? ActionRegistry.forAuthoring(),
+        onSelectComponent: _selectComponent,
+        onSelectModule: _selectModule,
+        onAddComponent: _addComponent,
+        onAddModule: _addModule,
+        onRemoveComponent: _removeComponent,
+        onRemoveModule: _removeModule,
+        onMoveComponent: _moveComponent,
+        onVisibilityChanged: _setVisibility,
+        onComponentChanged: _replaceComponent,
+        onDashboardChanged: _replaceDashboard,
+        onFrameAspectChanged: _setFrameAspect,
+        onFrameModeChanged: _setFrameMode,
+        onPlacementChanged: _setPlacement,
+        onModulePlacementChanged: _setModulePlacement,
+      ),
     );
   }
 
@@ -206,11 +216,24 @@ class _EditorPageState extends State<EditorPage> {
 
   void _setFrameAspect(double value) {
     if (!value.isFinite || value <= 0) return;
+    final current = _dashboard.frameSpec(_orientation);
     _replaceDashboard(
       _dashboard.copyWith(
-        frameAspects: <DesignOrientation, double>{
-          ..._dashboard.frameAspects,
-          _orientation: value,
+        frameSpecs: <DesignOrientation, FrameSpec>{
+          ..._dashboard.frameSpecs,
+          _orientation: current.copyWith(referenceAspect: value),
+        },
+      ),
+    );
+  }
+
+  void _setFrameMode(FrameAspectMode value) {
+    final current = _dashboard.frameSpec(_orientation);
+    _replaceDashboard(
+      _dashboard.copyWith(
+        frameSpecs: <DesignOrientation, FrameSpec>{
+          ..._dashboard.frameSpecs,
+          _orientation: current.copyWith(mode: value),
         },
       ),
     );
@@ -301,7 +324,12 @@ class _EditorPageState extends State<EditorPage> {
       _replaceDashboard(_dashboard.withComponent(component));
 
   void _replaceDashboard(Dashboard next) {
-    setState(() => _dashboard = next);
+    setState(() {
+      _dashboard = next;
+      if (!next.supports(_orientation)) {
+        _orientation = next.supportedOrientations.first;
+      }
+    });
     widget.onChanged(next);
   }
 
@@ -326,6 +354,7 @@ class _EditorServicePanel extends StatefulWidget {
   const _EditorServicePanel({
     required this.dashboard,
     required this.orientation,
+    required this.frameAspect,
     required this.selectedId,
     required this.selectedModuleId,
     required this.palette,
@@ -343,12 +372,14 @@ class _EditorServicePanel extends StatefulWidget {
     required this.onComponentChanged,
     required this.onDashboardChanged,
     required this.onFrameAspectChanged,
+    required this.onFrameModeChanged,
     required this.onPlacementChanged,
     required this.onModulePlacementChanged,
   });
 
   final Dashboard dashboard;
   final DesignOrientation orientation;
+  final double frameAspect;
   final String? selectedId;
   final String? selectedModuleId;
   final VfdPalette palette;
@@ -367,6 +398,7 @@ class _EditorServicePanel extends StatefulWidget {
   final ValueChanged<ComponentInstance> onComponentChanged;
   final ValueChanged<Dashboard> onDashboardChanged;
   final ValueChanged<double> onFrameAspectChanged;
+  final ValueChanged<FrameAspectMode> onFrameModeChanged;
   final void Function(String id, Placement placement) onPlacementChanged;
   final void Function(String id, Placement placement) onModulePlacementChanged;
 
@@ -769,29 +801,103 @@ class _DesignPanel extends StatelessWidget {
   final _EditorServicePanel host;
 
   @override
-  Widget build(BuildContext context) => PrismPanel(
-    palette: host.palette,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        VfdLegend('Design', palette: host.palette, lit: true, size: 12),
-        const SizedBox(height: 12),
-        VfdEditableField(
-          label: 'Frame aspect · ${host.orientation.name}',
-          value: host.dashboard
-              .frameAspect(host.orientation)
-              .toStringAsFixed(3),
-          palette: host.palette,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          onChanged: (_) {},
-          onSubmitted: (raw) {
-            final value = double.tryParse(raw);
-            if (value != null) host.onFrameAspectChanged(value);
-          },
-        ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final spec = host.dashboard.frameSpec(host.orientation);
+    final locked = host.dashboard.supportedOrientations.length == 1
+        ? host.dashboard.supportedOrientations.first
+        : null;
+    return PrismPanel(
+      palette: host.palette,
+      child: MechanicalPager(
+        pages: <Widget>[
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              VfdLegend('Frame', palette: host.palette, lit: true, size: 12),
+              const SizedBox(height: 10),
+              PrismSelectorBank<FrameAspectMode>(
+                choices: <PrismSelectorChoice<FrameAspectMode>>[
+                  for (final mode in FrameAspectMode.values)
+                    PrismSelectorChoice<FrameAspectMode>(
+                      value: mode,
+                      label: mode.name,
+                      lit: spec.mode == mode,
+                    ),
+                ],
+                selected: spec.mode,
+                palette: host.palette,
+                prismStyle: host.dashboard.settings.prismStyle,
+                rows: 1,
+                columns: 2,
+                soundEnabled: host.soundEnabled,
+                hapticsEnabled: host.hapticsEnabled,
+                semanticLabel: 'Frame aspect mode',
+                onSelected: host.onFrameModeChanged,
+              ),
+              const SizedBox(height: 10),
+              VfdEditableField(
+                label: 'Reference aspect · ${host.orientation.name}',
+                value: spec.referenceAspect.toStringAsFixed(3),
+                palette: host.palette,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                onChanged: (_) {},
+                onSubmitted: (raw) {
+                  final value = double.tryParse(raw);
+                  if (value != null) host.onFrameAspectChanged(value);
+                },
+              ),
+            ],
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              VfdLegend(
+                'Lock orientation · none means both',
+                palette: host.palette,
+                lit: true,
+                size: 11,
+              ),
+              const SizedBox(height: 10),
+              PrismSelectorBank<DesignOrientation>(
+                choices: <PrismSelectorChoice<DesignOrientation>>[
+                  for (final orientation in DesignOrientation.values)
+                    PrismSelectorChoice<DesignOrientation>(
+                      value: orientation,
+                      label: orientation.name,
+                      lit: locked == orientation,
+                    ),
+                ],
+                selected: locked,
+                palette: host.palette,
+                prismStyle: host.dashboard.settings.prismStyle,
+                rows: 1,
+                columns: 2,
+                soundEnabled: host.soundEnabled,
+                hapticsEnabled: host.hapticsEnabled,
+                semanticLabel: 'Lock orientation',
+                onSelected: (orientation) {
+                  host.onDashboardChanged(
+                    host.dashboard.copyWith(
+                      supportedOrientations: locked == orientation
+                          ? <DesignOrientation>{...DesignOrientation.values}
+                          : <DesignOrientation>{orientation},
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ],
+        palette: host.palette,
+        prismStyle: host.dashboard.settings.prismStyle,
+        soundEnabled: host.soundEnabled,
+        hapticsEnabled: host.hapticsEnabled,
+        semanticLabel: 'Design settings',
+      ),
+    );
+  }
 }
 
 class _PartPanel extends StatelessWidget {
@@ -1063,10 +1169,12 @@ class _PlacementPanel extends StatelessWidget {
     final type = component == null
         ? null
         : ComponentTypes.byId(component.typeId);
-    final size = component == null
-        ? (placement.size ?? const Size(1, 1))
-        : placement.resolveSize(type, variant: component.effectiveVariant);
-    final aspect = host.dashboard.frameAspect(host.orientation);
+    final aspect = host.frameAspect;
+    final size = placement.resolveSizeForAspect(
+      aspect,
+      type,
+      variant: component?.effectiveVariant,
+    );
     final center = placement.resolve(aspect);
     return PrismPanel(
       palette: host.palette,
@@ -1074,6 +1182,8 @@ class _PlacementPanel extends StatelessWidget {
       child: MechanicalPager(
         pages: <Widget>[
           _anchorPage(placement, aspect, component, module),
+          _spanPage(placement, aspect, size, component, module),
+          _recoveryPage(placement, center, component, module),
           _axisPage('X', center.dx, -_nudge, _nudge, (delta) {
             _write(component, module, nudgePlacement(placement, dx: delta));
           }),
@@ -1084,11 +1194,11 @@ class _PlacementPanel extends StatelessWidget {
             _write(
               component,
               module,
-              placement.copyWith(
-                size: Size(
-                  math.max(minimumAuthoredSize, size.width + delta),
-                  size.height,
-                ),
+              resizePlacementFromEdges(
+                placement: placement,
+                resolvedSize: size,
+                frameAspect: aspect,
+                widthDelta: delta,
               ),
             );
           }),
@@ -1096,11 +1206,11 @@ class _PlacementPanel extends StatelessWidget {
             _write(
               component,
               module,
-              placement.copyWith(
-                size: Size(
-                  size.width,
-                  math.max(minimumAuthoredSize, size.height + delta),
-                ),
+              resizePlacementFromEdges(
+                placement: placement,
+                resolvedSize: size,
+                frameAspect: aspect,
+                heightDelta: delta,
               ),
             );
           }),
@@ -1152,6 +1262,116 @@ class _PlacementPanel extends StatelessWidget {
           );
         },
       ),
+    ],
+  );
+
+  Widget _spanPage(
+    Placement placement,
+    double aspect,
+    Size size,
+    ComponentInstance? component,
+    VfdModule? module,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      VfdLegend('Axis sizing', palette: host.palette, lit: true, size: 11),
+      const SizedBox(height: 8),
+      PrismSelectorBank<String>(
+        choices: <PrismSelectorChoice<String>>[
+          PrismSelectorChoice<String>(
+            value: 'x-fixed',
+            label: 'X fixed',
+            lit: placement.horizontalSpan == null,
+          ),
+          PrismSelectorChoice<String>(
+            value: 'x-span',
+            label: 'X span',
+            lit: placement.horizontalSpan != null,
+          ),
+          PrismSelectorChoice<String>(
+            value: 'y-fixed',
+            label: 'Y fixed',
+            lit: placement.verticalSpan == null,
+          ),
+          PrismSelectorChoice<String>(
+            value: 'y-span',
+            label: 'Y span',
+            lit: placement.verticalSpan != null,
+          ),
+        ],
+        selected: null,
+        palette: host.palette,
+        prismStyle: host.dashboard.settings.prismStyle,
+        rows: 2,
+        columns: 2,
+        soundEnabled: host.soundEnabled,
+        hapticsEnabled: host.hapticsEnabled,
+        semanticLabel: 'Axis sizing mode',
+        onSelected: (value) {
+          final center = placement.resolve(aspect);
+          var next = placement.copyWith(
+            offset: center - placement.anchor.pointIn(aspect),
+            size: size,
+          );
+          switch (value) {
+            case 'x-fixed':
+              next = next.withHorizontalSpan(null);
+            case 'x-span':
+              next = next.withHorizontalSpan(
+                AxisSpan(
+                  startInset: aspect / 2 + center.dx - size.width / 2,
+                  endInset: aspect / 2 - center.dx - size.width / 2,
+                ),
+              );
+            case 'y-fixed':
+              next = next.withVerticalSpan(null);
+            case 'y-span':
+              next = next.withVerticalSpan(
+                AxisSpan(
+                  startInset: 0.5 - center.dy - size.height / 2,
+                  endInset: 0.5 + center.dy - size.height / 2,
+                ),
+              );
+          }
+          _write(component, module, next);
+        },
+      ),
+    ],
+  );
+
+  Widget _recoveryPage(
+    Placement placement,
+    Offset center,
+    ComponentInstance? component,
+    VfdModule? module,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      VfdLegend('Frame recovery', palette: host.palette, lit: true, size: 11),
+      const SizedBox(height: 8),
+      VfdLegend(
+        'Centers item without changing size.',
+        palette: host.palette,
+        size: 9,
+      ),
+      const Spacer(),
+      Center(
+        child: PrismButton(
+          label: 'Bring in',
+          palette: host.palette,
+          role: PrismRole.standard,
+          span: PrismSpan.two,
+          style: host.dashboard.settings.prismStyle,
+          soundEnabled: host.soundEnabled,
+          hapticsEnabled: host.hapticsEnabled,
+          onPressed: () => _write(
+            component,
+            module,
+            nudgePlacement(placement, dx: -center.dx, dy: -center.dy),
+          ),
+        ),
+      ),
+      const Spacer(),
     ],
   );
 

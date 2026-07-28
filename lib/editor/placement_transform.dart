@@ -16,20 +16,72 @@ Placement resizePlacementFromEdges({
   double heightDelta = 0,
   double minimumSize = minimumAuthoredSize,
 }) {
-  final nextWidth = math.max(minimumSize, resolvedSize.width + widthDelta);
-  final nextHeight = math.max(minimumSize, resolvedSize.height + heightDelta);
-  final appliedWidth = nextWidth - resolvedSize.width;
-  final appliedHeight = nextHeight - resolvedSize.height;
+  final horizontal = placement.horizontalSpan;
+  final vertical = placement.verticalSpan;
   final center = placement.resolve(frameAspect);
-  final nextCenter = center + Offset(appliedWidth / 2, -appliedHeight / 2);
-  return placement.copyWith(
-    offset: nextCenter - placement.anchor.pointIn(frameAspect),
-    size: Size(nextWidth, nextHeight),
-  );
+  var nextCenter = center;
+  var nextWidth = resolvedSize.width;
+  var nextHeight = resolvedSize.height;
+  AxisSpan? nextHorizontal = horizontal;
+  AxisSpan? nextVertical = vertical;
+
+  if (horizontal == null) {
+    nextWidth = math.max(minimumSize, resolvedSize.width + widthDelta);
+    nextCenter += Offset((nextWidth - resolvedSize.width) / 2, 0);
+  } else {
+    nextHorizontal = AxisSpan(
+      startInset: horizontal.startInset,
+      endInset: math.min(
+        horizontal.endInset - widthDelta,
+        frameAspect - horizontal.startInset - minimumSize,
+      ),
+    );
+  }
+
+  if (vertical == null) {
+    nextHeight = math.max(minimumSize, resolvedSize.height + heightDelta);
+    nextCenter += Offset(0, -(nextHeight - resolvedSize.height) / 2);
+  } else {
+    nextVertical = AxisSpan(
+      startInset: vertical.startInset,
+      endInset: math.min(
+        vertical.endInset - heightDelta,
+        1 - vertical.startInset - minimumSize,
+      ),
+    );
+  }
+
+  return placement
+      .copyWith(
+        offset: nextCenter - placement.anchor.pointIn(frameAspect),
+        size: Size(nextWidth, nextHeight),
+      )
+      .withHorizontalSpan(nextHorizontal)
+      .withVerticalSpan(nextVertical);
 }
 
-Placement nudgePlacement(Placement placement, {double dx = 0, double dy = 0}) =>
-    placement.copyWith(offset: placement.offset + Offset(dx, dy));
+Placement nudgePlacement(Placement placement, {double dx = 0, double dy = 0}) {
+  final horizontal = placement.horizontalSpan;
+  final vertical = placement.verticalSpan;
+  return placement
+      .copyWith(offset: placement.offset + Offset(dx, dy))
+      .withHorizontalSpan(
+        horizontal == null
+            ? null
+            : AxisSpan(
+                startInset: horizontal.startInset + dx,
+                endInset: horizontal.endInset - dx,
+              ),
+      )
+      .withVerticalSpan(
+        vertical == null
+            ? null
+            : AxisSpan(
+                startInset: vertical.startInset - dy,
+                endInset: vertical.endInset + dy,
+              ),
+      );
+}
 
 Placement setResolvedPlacementAxis({
   required Placement placement,

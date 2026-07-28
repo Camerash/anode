@@ -13,10 +13,12 @@ abstract interface class Design {
   Set<DesignOrientation> get supportedOrientations;
   List<ComponentInstance> get components;
   List<VfdModule> get modules;
+  Map<DesignOrientation, FrameSpec> get frameSpecs;
   DashboardSettings get renderSettings;
 
   bool supports(DesignOrientation orientation);
-  double frameAspect(DesignOrientation orientation);
+  FrameSpec frameSpec(DesignOrientation orientation);
+  double frameAspect(DesignOrientation orientation, {double? viewportAspect});
   List<ComponentInstance> componentsIn(DesignOrientation orientation);
   VfdModule moduleFor(ComponentInstance component);
 }

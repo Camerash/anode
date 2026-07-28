@@ -21,6 +21,7 @@ class Dashboard implements Design {
     required Set<DesignOrientation> supportedOrientations,
     required List<ComponentInstance> components,
     List<VfdModule>? modules,
+    Map<DesignOrientation, FrameSpec>? frameSpecs,
     Map<DesignOrientation, double>? frameAspects,
     DashboardSettings? settings,
     this.sourcePresetId,
@@ -31,9 +32,10 @@ class Dashboard implements Design {
        ),
        components = List<ComponentInstance>.unmodifiable(components),
        modules = normaliseVfdModules(modules),
-       frameAspects = normaliseFrameAspects(
+       frameSpecs = normaliseFrameSpecs(
          supportedOrientations,
-         frameAspects,
+         specs: frameSpecs,
+         legacyAspects: frameAspects,
        ),
        settings = settings ?? DashboardSettings();
 
@@ -62,10 +64,28 @@ class Dashboard implements Design {
         ),
     ],
     modules: <VfdModule>[...preset.modules],
-    frameAspects: <DesignOrientation, double>{...preset.frameAspects},
+    frameSpecs: <DesignOrientation, FrameSpec>{...preset.frameSpecs},
     settings: preset.defaults,
     sourcePresetId: preset.id,
     sourcePresetVersion: preset.version,
+    forkedAt: at ?? DateTime.now(),
+  );
+
+  factory Dashboard.cloneFrom(
+    Dashboard source, {
+    required String id,
+    required String name,
+    DateTime? at,
+  }) => Dashboard(
+    id: id,
+    name: name,
+    supportedOrientations: <DesignOrientation>{...source.supportedOrientations},
+    components: <ComponentInstance>[...source.components],
+    modules: <VfdModule>[...source.modules],
+    frameSpecs: <DesignOrientation, FrameSpec>{...source.frameSpecs},
+    settings: source.settings,
+    sourcePresetId: source.sourcePresetId,
+    sourcePresetVersion: source.sourcePresetVersion,
     forkedAt: at ?? DateTime.now(),
   );
 
@@ -79,7 +99,13 @@ class Dashboard implements Design {
   final List<ComponentInstance> components;
   @override
   final List<VfdModule> modules;
-  final Map<DesignOrientation, double> frameAspects;
+  @override
+  final Map<DesignOrientation, FrameSpec> frameSpecs;
+  Map<DesignOrientation, double> get frameAspects =>
+      Map<DesignOrientation, double>.unmodifiable(<DesignOrientation, double>{
+        for (final entry in frameSpecs.entries)
+          entry.key: entry.value.referenceAspect,
+      });
   final DashboardSettings settings;
 
   /// Provenance only. The preset is never consulted again after the fork.
@@ -95,8 +121,13 @@ class Dashboard implements Design {
   DashboardSettings get renderSettings => settings;
 
   @override
-  double frameAspect(DesignOrientation orientation) =>
-      frameAspects[orientation] ?? kDefaultFrameAspects[orientation]!;
+  FrameSpec frameSpec(DesignOrientation orientation) =>
+      frameSpecs[orientation] ??
+      FrameSpec(referenceAspect: kDefaultFrameAspects[orientation]!);
+
+  @override
+  double frameAspect(DesignOrientation orientation, {double? viewportAspect}) =>
+      frameSpec(orientation).resolve(viewportAspect: viewportAspect);
 
   @override
   List<ComponentInstance> componentsIn(DesignOrientation orientation) =>
@@ -114,6 +145,7 @@ class Dashboard implements Design {
     Set<DesignOrientation>? supportedOrientations,
     List<ComponentInstance>? components,
     List<VfdModule>? modules,
+    Map<DesignOrientation, FrameSpec>? frameSpecs,
     Map<DesignOrientation, double>? frameAspects,
     DashboardSettings? settings,
   }) => Dashboard(
@@ -122,7 +154,14 @@ class Dashboard implements Design {
     supportedOrientations: supportedOrientations ?? this.supportedOrientations,
     components: components ?? this.components,
     modules: modules ?? this.modules,
-    frameAspects: frameAspects ?? this.frameAspects,
+    frameSpecs:
+        frameSpecs ??
+        (frameAspects == null
+            ? this.frameSpecs
+            : normaliseFrameSpecs(
+                supportedOrientations ?? this.supportedOrientations,
+                legacyAspects: frameAspects,
+              )),
     settings: settings ?? this.settings,
     sourcePresetId: sourcePresetId,
     sourcePresetVersion: sourcePresetVersion,
@@ -182,7 +221,7 @@ class Dashboard implements Design {
     'id': id,
     'name': name,
     'supportedOrientations': supportedOrientations.map((o) => o.name).toList(),
-    'frameAspects': frameAspectsToJson(frameAspects),
+    'frameSpecs': frameSpecsToJson(frameSpecs),
     'components': components.map((c) => c.toJson()).toList(),
     'modules': modules.map((module) => module.toJson()).toList(),
     'settings': settings.toJson(),
@@ -195,6 +234,7 @@ class Dashboard implements Design {
     id: json['id'] as String? ?? '',
     name: json['name'] as String? ?? '',
     supportedOrientations: parseOrientations(json['supportedOrientations']),
+    frameSpecs: parseFrameSpecs(json['frameSpecs']),
     frameAspects: parseFrameAspects(json['frameAspects']),
     components: parseComponents(json['components']),
     modules: parseVfdModules(json['modules']),

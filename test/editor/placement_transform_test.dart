@@ -71,4 +71,30 @@ void main() {
     expect(y.dx, 0.1);
     expect(y.dy, closeTo(0.195, 1e-12));
   });
+
+  test('mixed span resize still updates fixed axis', () {
+    const placement = Placement(
+      size: Size(0.5, 0.2),
+      horizontalSpan: AxisSpan(startInset: 0.2, endInset: 0.3),
+    );
+    final resolved = placement.resolveSizeForAspect(2.6, null);
+    final beforeTop = placement.resolve(2.6).dy + resolved.height / 2;
+    final resized = resizePlacementFromEdges(
+      placement: placement,
+      resolvedSize: resolved,
+      frameAspect: 2.6,
+      widthDelta: 0.1,
+      heightDelta: 0.1,
+    );
+    final afterSize = resized.resolveSizeForAspect(2.6, null);
+
+    expect(resized.horizontalSpan?.startInset, 0.2);
+    expect(resized.horizontalSpan?.endInset, closeTo(0.2, 1e-9));
+    expect(afterSize.width, closeTo(resolved.width + 0.1, 1e-9));
+    expect(afterSize.height, closeTo(0.3, 1e-9));
+    expect(
+      resized.resolve(2.6).dy + afterSize.height / 2,
+      closeTo(beforeTop, 1e-9),
+    );
+  });
 }

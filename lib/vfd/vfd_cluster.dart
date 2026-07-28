@@ -96,9 +96,21 @@ class VfdController extends ChangeNotifier {
     _banks.clear();
   }
 
-  /// Aspect of the authored frame. A design declares this; it is not the
-  /// device's aspect.
-  double get aspect => _design.frameAspect(_orientation);
+  double? _viewportAspect;
+
+  /// Fixed faces retain their authored reference aspect. Adaptive faces resolve
+  /// against the current safe viewport supplied by [VfdCluster].
+  double get aspect => _design.frameAspect(
+    _orientation,
+    viewportAspect: _viewportAspect == null
+        ? null
+        : orientViewportAspect(_viewportAspect!, _orientation),
+  );
+
+  set viewportAspect(double value) {
+    if (!value.isFinite || value <= 0 || value == _viewportAspect) return;
+    _viewportAspect = value;
+  }
 
   late final Ticker _ticker;
   Duration _last = Duration.zero;
@@ -183,7 +195,11 @@ class VfdController extends ChangeNotifier {
       if (type == null || placement == null) continue;
 
       final center = placement.resolve(aspect);
-      final size = placement.resolveSize(type, variant: c.effectiveVariant);
+      final size = placement.resolveSizeForAspect(
+        aspect,
+        type,
+        variant: c.effectiveVariant,
+      );
       final params = c.effectiveParams;
       final moduleProfile = opticalProfile.apply(
         _design.moduleFor(c).opticalOverrides,
@@ -347,7 +363,7 @@ class VfdController extends ChangeNotifier {
     }
     return (
       center: placement.resolve(aspect),
-      size: placement.size ?? Size(aspect, 1),
+      size: placement.resolveSizeForAspect(aspect, null),
     );
   }
 
@@ -472,6 +488,8 @@ class _VfdClusterState extends State<VfdCluster> {
             math.max(padding.left + 1, size.width - padding.right),
             math.max(padding.top + 1, size.height - padding.bottom),
           );
+          widget.controller.viewportAspect =
+              safeRect.width / math.max(1, safeRect.height);
 
           return CustomPaint(
             painter: VfdPainter(

@@ -30,7 +30,9 @@ Commit `444a836`.
 - [x] System UI hidden (`immersiveSticky`), screen kept awake (`wakelock_plus`).
 - [x] Content insets to safe area, background does not.
 - [x] Stacked `KM/H` / `MPH` legends, stroked from `sdSeg` paths.
-- [x] Runtime controls docked in the contain-fit dead space, in the VFD idiom.
+- [x] Runtime controls were initially docked in contain-fit dead space. Stage 4
+      later removed the active-dashboard config dock; `SET` now opens Settings
+      and debug controls live in a separate workbench.
 
 Two shader defects found and fixed while verifying, both recorded in
 `CLAUDE.md` under "Flutter shader constraints":
@@ -172,9 +174,9 @@ data model. Commit `4d511ed` is the reviewed developer-tool boundary. The
 optical-authoring extension completed before Stage 5 or shipped preset
 authoring.
 
-- [x] Editor route with an aspect-locked canvas. The canvas holds the target
-      orientation's aspect regardless of the window and scales to fit, with a
-      visible frame boundary — the one place a visible edge is correct.
+- [x] Editor route with a visible authored-frame canvas. Fixed frames hold their
+      authored aspect and contain-fit; adaptive frames opt into current-window
+      aspect.
 - [x] Add, remove, reorder components from the `ComponentTypes` registry.
 - [x] Drag to reposition; writes `Placement.offset` for the displayed
       orientation ONLY.
@@ -182,7 +184,7 @@ authoring.
 - [x] Params rendered generically from `ParamSpec`. A param needing a bespoke
       control is a finding about the model, not a reason to special-case it.
 - [x] Orientation switcher, so both authored layouts are editable on one device.
-- [x] Fork a preset into a dashboard, visibly.
+- [x] Clone a template into a named dashboard through explicit confirmation.
 - [x] **Deliverable: a written list of everything the model could not express.**
       That list is the actual output of this stage.
 
@@ -195,9 +197,8 @@ Already-known gaps to fold into that list:
 Also outstanding from the navigation decision, which needs the model and so
 could not be built in Stage 1:
 
-- [x] Library route reached from the dock, with `Designs` / `Settings` tabs.
-      Card tap activates; a separate explicit Edit button opens the editor.
-      The dock now exposes the route through a live `LIBRARY` control.
+- [x] Library route with `Templates` / `Designs` / `Settings`. Template cards
+      activate or clone; user-design cards activate, clone, or explicitly edit.
 
 ### Stage 4 implementation
 
@@ -205,20 +206,19 @@ could not be built in Stage 1:
   selection/drag/resize overlays; no per-component raster surfaces.
 - `Design` read interface lets presets and dashboards activate without silently
   converting presets into dashboards.
-- `frameAspects` stores the authored aspect per orientation. Legacy payloads get
-  tolerant development defaults.
-- Presets stay immutable. Edit visibly creates a user-copy banner, activates the
-  fork, and adds it to the dashboard list.
+- `FrameSpec` stores reference aspect plus fixed/adaptive mode per orientation.
+  Fixed is default and contain-fits; adaptive is explicit.
+- Templates stay immutable. Clone confirms and optionally names a dashboard,
+  activates it, then opens its editor. Edit never clones implicitly.
 - Dashboards, active selection, and global settings persist through
   `shared_preferences`; editor drag writes are debounced.
-- Prism controls cover editor chrome, runtime dock, Library actions, and device
-  feedback settings. Generic form fields remain plain controls where appropriate
-  for the developer inspector.
+- Prism controls cover editor chrome, Library actions, and device feedback
+  settings. Runtime debug controls live only in a debug workbench.
 
 ### Stage 4 data-model findings
 
-1. **Frame aspect was missing — resolved.** The model could not tell the editor
-   which aspect to lock to. It is now authored per orientation.
+1. **Frame behavior was missing — resolved.** `FrameSpec` now expresses fixed
+   reference aspect or adaptive current-window aspect per orientation.
 2. **Per-orientation params are missing — unresolved.** Three digits in
    landscape and two in portrait still requires two component ids with
    mutually exclusive placements.
@@ -354,8 +354,9 @@ handcrafted digit variant was authored during it.
 - [x] Per-effect `INHERIT` / `OVERRIDE`. Inherited values remain visible but
       read-only; enabling override seeds current effective value; disabling it
       removes local value.
-- [x] Immutable presets show read-only effect controls plus explicit
-      `CUSTOMIZE`; changing effects never silently forks.
+- [x] Immutable templates never expose live effect controls. `CLONE` confirms
+      before creating a mutable dashboard; changing effects never silently
+      forks.
 - [x] Dashboard background remains inert. Explicit interactive design
       components get authored hit regions and accessibility semantics without
       painted Flutter surfaces. Press state flows through the render controller.
@@ -396,12 +397,13 @@ handcrafted digit variant was authored during it.
       semantics, and one feedback event per detent.
 - [x] Make effect caps label-only. Add `PHOSPHOR` as first channel and reveal
       all values, inheritance, power, segmented strength, and steppers in a
-      fixed-height top-hinged fascia.
+      top-hinged fascia that occupies zero height while closed.
 - [x] Add non-persisted `EffectSpec.controlLabel`; persisted effect ids and
       values remain unchanged. Unknown ids remain retained and visible.
-- [x] Rebuild editor around a 48px rail, full remaining canvas, and manually
-      latched overlay service drawer. Component selection never opens it and
-      drawer state never changes canvas size.
+- [x] Rebuild editor around a 48px rail and manually latched push service bay.
+      Portrait bay enters from bottom; landscape enters from right. Selection
+      never opens it. Opening reduces preview bounds and re-contain-fits without
+      mutating authored geometry.
 - [x] Page rack slots; move reorder, visibility, and removal to explicit
       selected-item controls. Generic param, variant, module, action, anchor,
       and placement controls use the shared mechanical primitives.
@@ -431,10 +433,49 @@ Mechanical refinement model findings:
    It selects a colour while effect channels select calibrated scalar physics;
    forcing both into one persisted scalar schema would weaken the model.
 
+#### Stage 4 viewport, cloning, and recovery follow-up — DONE
+
+- [x] Fixed aspect remains default; adaptive aspect is explicit per orientation.
+      Runtime and editor contain-fit fixed frames.
+- [x] Nullable orientation lock: portrait-only, landscape-only, or neither for
+      both. Editor initially selects current window orientation when supported.
+      No OS orientation lock; iPad remains resizable and Split View-capable.
+- [x] Add independent fixed/span placement axes. Span persists start/end insets
+      and resolves against adaptive frame extent; fixed sizing remains legal in
+      either frame mode.
+- [x] Preserve unknown component types during import/round-trip.
+- [x] Render and hit-test component overlays beyond frame bounds; dim only the
+      portion outside the authored boundary. Add `BRING IN` recovery.
+- [x] Separate canvas `EDIT` and `NAV` modes. Nav owns 1×–4× pan/zoom; `FIT`
+      restores edit mode and identity without writing placement.
+- [x] Fix first resize interaction by snapshotting resolved size, placement,
+      frame aspect, and scale at gesture start.
+- [x] Push service bay from bottom in portrait and right in landscape, using the
+      same panel contents in both orientations.
+- [x] Split Library into immutable Templates and mutable Designs. Clone prompts
+      for optional name; template Edit no longer auto-forks.
+- [x] Remove active-dashboard configuration dock. `SET` opens app Settings;
+      RUN/manual speed/unit survive only in debug workbench.
+- [x] Collapse closed effect/Prism detail fascia to zero height and keep selected
+      paged channel visible after bank capacity changes.
+
+Follow-up model findings:
+
+1. **Window aspect policy — resolved.** Fixed/adaptive is design data, not
+   inferred behavior. `FrameSpec.referenceAspect` remains exportable.
+2. **Adaptive element sizing — resolved.** AxisSpan is lightweight placement
+   data; no extra module/layer hierarchy is needed.
+3. **Cross-version import loss — resolved.** Unknown component instances now
+   survive serialization. They remain unavailable to render until a matching
+   type implementation exists.
+4. **Per-orientation params and optics remain unresolved.** Placement and frame
+   behavior vary per orientation; component params, variant, and sparse optical
+   overrides do not.
+
 Mechanical refinement verification:
 
 - `flutter analyze`: clean.
-- `flutter test`: 98 passing, including architecture, detent/fascia,
+- `flutter test`: 112 passing, including architecture, detent/fascia,
   resize-transform, responsive, and new golden coverage.
 - Existing Prism golden remains unchanged except shared VFD typography now uses
   the bundled Barlow face.

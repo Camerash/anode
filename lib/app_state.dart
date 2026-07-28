@@ -107,13 +107,28 @@ class AnodeState extends ChangeNotifier {
   void activateDashboard(Dashboard dashboard) =>
       _activate(DesignReference(DesignKind.dashboard, dashboard.id));
 
-  Dashboard forkPreset(DesignPreset preset, {DateTime? at}) {
+  Dashboard forkPreset(DesignPreset preset, {DateTime? at, String? name}) {
     final forkedAt = at ?? DateTime.now();
     final dashboard = Dashboard.forkFrom(
       preset,
       id: _nextDashboardId(preset.id, forkedAt),
-      name: '${preset.name} copy',
+      name: name ?? '${preset.name} copy',
       at: forkedAt,
+    );
+    _dashboards = <Dashboard>[..._dashboards, dashboard];
+    _activeReference = DesignReference(DesignKind.dashboard, dashboard.id);
+    notifyListeners();
+    _scheduleSave();
+    return dashboard;
+  }
+
+  Dashboard cloneDashboard(Dashboard source, {DateTime? at, String? name}) {
+    final clonedAt = at ?? DateTime.now();
+    final dashboard = Dashboard.cloneFrom(
+      source,
+      id: _nextDashboardId(source.id, clonedAt),
+      name: name ?? '${source.name} copy',
+      at: clonedAt,
     );
     _dashboards = <Dashboard>[..._dashboards, dashboard];
     _activeReference = DesignReference(DesignKind.dashboard, dashboard.id);

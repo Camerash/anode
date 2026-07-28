@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
@@ -8,10 +10,13 @@ import '../model/placement.dart';
 import '../model/vfd_module.dart';
 import '../vfd/vfd_cluster.dart';
 import '../vfd/vfd_render_assets.dart';
+import '../vfd/prism_widgets.dart';
 import '../vfd/vfd_widgets.dart';
 import 'placement_transform.dart';
 
-class EditorCanvas extends StatelessWidget {
+enum CanvasInteractionMode { edit, navigate }
+
+class EditorCanvas extends StatefulWidget {
   const EditorCanvas({
     super.key,
     required this.dashboard,
@@ -22,6 +27,7 @@ class EditorCanvas extends StatelessWidget {
     this.selectedModuleId,
     this.onModulePlacementChanged,
     this.renderAssets,
+    this.adaptiveAspect,
   });
 
   final Dashboard dashboard;
@@ -34,79 +40,254 @@ class EditorCanvas extends StatelessWidget {
   final void Function(String moduleId, Placement placement)?
   onModulePlacementChanged;
   final VfdRenderAssets? renderAssets;
+  final double? adaptiveAspect;
+
+  @override
+  State<EditorCanvas> createState() => _EditorCanvasState();
+}
+
+class _EditorCanvasState extends State<EditorCanvas> {
+  final TransformationController _camera = TransformationController();
+  CanvasInteractionMode _mode = CanvasInteractionMode.edit;
+  double _cameraScale = 1;
+
+  @override
+  void didUpdateWidget(covariant EditorCanvas oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.orientation != widget.orientation ||
+        oldWidget.dashboard.id != widget.dashboard.id) {
+      _fit();
+    }
+  }
+
+  @override
+  void dispose() {
+    _camera.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final aspect = dashboard.frameAspect(orientation);
-    final palette = VfdPalette.of(dashboard.settings.opticalProfile.phosphor);
+    final aspect = widget.dashboard.frameAspect(
+      widget.orientation,
+      viewportAspect: widget.adaptiveAspect,
+    );
+    final palette = VfdPalette.of(
+      widget.dashboard.settings.opticalProfile.phosphor,
+    );
     return ColoredBox(
       color: const Color(0xFF161917),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Center(
-          child: AspectRatio(
-            key: const ValueKey('editor-canvas'),
-            aspectRatio: aspect,
-            child: Stack(
-              fit: StackFit.expand,
-              clipBehavior: Clip.none,
-              children: <Widget>[
-                DecoratedBox(
-                  decoration: const BoxDecoration(color: Color(0xFF000000)),
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => onSelect(null),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: <Widget>[
-                        if (renderAssets != null)
-                          _LiveVfdPreview(
-                            renderAssets: renderAssets!,
-                            dashboard: dashboard,
-                            orientation: orientation,
-                          ),
-                        _ComponentStack(
-                          dashboard: dashboard,
-                          orientation: orientation,
-                          selectedId: selectedId,
-                          livePreview: renderAssets != null,
-                          onSelect: onSelect,
-                          onPlacementChanged: onPlacementChanged,
-                        ),
-                        if (selectedModuleId != null &&
-                            onModulePlacementChanged != null)
-                          _ModuleOverlay(
-                            dashboard: dashboard,
-                            orientation: orientation,
-                            selectedModuleId: selectedModuleId!,
-                            onPlacementChanged: onModulePlacementChanged!,
-                          ),
-                      ],
-                    ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final viewport = constraints.biggest;
+          final sceneSize = Size(
+            math.max(1, viewport.width),
+            math.max(1, viewport.height),
+          );
+          final frame = _containRect(
+            Rect.fromLTWH(
+              24,
+              24,
+              math.max(1, sceneSize.width - 48),
+              math.max(1, sceneSize.height - 48),
+            ),
+            aspect,
+          );
+          final frameInsets = EdgeInsets.fromLTRB(
+            frame.left,
+            frame.top,
+            sceneSize.width - frame.right,
+            sceneSize.height - frame.bottom,
+          );
+          return Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              if (_mode == CanvasInteractionMode.navigate)
+                InteractiveViewer(
+                  key: const ValueKey('editor-camera'),
+                  transformationController: _camera,
+                  minScale: 1,
+                  maxScale: 4,
+                  boundaryMargin: const EdgeInsets.all(240),
+                  constrained: false,
+                  clipBehavior: Clip.hardEdge,
+                  onInteractionUpdate: (_) => setState(() {
+                    _cameraScale = _camera.value.getMaxScaleOnAxis();
+                  }),
+                  child: _buildScene(
+                    sceneSize: sceneSize,
+                    frame: frame,
+                    frameInsets: frameInsets,
+                    aspect: aspect,
+                    palette: palette,
                   ),
-                ),
-                IgnorePointer(
-                  child: CustomPaint(
-                    painter: _AuthoredFramePainter(palette: palette),
-                  ),
-                ),
-                Positioned(
-                  left: 7,
-                  top: 7,
-                  child: IgnorePointer(
-                    child: VfdLegend(
-                      '${orientation.name} · ${aspect.toStringAsFixed(3)}:1',
+                )
+              else
+                ClipRect(
+                  key: const ValueKey('editor-camera'),
+                  child: Transform(
+                    transform: _camera.value,
+                    alignment: Alignment.topLeft,
+                    transformHitTests: true,
+                    child: _buildScene(
+                      sceneSize: sceneSize,
+                      frame: frame,
+                      frameInsets: frameInsets,
+                      aspect: aspect,
                       palette: palette,
-                      lit: true,
-                      size: 9,
                     ),
                   ),
                 ),
-              ],
+              Positioned(
+                left: 8,
+                bottom: 8,
+                child: Row(
+                  children: <Widget>[
+                    PrismButton(
+                      key: const ValueKey('canvas-mode'),
+                      label: _mode == CanvasInteractionMode.edit
+                          ? 'Edit'
+                          : 'Nav',
+                      palette: palette,
+                      lit: _mode == CanvasInteractionMode.navigate,
+                      role: PrismRole.compact,
+                      style: widget.dashboard.settings.prismStyle,
+                      onPressed: () => setState(() {
+                        _mode = _mode == CanvasInteractionMode.edit
+                            ? CanvasInteractionMode.navigate
+                            : CanvasInteractionMode.edit;
+                      }),
+                    ),
+                    const SizedBox(width: 5),
+                    PrismButton(
+                      key: const ValueKey('canvas-fit'),
+                      label: 'Fit',
+                      palette: palette,
+                      role: PrismRole.compact,
+                      style: widget.dashboard.settings.prismStyle,
+                      onPressed: _fit,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildScene({
+    required Size sceneSize,
+    required Rect frame,
+    required EdgeInsets frameInsets,
+    required double aspect,
+    required VfdPalette palette,
+  }) => SizedBox.fromSize(
+    size: sceneSize,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _mode == CanvasInteractionMode.edit
+          ? () => widget.onSelect(null)
+          : null,
+      child: Stack(
+        fit: StackFit.expand,
+        clipBehavior: Clip.hardEdge,
+        children: <Widget>[
+          if (widget.renderAssets != null)
+            _LiveVfdPreview(
+              renderAssets: widget.renderAssets!,
+              dashboard: widget.dashboard,
+              orientation: widget.orientation,
+              safeInsets: frameInsets,
+            ),
+          IgnorePointer(
+            child: CustomPaint(
+              painter: _OutsideFramePainter(frame: frame, palette: palette),
             ),
           ),
-        ),
+          IgnorePointer(
+            ignoring: _mode == CanvasInteractionMode.navigate,
+            child: _ComponentStack(
+              dashboard: widget.dashboard,
+              orientation: widget.orientation,
+              selectedId: widget.selectedId,
+              livePreview: widget.renderAssets != null,
+              frame: frame,
+              aspect: aspect,
+              cameraScale: _cameraScale,
+              onSelect: widget.onSelect,
+              onPlacementChanged: widget.onPlacementChanged,
+            ),
+          ),
+          if (widget.selectedModuleId != null &&
+              widget.onModulePlacementChanged != null)
+            IgnorePointer(
+              ignoring: _mode == CanvasInteractionMode.navigate,
+              child: _ModuleOverlay(
+                dashboard: widget.dashboard,
+                orientation: widget.orientation,
+                selectedModuleId: widget.selectedModuleId!,
+                frame: frame,
+                aspect: aspect,
+                cameraScale: _cameraScale,
+                onPlacementChanged: widget.onModulePlacementChanged!,
+              ),
+            ),
+          IgnorePointer(
+            child: CustomPaint(
+              painter: _AuthoredFramePainter(palette: palette, frame: frame),
+            ),
+          ),
+          Positioned.fromRect(
+            rect: frame,
+            child: const IgnorePointer(
+              child: SizedBox(key: ValueKey('editor-canvas')),
+            ),
+          ),
+          Positioned(
+            left: frame.left + 7,
+            top: frame.top + 7,
+            child: IgnorePointer(
+              child: VfdLegend(
+                '${widget.orientation.name} · ${aspect.toStringAsFixed(3)}:1',
+                palette: palette,
+                lit: true,
+                size: 9,
+              ),
+            ),
+          ),
+        ],
       ),
+    ),
+  );
+
+  void _fit() {
+    _camera.value = Matrix4.identity();
+    if (mounted) {
+      setState(() {
+        _cameraScale = 1;
+        _mode = CanvasInteractionMode.edit;
+      });
+    }
+  }
+
+  static Rect _containRect(Rect bounds, double aspect) {
+    if (bounds.width / bounds.height > aspect) {
+      final width = bounds.height * aspect;
+      return Rect.fromLTWH(
+        bounds.left + (bounds.width - width) / 2,
+        bounds.top,
+        width,
+        bounds.height,
+      );
+    }
+    final height = bounds.width / aspect;
+    return Rect.fromLTWH(
+      bounds.left,
+      bounds.top + (bounds.height - height) / 2,
+      bounds.width,
+      height,
     );
   }
 }
@@ -117,6 +298,9 @@ class _ComponentStack extends StatelessWidget {
     required this.orientation,
     required this.selectedId,
     required this.livePreview,
+    required this.frame,
+    required this.aspect,
+    required this.cameraScale,
     required this.onSelect,
     required this.onPlacementChanged,
   });
@@ -125,6 +309,9 @@ class _ComponentStack extends StatelessWidget {
   final DesignOrientation orientation;
   final String? selectedId;
   final bool livePreview;
+  final Rect frame;
+  final double aspect;
+  final double cameraScale;
   final ValueChanged<String?> onSelect;
   final void Function(String componentId, Placement placement)
   onPlacementChanged;
@@ -132,14 +319,14 @@ class _ComponentStack extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final scale = constraints.maxHeight;
-      final aspect = dashboard.frameAspect(orientation);
+      final scale = frame.height;
       final visible = dashboard.componentsIn(orientation);
       final ordered = <ComponentInstance>[
         ...visible.where((component) => component.id != selectedId),
         ...visible.where((component) => component.id == selectedId),
       ];
       return Stack(
+        fit: StackFit.expand,
         clipBehavior: Clip.none,
         children: <Widget>[
           for (final component in ordered)
@@ -157,14 +344,15 @@ class _ComponentStack extends StatelessWidget {
     final type = ComponentTypes.byId(component.typeId);
     final placement = component.placements[orientation]!;
     final center = placement.resolve(aspect);
-    final size = placement.resolveSize(
+    final size = placement.resolveSizeForAspect(
+      aspect,
       type,
       variant: component.effectiveVariant,
     );
     return Positioned(
       key: ValueKey('canvas-${component.id}'),
-      left: (aspect / 2 + center.dx - size.width / 2) * scale,
-      top: (0.5 - center.dy - size.height / 2) * scale,
+      left: frame.left + (aspect / 2 + center.dx - size.width / 2) * scale,
+      top: frame.top + (0.5 - center.dy - size.height / 2) * scale,
       width: size.width * scale,
       height: size.height * scale,
       child: _ComponentBox(
@@ -173,7 +361,8 @@ class _ComponentStack extends StatelessWidget {
             component.typeId,
         placement: placement,
         defaultSize: size,
-        scale: scale,
+        frameAspect: aspect,
+        scale: scale * cameraScale,
         selected: component.id == selectedId,
         livePreview: livePreview,
         onSelect: () => onSelect(component.id),
@@ -188,6 +377,7 @@ class _ComponentBox extends StatefulWidget {
     required this.label,
     required this.placement,
     required this.defaultSize,
+    required this.frameAspect,
     required this.scale,
     required this.selected,
     required this.livePreview,
@@ -198,6 +388,7 @@ class _ComponentBox extends StatefulWidget {
   final String label;
   final Placement placement;
   final Size defaultSize;
+  final double frameAspect;
   final double scale;
   final bool selected;
   final bool livePreview;
@@ -213,6 +404,8 @@ class _ComponentBoxState extends State<_ComponentBox> {
 
   Offset? _pointerOrigin;
   late Placement _initialPlacement = widget.placement;
+  late Size _initialResolvedSize = widget.defaultSize;
+  late double _interactionScale = widget.scale;
 
   @override
   Widget build(BuildContext context) {
@@ -326,14 +519,16 @@ class _ComponentBoxState extends State<_ComponentBox> {
   void _startInteraction(DragStartDetails details, {bool select = false}) {
     _pointerOrigin = details.globalPosition;
     _initialPlacement = widget.placement;
+    _initialResolvedSize = widget.placement.size ?? widget.defaultSize;
+    _interactionScale = widget.scale;
     if (select) widget.onSelect();
   }
 
   void _move(DragUpdateDetails details) {
     final pointerDelta = _pointerDelta(details);
     final delta = Offset(
-      pointerDelta.dx / widget.scale,
-      -pointerDelta.dy / widget.scale,
+      pointerDelta.dx / _interactionScale,
+      -pointerDelta.dy / _interactionScale,
     );
     widget.onChanged(
       _initialPlacement.copyWith(offset: _initialPlacement.offset + delta),
@@ -341,14 +536,13 @@ class _ComponentBoxState extends State<_ComponentBox> {
   }
 
   void _resize({double widthDelta = 0, double heightDelta = 0}) {
-    final size = _initialPlacement.size ?? widget.defaultSize;
     widget.onChanged(
       resizePlacementFromEdges(
         placement: _initialPlacement,
-        resolvedSize: size,
-        frameAspect: 1,
-        widthDelta: widthDelta,
-        heightDelta: heightDelta,
+        resolvedSize: _initialResolvedSize,
+        frameAspect: widget.frameAspect,
+        widthDelta: widthDelta * widget.scale / _interactionScale,
+        heightDelta: heightDelta * widget.scale / _interactionScale,
       ),
     );
   }
@@ -358,9 +552,10 @@ class _ComponentBoxState extends State<_ComponentBox> {
 }
 
 class _AuthoredFramePainter extends CustomPainter {
-  const _AuthoredFramePainter({required this.palette});
+  const _AuthoredFramePainter({required this.palette, required this.frame});
 
   final VfdPalette palette;
+  final Rect frame;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -372,24 +567,42 @@ class _AuthoredFramePainter extends CustomPainter {
       ..color = palette.unlit.withValues(alpha: 0.58)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
-    canvas.drawRect(Offset.zero & size, bright);
-    canvas.drawRect(Rect.fromLTWH(4, 4, size.width - 8, size.height - 8), dim);
+    canvas.drawRect(frame, bright);
+    canvas.drawRect(frame.deflate(4), dim);
     const mark = 13.0;
     const gap = 4.0;
     final segments = <(Offset, Offset)>[
-      (const Offset(-gap - mark, -gap), const Offset(-gap, -gap)),
-      (const Offset(-gap, -gap - mark), const Offset(-gap, -gap)),
-      (Offset(size.width + gap, -gap), Offset(size.width + gap + mark, -gap)),
-      (Offset(size.width + gap, -gap - mark), Offset(size.width + gap, -gap)),
-      (Offset(-gap - mark, size.height + gap), Offset(-gap, size.height + gap)),
-      (Offset(-gap, size.height + gap), Offset(-gap, size.height + gap + mark)),
       (
-        Offset(size.width + gap, size.height + gap),
-        Offset(size.width + gap + mark, size.height + gap),
+        Offset(frame.left - gap - mark, frame.top - gap),
+        Offset(frame.left - gap, frame.top - gap),
       ),
       (
-        Offset(size.width + gap, size.height + gap),
-        Offset(size.width + gap, size.height + gap + mark),
+        Offset(frame.left - gap, frame.top - gap - mark),
+        Offset(frame.left - gap, frame.top - gap),
+      ),
+      (
+        Offset(frame.right + gap, frame.top - gap),
+        Offset(frame.right + gap + mark, frame.top - gap),
+      ),
+      (
+        Offset(frame.right + gap, frame.top - gap - mark),
+        Offset(frame.right + gap, frame.top - gap),
+      ),
+      (
+        Offset(frame.left - gap - mark, frame.bottom + gap),
+        Offset(frame.left - gap, frame.bottom + gap),
+      ),
+      (
+        Offset(frame.left - gap, frame.bottom + gap),
+        Offset(frame.left - gap, frame.bottom + gap + mark),
+      ),
+      (
+        Offset(frame.right + gap, frame.bottom + gap),
+        Offset(frame.right + gap + mark, frame.bottom + gap),
+      ),
+      (
+        Offset(frame.right + gap, frame.bottom + gap),
+        Offset(frame.right + gap, frame.bottom + gap + mark),
       ),
     ];
     for (final segment in segments) {
@@ -399,7 +612,31 @@ class _AuthoredFramePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _AuthoredFramePainter oldDelegate) =>
-      oldDelegate.palette != palette;
+      oldDelegate.palette != palette || oldDelegate.frame != frame;
+}
+
+class _OutsideFramePainter extends CustomPainter {
+  const _OutsideFramePainter({required this.frame, required this.palette});
+
+  final Rect frame;
+  final VfdPalette palette;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final matte = Paint()..color = const Color(0xCC111512);
+    canvas
+      ..drawRect(Rect.fromLTRB(0, 0, size.width, frame.top), matte)
+      ..drawRect(Rect.fromLTRB(0, frame.bottom, size.width, size.height), matte)
+      ..drawRect(Rect.fromLTRB(0, frame.top, frame.left, frame.bottom), matte)
+      ..drawRect(
+        Rect.fromLTRB(frame.right, frame.top, size.width, frame.bottom),
+        matte,
+      );
+  }
+
+  @override
+  bool shouldRepaint(covariant _OutsideFramePainter oldDelegate) =>
+      oldDelegate.frame != frame || oldDelegate.palette != palette;
 }
 
 class _ModuleOverlay extends StatelessWidget {
@@ -407,12 +644,18 @@ class _ModuleOverlay extends StatelessWidget {
     required this.dashboard,
     required this.orientation,
     required this.selectedModuleId,
+    required this.frame,
+    required this.aspect,
+    required this.cameraScale,
     required this.onPlacementChanged,
   });
 
   final Dashboard dashboard;
   final DesignOrientation orientation;
   final String selectedModuleId;
+  final Rect frame;
+  final double aspect;
+  final double cameraScale;
   final void Function(String moduleId, Placement placement) onPlacementChanged;
 
   @override
@@ -428,24 +671,26 @@ class _ModuleOverlay extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final scale = constraints.maxHeight;
-        final aspect = dashboard.frameAspect(orientation);
+        final scale = frame.height;
         final center = placement.resolve(aspect);
-        final size = placement.size ?? Size(aspect, 1);
+        final size = placement.resolveSizeForAspect(aspect, null);
         return Stack(
           clipBehavior: Clip.none,
           children: <Widget>[
             Positioned(
               key: ValueKey('module-${module.id}'),
-              left: (aspect / 2 + center.dx - size.width / 2) * scale,
-              top: (0.5 - center.dy - size.height / 2) * scale,
+              left:
+                  frame.left +
+                  (aspect / 2 + center.dx - size.width / 2) * scale,
+              top: frame.top + (0.5 - center.dy - size.height / 2) * scale,
               width: size.width * scale,
               height: size.height * scale,
               child: _ComponentBox(
                 label: module.name,
                 placement: placement,
                 defaultSize: size,
-                scale: scale,
+                frameAspect: aspect,
+                scale: scale * cameraScale,
                 selected: true,
                 livePreview: true,
                 onSelect: () {},
@@ -464,11 +709,13 @@ class _LiveVfdPreview extends StatefulWidget {
     required this.renderAssets,
     required this.dashboard,
     required this.orientation,
+    required this.safeInsets,
   });
 
   final VfdRenderAssets renderAssets;
   final Dashboard dashboard;
   final DesignOrientation orientation;
+  final EdgeInsets safeInsets;
 
   @override
   State<_LiveVfdPreview> createState() => _LiveVfdPreviewState();
@@ -500,6 +747,6 @@ class _LiveVfdPreviewState extends State<_LiveVfdPreview>
   Widget build(BuildContext context) => VfdCluster(
     renderAssets: widget.renderAssets,
     controller: _controller,
-    safeInsets: EdgeInsets.zero,
+    safeInsets: widget.safeInsets,
   );
 }

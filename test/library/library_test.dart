@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../model/fixtures.dart';
 
 void main() {
-  testWidgets('preset edit visibly forks and opens dashboard editor', (
+  testWidgets('template clone prompts for a name and opens dashboard editor', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -24,14 +24,47 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(home: LibraryPage(state: state)));
 
-    await tester.tap(find.text('EDIT'));
+    expect(find.text('EDIT'), findsNothing);
+    await tester.tap(find.text('CLONE'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('CLONE CLASSIC?'), findsOneWidget);
+    expect(state.dashboards, isEmpty);
+
+    await tester.tap(find.text('CLONE'));
     await tester.pumpAndSettle();
 
     expect(state.dashboards, hasLength(1));
     expect(state.activeReference.kind, DesignKind.dashboard);
-    expect(find.textContaining('FORKED FROM CLASSIC V1'), findsOneWidget);
-    expect(find.text('ACK'), findsOneWidget);
+    expect(state.dashboards.single.name, 'Classic copy');
+    expect(find.text('CLASSIC COPY'), findsOneWidget);
+    expect(find.textContaining('FORKED FROM'), findsNothing);
     await tester.pump(const Duration(milliseconds: 300));
+  });
+
+  testWidgets('user design exposes edit and clone actions', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final source = preset();
+    final repository = DesignRepository(await SharedPreferences.getInstance());
+    final state = AnodeState.load(
+      repository: repository,
+      presets: <DesignPreset>[source],
+    );
+    addTearDown(state.dispose);
+    state.forkPreset(source, name: 'My design');
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LibraryPage(state: state, initialSection: LibrarySection.designs),
+      ),
+    );
+
+    expect(find.text('EDIT'), findsOneWidget);
+    expect(find.text('CLONE'), findsOneWidget);
+    await tester.tap(find.text('EDIT'));
+    await tester.pumpAndSettle();
+    expect(find.text('MY DESIGN'), findsOneWidget);
   });
 
   testWidgets('Library and Settings avoid overflow on phone orientations', (

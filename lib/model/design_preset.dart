@@ -1,14 +1,13 @@
 import 'package:flutter/foundation.dart';
 
 import 'component_instance.dart';
-import 'component_type.dart';
 import 'design.dart';
 import 'placement.dart';
 import 'settings.dart';
 import 'vfd_module.dart';
 
 /// Bumped when the stored shape changes in a way older builds cannot read.
-const int kSchemaVersion = 2;
+const int kSchemaVersion = 3;
 
 /// A shipped design: immutable, versioned, and never edited in place. Editing
 /// one forks it into a [Dashboard].
@@ -21,6 +20,7 @@ class DesignPreset implements Design {
     required Set<DesignOrientation> supportedOrientations,
     required List<ComponentInstance> components,
     List<VfdModule>? modules,
+    Map<DesignOrientation, FrameSpec>? frameSpecs,
     Map<DesignOrientation, double>? frameAspects,
     DashboardSettings? defaults,
   }) : supportedOrientations = Set<DesignOrientation>.unmodifiable(
@@ -28,9 +28,10 @@ class DesignPreset implements Design {
        ),
        components = List<ComponentInstance>.unmodifiable(components),
        modules = normaliseVfdModules(modules),
-       frameAspects = normaliseFrameAspects(
+       frameSpecs = normaliseFrameSpecs(
          supportedOrientations,
-         frameAspects,
+         specs: frameSpecs,
+         legacyAspects: frameAspects,
        ),
        defaults = defaults ?? DashboardSettings();
 
@@ -45,7 +46,13 @@ class DesignPreset implements Design {
   final List<ComponentInstance> components;
   @override
   final List<VfdModule> modules;
-  final Map<DesignOrientation, double> frameAspects;
+  @override
+  final Map<DesignOrientation, FrameSpec> frameSpecs;
+  Map<DesignOrientation, double> get frameAspects =>
+      Map<DesignOrientation, double>.unmodifiable(<DesignOrientation, double>{
+        for (final entry in frameSpecs.entries)
+          entry.key: entry.value.referenceAspect,
+      });
   final DashboardSettings defaults;
 
   @override
@@ -56,8 +63,13 @@ class DesignPreset implements Design {
       supportedOrientations.contains(orientation);
 
   @override
-  double frameAspect(DesignOrientation orientation) =>
-      frameAspects[orientation] ?? kDefaultFrameAspects[orientation]!;
+  FrameSpec frameSpec(DesignOrientation orientation) =>
+      frameSpecs[orientation] ??
+      FrameSpec(referenceAspect: kDefaultFrameAspects[orientation]!);
+
+  @override
+  double frameAspect(DesignOrientation orientation, {double? viewportAspect}) =>
+      frameSpec(orientation).resolve(viewportAspect: viewportAspect);
 
   @override
   List<ComponentInstance> componentsIn(DesignOrientation orientation) =>
@@ -75,7 +87,7 @@ class DesignPreset implements Design {
     'name': name,
     'version': version,
     'supportedOrientations': supportedOrientations.map((o) => o.name).toList(),
-    'frameAspects': frameAspectsToJson(frameAspects),
+    'frameSpecs': frameSpecsToJson(frameSpecs),
     'components': components.map((c) => c.toJson()).toList(),
     'modules': modules.map((module) => module.toJson()).toList(),
     'defaults': defaults.toJson(),
@@ -86,6 +98,7 @@ class DesignPreset implements Design {
     name: json['name'] as String? ?? '',
     version: (json['version'] as num?)?.toInt() ?? 1,
     supportedOrientations: parseOrientations(json['supportedOrientations']),
+    frameSpecs: parseFrameSpecs(json['frameSpecs']),
     frameAspects: parseFrameAspects(json['frameAspects']),
     components: parseComponents(json['components']),
     modules: parseVfdModules(json['modules']),
@@ -105,16 +118,15 @@ Set<DesignOrientation> parseOrientations(Object? raw) {
   return out.isEmpty ? <DesignOrientation>{DesignOrientation.landscape} : out;
 }
 
-/// Components whose type the registry does not know are dropped rather than
-/// throwing. A build that no longer ships a component type must still be able
-/// to open a dashboard that used it.
+/// Unknown types survive so imported designs from newer builds round-trip
+/// without data loss. Rendering skips them and the editor presents their stable
+/// type id as unavailable.
 List<ComponentInstance> parseComponents(Object? raw) {
   final out = <ComponentInstance>[];
   for (final v in (raw as List?) ?? const <Object?>[]) {
     final instance = ComponentInstance.fromJson(
       (v as Map).cast<String, Object?>(),
     );
-    if (ComponentTypes.byId(instance.typeId) == null) continue;
     out.add(instance);
   }
   return out;

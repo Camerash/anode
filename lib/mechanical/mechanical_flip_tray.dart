@@ -13,6 +13,7 @@ class MechanicalFlipTray extends StatefulWidget {
     required this.height,
     required this.palette,
     required this.child,
+    this.collapseWhenClosed = false,
     this.soundEnabled = true,
     this.hapticsEnabled = true,
   });
@@ -21,6 +22,7 @@ class MechanicalFlipTray extends StatefulWidget {
   final double height;
   final VfdPalette palette;
   final Widget child;
+  final bool collapseWhenClosed;
   final bool soundEnabled;
   final bool hapticsEnabled;
 
@@ -61,27 +63,44 @@ class _MechanicalFlipTrayState extends State<MechanicalFlipTray>
   }
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    key: const ValueKey('mechanical-flip-tray'),
-    height: widget.height,
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        color: const Color(0xFF030504),
-        border: Border.all(color: widget.palette.unlit.withValues(alpha: 0.24)),
-      ),
-      child: ClipRect(
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, child) => Transform(
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _controller,
+    builder: (context, _) {
+      final visibleHeight = widget.collapseWhenClosed
+          ? widget.height * _controller.value
+          : widget.height;
+      return SizedBox(
+        key: const ValueKey('mechanical-flip-tray'),
+        height: visibleHeight,
+        child: ClipRect(
+          child: OverflowBox(
             alignment: Alignment.topCenter,
-            transform: Matrix4.identity()
-              ..setEntry(3, 2, 0.002)
-              ..rotateX((1 - _controller.value) * -math.pi / 2),
-            child: Opacity(opacity: _controller.value, child: child),
+            minHeight: widget.height,
+            maxHeight: widget.height,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0xFF030504),
+                border: Border.all(
+                  color: widget.palette.unlit.withValues(alpha: 0.24),
+                ),
+              ),
+              child: Transform(
+                alignment: Alignment.topCenter,
+                transform: Matrix4.identity()
+                  ..setEntry(3, 2, 0.002)
+                  ..rotateX((1 - _controller.value) * -math.pi / 2),
+                child: Opacity(
+                  opacity: _controller.value,
+                  child: IgnorePointer(
+                    ignoring: !widget.open,
+                    child: widget.child,
+                  ),
+                ),
+              ),
+            ),
           ),
-          child: IgnorePointer(ignoring: !widget.open, child: widget.child),
         ),
-      ),
-    ),
+      );
+    },
   );
 }
