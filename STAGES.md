@@ -13,7 +13,7 @@ their boundary.
 | 1 | Full bleed | Done — `444a836` |
 | 2 | Component data model | Done — `bdd4d01`, `80831c0` |
 | 3 | Single-pass renderer | Done — `de91249` |
-| 4 | Editor as developer tool | Done |
+| 4 | Editor and optical authoring | Base done — `4d511ed`; extension approved |
 | 5 | Speed estimation | Not started |
 
 ---
@@ -158,12 +158,12 @@ Sampler 0 is `uData`.
 
 ---
 
-## Stage 4 — editor as developer tool — DONE
+## Stage 4 — editor and optical authoring — BASE DONE, EXTENSION APPROVED
 
 Built BEFORE the shipped presets are authored, as a forcing function on the
-data model. Plain Material widgets, no onboarding, no polish — see "Build
-order" in `CLAUDE.md`. The editor is exempt from the VFD idiom while it is a
-developer tool.
+data model. Commit `4d511ed` is the reviewed developer-tool boundary. The
+approved optical-authoring extension below reopens Stage 4 before Stage 5 or
+shipped preset authoring.
 
 - [x] Editor route with an aspect-locked canvas. The canvas holds the target
       orientation's aspect regardless of the window and scales to fit, with a
@@ -223,12 +223,23 @@ could not be built in Stage 1:
    tool. Production UI should extend the schema, not add bespoke controls.
 5. **Tube-level optical geometry is missing — unresolved.** Filament wires
    remain global shader constants around the old digit locus. Moving components
-   exposes this immediately. Filaments belong to the frame/tube, not a digit
-   component.
+   exposes this immediately. Approved resolution: a lightweight `VfdModule`
+   owns filament geometry and glass grain; every design gets an implicit `main`
+   module, so the common case adds no visible hierarchy.
 6. **Renderer coverage is narrower than the registry.** Outside temperature,
    battery, and altitude can be added, placed, resized, and configured in the
    editor, but the current shader skips them. Their data model is sufficient;
    their renderer implementations are outstanding.
+7. **Optical scope is missing — unresolved.** Boolean global `VfdLayers` cannot
+   express a dashboard baseline, module defaults, component colour, calibrated
+   strengths, or sparse inheritance. `OpticalProfile` plus generic `EffectSpec`
+   metadata is the approved replacement.
+8. **Component variants are missing — unresolved.** Instances need stable,
+   revisioned variant references before handcrafted digit geometries are
+   authored. Shader ordinals must never enter persisted data.
+9. **Interactive actions are missing — unresolved.** Design components need
+   stable action ids, generic params, platform availability, and non-painting
+   hit semantics. Runtime callbacks are not serializable design data.
 
 Verification at the boundary:
 
@@ -238,6 +249,98 @@ Verification at the boundary:
   simulator, iOS 26.3, Impeller.
 - Fresh debug launch inspected after explicit terminate; Stage 3 render remains
   intact. Screenshot is rotated in the captured file as documented.
+
+### Stage 4 optical-authoring extension — APPROVED, NOT STARTED
+
+This extension is still a forcing function on the model. Do not author shipped
+presets or handcrafted digit variants while it is incomplete.
+
+#### Model and persistence
+
+- [ ] Replace app-wide authored `VfdLayers` with dashboard
+      `OpticalProfile` values driven by generic `EffectSpec` metadata.
+- [ ] Calibrated effect strength: `0.00` off, `1.00` tuned ideal, `2.00`
+      overdrive ceiling unless an effect declares a lower safe maximum. Preserve
+      `strength` plus `resumeStrength`; derive power from `strength > 0` rather
+      than persisting a duplicate enabled boolean.
+- [ ] Add sparse inheritance:
+      dashboard baseline -> VFD module -> component. Missing means inherit;
+      explicit zero means locally off.
+- [ ] Add component-overridable phosphor colour, emission, bloom, phosphor
+      texture, grid strength, unlit-phosphor strength, and decay.
+- [ ] Keep tilt/parallax dashboard-scoped. Keep glass grain and filament
+      geometry module-scoped.
+- [ ] Add lightweight `VfdModule`: implicit `main`, flat component list,
+      component `moduleId`, per-orientation module region, filament variant,
+      glass grain, and sparse optical overrides. Hide module management until a
+      second module exists.
+- [ ] Add revisioned `ComponentVariantSpec` and persisted variant reference.
+      New variants register new refs; deprecated variants remain renderable;
+      unknown refs and params survive round-trip with visible fallback.
+- [ ] Variant switching preserves `Placement.size`; explicit
+      `RESET TO VARIANT SIZE` applies recommended dimensions.
+- [ ] Add extensible `ActionRegistry` and persisted action bindings. App and
+      platform register prebuilt actions; unsupported bindings remain stored and
+      visibly unavailable.
+- [ ] Move app Settings to user/device preferences only: sound, haptics,
+      accessibility, demo mode, and future renderer quality. Remove duplicate
+      authored effect controls.
+- [ ] Extend tolerant serialization tests for legacy layer payloads, unknown
+      modules, variants/revisions, effect ids, overrides, and action ids.
+
+#### Prism control system
+
+- [ ] Reusable Flutter `PrismButton`: smoked acrylic trapezoidal bevel,
+      independent active/pressed states, dashboard-coloured light, focus and
+      semantics, depth transform, click sound, and haptic actuation.
+- [ ] Separate shader-rendered prism design component using shared semantics and
+      the existing single pass. Never render instrument buttons as individual
+      Flutter visual surfaces.
+- [ ] Add Prism roles for hierarchy through size, bezel depth, grouping, label
+      scale, and controlled luminous intensity. Dense period-correct button
+      banks are intentional; do not simplify them into sparse modern cards.
+- [ ] Migrate editor-wide visible controls to the Prism/retro system. Keep
+      conventional interaction semantics and accessibility under the custom
+      surface.
+- [ ] Sound and haptics are simple app-wide preferences initially; no
+      per-design sound packs.
+
+#### Editor and runtime interaction
+
+- [ ] Replace box-only preview with one live shared VFD render plus non-painting
+      selection, drag, and resize overlays. Keep
+      `CustomPainter(repaint: controller)`.
+- [ ] No selection: `DESIGN EFFECTS`. Selected component:
+      `<COMPONENT> · LOCAL EFFECTS`. Panel styling always follows dashboard;
+      canvas resolves all module/component overrides live.
+- [ ] Non-scrolling effect-button grid. Tile tap selects detail only. Detail
+      supplies physical description, explicit power, segmented strength,
+      precise number, and minus/plus steppers.
+- [ ] Per-effect `INHERIT` / `OVERRIDE`. Inherited values remain visible but
+      read-only; enabling override seeds current effective value; disabling it
+      removes local value.
+- [ ] Immutable presets show read-only effect controls plus explicit
+      `CUSTOMIZE`; changing effects never silently forks.
+- [ ] Dashboard background remains inert. Explicit interactive design
+      components get authored hit regions and accessibility semantics without
+      painted Flutter surfaces. Press state flows through the render controller.
+- [ ] First registry actions may include `media.playPause`, `media.previous`,
+      and `media.next`; registry architecture must remain open to later app-built
+      actions and platform differences.
+
+#### Renderer verification
+
+- [ ] Pack module ids, variant refs, optical values, component phosphor colour,
+      and prism press/light state without exceeding the sampled-data contract.
+- [ ] Accumulate component-coloured emission and local bloom/grid effects in the
+      same pass; no per-component raster surface.
+- [ ] Render module filament geometry after emission and module glass grain in
+      its physical composite layer.
+- [ ] Re-run `flutter analyze`, all headless tests, and
+      `integration_test/halo_compounding_test.dart`.
+- [ ] Add device tests for mixed-colour halo compounding, component inheritance,
+      and shader-rendered Prism press/light state.
+- [ ] End extension in its own reviewed commit. Stop before Stage 5.
 
 ---
 
@@ -272,13 +375,13 @@ forward acceleration.
 - [ ] **Filament wires are still global**, confirmed by the Stage 4 editor,
       positioned around where the digits used to be hardcoded
       (`0.11 ± 0.215`, gated to `|q.x| < 0.62`). They
-      belong to the tube, not to a component, so they should span the frame
-      rather than track a gauge. Visible as an inconsistency the moment a design
-      moves the digits.
+      belong to a physical VFD module, not to an anode component. Stage 4
+      extension replaces this with module-authored regions and filament
+      variants; implicit `main` preserves the full-frame case.
 - [ ] **Tilt on device should come from the gravity vector**, not the pointer.
       The full-screen `Listener` is a desktop and development affordance and
-      must not survive onto the instrument — see "no root gestures" in
-      `CLAUDE.md`.
+      must not survive onto the instrument. Explicit interactive component hit
+      regions are allowed; root gestures are not.
 - [ ] Baked SDF atlas for irregular glyphs. The `KM/H` and `MPH` legends are
       hand-stroked, which is fine for five glyphs and is not a route to an
       alphabet.

@@ -198,15 +198,65 @@ These cost real time to rediscover:
 - The numeric constants in `vfd.frag` are visually tuned against reference
   photographs. Do not refactor, round, rename or extract them.
 
-## Layer toggles
+## Optical profiles and effect scope
 
-`VfdLayers` gates each optical layer independently. These are GLOBAL, app-wide
-settings, not per-dashboard. They govern render fidelity and performance, not a
-design's identity. Persist once with `shared_preferences`.
+Optical appearance is part of a design's identity, not an app-wide preference.
+The old boolean `VfdLayers` implementation is scaffolding to migrate, not the
+target model.
 
-Keep them. They are a debugging tool, a user-facing authenticity panel, and how
-App Store screenshots get made — killing grain and raising bloom for a still is
-genuinely useful. Never collapse them into a single "retro mode" boolean.
+An effect is declared once through generic metadata: stable id, label,
+description, scope, calibrated default, minimum, maximum, step, precision, and
+renderer transfer function. The editor builds every effect control from this
+metadata. An effect needing a bespoke editor control is a model finding, not a
+reason to special-case the panel.
+
+Effect ids are persisted API. Add new effects under new ids; never reuse an id
+for different physics. Deprecated effects may disappear from new-authoring
+choices, but unknown stored values survive round-trip and appear as unavailable
+in the editor rather than being silently discarded.
+
+Strength is a calibrated multiplier, not a normalised fraction:
+
+- `0.00` is off.
+- `1.00` is the photograph-tuned ideal and must reproduce the current render
+  without changing any tuned constant in `vfd.frag`.
+- `2.00` is 200% overdrive. Start with this as the common ceiling; an effect may
+  declare a lower safe maximum when its transfer function stops being useful.
+
+The segmented strength bar marks `1.00` explicitly. Persist each authored value
+as an `EffectSetting` containing `strength` and `resumeStrength`; enabled state
+is derived from `strength > 0`, never stored as a second boolean. Turning an
+effect off writes zero while retaining `resumeStrength`; turning it back on
+restores that value. Overdrive scales the result around the tuned calculation.
+It does not refactor, replace, or round the tuned shader constants.
+
+The physical layer determines where a value may be authored:
+
+- **Dashboard:** tilt/parallax and the baseline `OpticalProfile`.
+- **VFD module:** glass grain, filament geometry, and sparse module optical
+  overrides.
+- **Component:** phosphor colour, emission strength, bloom, phosphor texture,
+  control-grid strength, unlit-phosphor strength, and phosphor decay.
+
+Glass grain remains glass/sensor noise after sheen. It is not a way to make one
+anode brighter. Use component emission strength for brightness and phosphor
+texture for local coating irregularity. Filaments are cathode wires belonging to
+a physical VFD module, not to an anode component. A curved bar changes anode and
+control-grid geometry; it does not bend a shared cathode around itself.
+
+Resolution follows:
+
+    dashboard baseline -> VFD module sparse overrides -> component sparse overrides
+
+An absent override inherits. A present zero explicitly disables that effect. A
+present positive value is local. The dashboard control panel always uses the
+dashboard's phosphor colour and `PrismStyle`; selecting a red component in a
+cyan-green dashboard makes that component red in the live canvas while the
+panel and other components remain cyan-green.
+
+App Settings contains user/device preferences only: sound, haptics, accessibility,
+and any future renderer-quality switch that changes performance rather than
+authored appearance. Do not duplicate authored effect controls in Settings.
 
 ## Dashboards, presets and components
 
@@ -229,6 +279,79 @@ starts only those sensors and requests only those permissions. This is how the
 barometer stays off for someone with no altimeter, and how network permission is
 not requested for a layout with no weather gauge.
 
+Interactive components contribute action capabilities through the same union.
+The app exposes an extensible `ActionRegistry` of prebuilt actions such as
+`media.playPause`, `media.previous`, and `media.next`. This is not a frozen
+policy allowlist: app versions and platforms register whatever actions they
+implement. A persisted action binding stores a stable action id plus generic,
+validated params. Unsupported or removed ids are preserved and shown as
+unavailable with a reason; they are never silently deleted or rebound.
+
+Platform availability filters presentation, not persistence. A dashboard moved
+between iOS and Android keeps an unsupported binding so it can work again on a
+platform that provides the action. Arbitrary scripts and callbacks are not
+design data.
+
+### VFD modules
+
+A dashboard may contain multiple physical VFD modules. This is a lightweight
+optical grouping, not a second component tree:
+
+- Every design has an implicit `main` module covering the authored frame.
+- Legacy components and components with no `moduleId` belong to `main`.
+- The component list stays flat. A component inspector exposes its module as a
+  simple choice.
+- Module management remains hidden until a second module is added.
+- Deleting a module reassigns its components to `main`; it never deletes them.
+
+Additional modules declare an authored region per supported orientation and own
+their filament variant, glass grain, and sparse optical overrides. Components
+still use frame-relative placements and reference their module by stable id.
+This allows separate display envelopes to have different cathode layouts without
+pretending every anode owns a filament. The renderer still composites all
+modules and components in one pass.
+
+Module ids are persisted API. Never reuse one inside a dashboard. An unknown
+module reference survives round-trip, resolves through `main` for rendering, and
+shows a missing-module warning until the user explicitly reassigns it. This is
+different from deliberately deleting a known module, which performs the visible
+reassignment described above.
+
+### Component variants
+
+A variant changes handcrafted geometry or minor rendering behaviour while
+preserving the component's semantic job, data binding, capabilities, and
+interaction model. The blocky, chamfered, and rounded seven-segment references
+are variants of one numeric-display type. A swept needle gauge is not.
+
+`ComponentTypeSpec` declares common params and available
+`ComponentVariantSpec`s. `ComponentInstance` stores a stable variant id and
+revision. A variant declares its label, renderer geometry, recommended size,
+optional generic params, glyph mapping, and sizing constraints. The editor
+merges common and variant param metadata; it does not add bespoke controls.
+
+Variant references are persisted API:
+
+- Never persist a shader ordinal. The renderer translates the stable string
+  reference at its boundary.
+- Never reuse an id or revision for different geometry.
+- Adding a variant only registers a new reference.
+- Deprecating a variant hides it from new selection but retains its renderer so
+  existing presets and dashboards remain visually stable.
+- Hard removal requires an explicit versioned migration. Unknown references and
+  their unknown params are preserved, rendered with a visible fallback, and
+  shown as missing in the editor; loading must not silently rewrite them.
+- Payloads predating variants map to a fixed legacy revision, not whichever
+  variant happens to become the future default.
+
+Changing a component's variant preserves `Placement.size`. Different intrinsic
+proportions fit inside that authored box. An explicit `RESET TO VARIANT SIZE`
+action applies the recommended size; switching variants never moves or resizes
+the layout silently. Variant choice is component-wide, like other params; only
+placement currently varies by orientation. Two orientation-specific variants
+therefore require two component ids until the broader per-orientation param gap
+is solved.
+
 ### Orientation
 
 Layouts are NOT responsive. These are designed instrument faces, not web pages. A
@@ -243,11 +366,14 @@ not inferred from the device and is not one global ratio reused after rotation.
 Payloads written before this was expressible receive tolerant development
 defaults on read.
 
-### Three settings levels
+### Authored and device settings
 
-- Per-component: speed unit, digit count, data binding
-- Per-dashboard: orientation, brightness, phosphor colour
-- Global: authenticity layer toggles (see "Layer toggles")
+- Per-component: variant, speed unit, digit count, data binding, action binding,
+  and sparse component optical overrides.
+- Per-module: authored region, filament variant, glass grain, and sparse module
+  optical overrides.
+- Per-dashboard: orientation, baseline `OpticalProfile`, and `PrismStyle`.
+- App-wide: sound, haptics, accessibility, demo mode, and renderer quality only.
 
 ### Build order
 
@@ -257,14 +383,23 @@ data proves it; if they are hardcoded layouts in disguise, the editor exposes
 that immediately. Presets authored before the editor exists will encode
 assumptions the editor breaks.
 
-Build the editor first as a DEVELOPER TOOL — plain Material widgets, no
-onboarding, no polish. Its purpose is to stress the data model. Polish it only
-once the model has stopped moving.
+The first Stage 4 boundary deliberately built a plain-Material developer editor
+to stress placement, params, persistence, and copy-on-customize. Before any
+shipped preset is authored, extend that editor with live optical controls and
+the reusable Prism control system. This is still model work: generic effect
+metadata, inheritance, variants, modules, and actions must prove themselves in
+the editor before preset authoring starts.
+
+Prism controls become editor-wide UI. Do not spend this pass on onboarding or
+unrelated ornament, but the Prism button's bevel, light, press depth, sound, and
+haptic response are functional requirements rather than optional polish.
 
 ## Screens
 
 The speedometer is the root screen and is standalone. A dimmed gear in the bottom
-right auto-hides after a few seconds and returns on tap anywhere.
+right auto-hides after a few seconds and returns on an unclaimed tap on the inert
+background. Taps claimed by explicit interactive components invoke only their
+bound action.
 
 The gear must be rendered in the VFD idiom — unlit-segment grey on the same
 substrate. A crisp vector icon floating on top breaks the illusion harder than
@@ -296,47 +431,83 @@ in the tube's visual language, not Material's. A stock switch or a filled chip
 sitting on the substrate breaks the illusion exactly the way a crisp vector gear
 does, and these surfaces sit directly on top of the render.
 
-- Two states, borrowed from the phosphor: unlit warm grey for available, lit
-  phosphor for active. Never a fill colour, never an accent hue that is not the
-  active phosphor.
-- Etched hairline borders. No shadows, no elevation, no ripples. Controls look
-  like shapes etched on the anode, not like paper.
+- The primary control primitive is the **Prism button**: smoked acrylic with a
+  dark face, transparent trapezoidal bevel edges, hard perimeter reflections,
+  and visible extrusion. It comes from moulded automotive switchgear, not
+  generic frosted-glass or glassmorphism UI.
+- Enabled and pressed are independent states. An active button rests raised and
+  lit; an inactive button rests raised and dark; pointer-down depresses either
+  one temporarily. Depth motion transforms the face rather than changing layout.
+- The active light follows the dashboard phosphor colour. Component optical
+  overrides never recolour the surrounding panel.
 - Legends are uppercase and letterspaced. Prefer a word to an icon — `RUN` and
   `HOLD` read more period-correct than a play triangle.
 - Anything showing a quantity uses the segmented cell bar on the same rule as
   the gauge: cell `i` is lit when `(i + 0.5) / n <= fraction`. A continuous
   Material slider does not belong on this substrate.
-- Controls sit on the substrate with no panel fill behind them. The tube shows
-  through.
+- Dense banks of buttons are intentional period language, not a dashboard-card
+  grid to simplify away. Establish hierarchy through button size, bezel depth,
+  grouping, spacing, label scale, and controlled luminous intensity. Reserve a
+  consistent light treatment for state so hierarchy never makes an inactive
+  control look active.
+- Sound and haptics are app preferences. One low-latency physical click and one
+  actuation haptic are enough initially; no per-design sound packs.
 
-The glow is faked in these widgets, which is acceptable because they are chrome
-rather than instrument. Do not push the fake far — a widget approximating a
-two-lobe halo directly beside a real one looks worse than a flat etched control.
-Genuine emissive controls arrive with the baked SDF atlas, which turns a legend
-into real anode geometry whose halo compounds with everything else.
+Use shared button semantics with two renderers:
 
-The editor is exempt while it is a developer tool. See "Build order": plain
-Material until the data model stops moving, then it adopts the idiom.
+- `PrismButton` is the Flutter control used by panels, navigation, and the
+  editor. It owns focus, semantics, keyboard/pointer input, press animation,
+  sound, and haptics.
+- A prism design component is data-driven geometry inside the existing shared
+  VFD render pass. It receives state through the controller/data texture so its
+  light compounds correctly with neighbouring emission.
 
-### Navigation, and why there are no root gestures
+Do not force both through one renderer. Do not give design components their own
+widgets or fragment surfaces.
 
-**The cluster is inert to touch except the gear.** No long-press, no swipe, no
+Effect selection is a non-scrolling button grid. Tapping an effect button
+selects its detail; it does not toggle the effect. The detail shows label,
+physical description, segmented strength bar, precise number, minus/plus
+steppers, and an explicit power control.
+
+With no component selected, the editor shows `DESIGN EFFECTS`. With a component
+selected it shows a named `LOCAL EFFECTS` context. Each local effect exposes
+`INHERIT` / `OVERRIDE`; inherited values remain visible but read-only. Changing
+an override updates the selected component live. The panel itself continues to
+use dashboard styling. Keep context labels visible so selecting a component
+cannot silently change what identical controls mean.
+
+An immutable preset exposes effect values read-only. `CUSTOMIZE` performs the
+same explicit, visible fork as Edit before any value can change. Never silently
+fork a preset on a slider drag.
+
+### Navigation, explicit controls, and no root gestures
+
+**The cluster background is inert.** No whole-screen long-press, swipe, or
 double-tap. The phone lives in a windshield mount that gets bumped, and a hand
 bracing against the device produces exactly the gesture a long-press detector
 is looking for. A mistouch that opens an editor over a driver's instrument is
-the worst failure this app can have, so no whole-screen gesture may be bound to
-anything. This also means pointer-drag tilt is a desktop and development
-affordance only; on device, tilt comes from the gravity vector.
+the worst failure this app can have.
 
-Everything that is not driving sits behind one deliberate path:
+Explicit interactive design components are allowed. Their authored placement is
+their visible hit region, and they invoke prebuilt actions from the
+`ActionRegistry`. Invisible Flutter hit regions and accessibility semantics may
+sit above the renderer, but they must not paint or create per-component visual
+surfaces. Press state goes through the render controller and keeps
+`CustomPainter(repaint: controller)`; do not rebuild the widget tree per frame.
+
+Pointer-drag tilt remains a desktop and development affordance only. On device,
+tilt comes from the gravity vector.
+
+Library, Settings, and editing sit behind one deliberate path:
 
     cluster --gear--> dock --[Library]--> route with tabs
                                           [ Designs | Settings ]
 
-Conventional app chrome — tabs, lists, app bars — is fine on that route. It is
-only forbidden on the instrument itself. Tapping a design card activates it;
-opening the editor requires the card's separate, explicit Edit button, so
-nothing is editable in fewer than three deliberate taps.
+Tapping a design card activates it; opening the editor requires the card's
+separate, explicit Edit button, so nothing is editable in fewer than three
+deliberate taps. A design's explicit media or trip-computer buttons do not open
+editing or navigation accidentally.
 
 Edit on a shipped preset forks it. The Library is where copy-on-customize
 becomes legible to the user, and the fork must be visible when it happens
@@ -357,10 +528,12 @@ else an edge breaks the illusion; here you are authoring the frame, so you have
 to see where it ends. The canvas holds the target orientation's aspect
 regardless of the window shape, and scales to fit.
 
-The developer editor represents components as plain bounding boxes. It does not
-embed component shaders or create per-component raster surfaces. The selected
-box is painted last inside editor chrome only so its resize handles remain
-reachable; this does not change the component list or runtime z-order.
+The completed developer editor represents components as plain bounding boxes.
+The next Stage 4 extension replaces that canvas with one live, shared render of
+the whole design plus non-painting selection/drag/resize overlays. It must not
+embed component shaders or create per-component raster surfaces. Selection
+chrome may be lifted above the canvas so handles remain reachable; this does not
+change component list order or runtime z-order.
 
 ### Model findings from the developer editor
 
@@ -381,11 +554,20 @@ special-casing controls around them:
   or a unit suffix. The developer editor therefore exposes raw option tokens and
   generic numeric formatting. Do not add bespoke controls; extend the schema
   when production editor copy requires it.
-- **Unresolved tube-level gap:** filament wires are renderer-global constants
-  around the old digit locus. The component model cannot express tube geometry,
-  so moving digits exposes the mismatch. Filaments must not be attached to a
-  digit component; future design-level tube geometry should describe their
-  frame-wide placement.
+- **Tube-level gap has an approved model, not an implementation:** filament
+  wires remain renderer-global constants around the old digit locus. `VfdModule`
+  will own authored regions, filament variants, and glass grain; the implicit
+  `main` module preserves the lightweight single-tube case.
+- **Optical inheritance is not implemented:** current boolean `VfdLayers` cannot
+  express calibrated dashboard values, module defaults, component colour, or
+  sparse component overrides. The approved `OpticalProfile` hierarchy above
+  replaces it.
+- **Variants are not implemented:** component instances cannot yet select a
+  stable, revisioned geometry variant. The compatibility contract above must be
+  in place before handcrafted digit variants are authored.
+- **Actions are not implemented:** components have no persisted action binding
+  or runtime hit semantics. Use the registry contract above; do not put
+  callbacks or platform objects into design data.
 - `outsideTemp`, `phoneBattery`, and `altitude` are expressible and editable as
   component data, but the current shader intentionally skips them. This is a
   renderer coverage gap, not a reason to hardcode or remove them from the
@@ -563,6 +745,10 @@ Near term, roughly in order:
 - **Single-pass composable renderer.** See "Rendering architecture".
 - **Dashboard editor as a developer tool.** Built before the shipped presets are
   authored. See "Build order".
+- **Stage 4 optical editor extension.** Live shared-render canvas, calibrated
+  optical profiles, lightweight VFD modules, revisioned component variants,
+  interactive action bindings, and editor-wide Prism controls. Complete and
+  review this before Stage 5 or shipped preset authoring.
 - **Irregular glyphs via a baked SDF atlas.** Real clusters have etched anode
   shapes that are not seven-segment: `MPH`, fuel pump icons, arrows, `ANTI-LOCK`,
   `CHECK ENGINE`, 14-segment alphanumerics. Author them as SVG, bake to an SDF
