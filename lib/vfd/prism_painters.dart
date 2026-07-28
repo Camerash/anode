@@ -223,7 +223,7 @@ class _PrismCapPainter extends CustomPainter {
             palette.lit.withValues(
               alpha: 0.035 * style.activeLuminosity * geometry.opacity,
             ),
-            Colors.transparent,
+            const Color(0x00000000),
           ],
           stops: const <double>[0, 0.58, 1],
         ).createShader(geometry.face.outerRect),

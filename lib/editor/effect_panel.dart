@@ -1,9 +1,13 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
+import '../mechanical/mechanical_flip_tray.dart';
+import '../mechanical/prism_selector_bank.dart';
 import '../model/optical_profile.dart';
 import '../vfd/prism_widgets.dart';
 import '../vfd/vfd_types.dart';
 import '../vfd/vfd_widgets.dart';
+
+const _phosphorChannel = '__phosphor__';
 
 class EffectPanel extends StatefulWidget {
   const EffectPanel({
@@ -22,11 +26,7 @@ class EffectPanel extends StatefulWidget {
   });
 
   final String title;
-
-  /// Drives panel chrome even while local values use another phosphor colour.
   final OpticalProfile dashboardProfile;
-
-  /// Inherited profile before [overrides] are applied.
   final OpticalProfile baseProfile;
   final OpticalOverrides? overrides;
   final EffectScope scope;
@@ -43,189 +43,21 @@ class EffectPanel extends StatefulWidget {
   State<EffectPanel> createState() => _EffectPanelState();
 }
 
-class PrismStyleEditor extends StatelessWidget {
-  const PrismStyleEditor({
-    super.key,
-    required this.profile,
-    required this.style,
-    required this.soundEnabled,
-    required this.hapticsEnabled,
-    required this.onChanged,
-  });
-
-  final OpticalProfile profile;
-  final PrismStyle style;
-  final bool soundEnabled;
-  final bool hapticsEnabled;
-  final ValueChanged<PrismStyle> onChanged;
-
-  VfdPalette get _palette => VfdPalette.of(profile.phosphor);
-
-  @override
-  Widget build(BuildContext context) => PrismPanel(
-    palette: _palette,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        VfdLegend('Prism style', palette: _palette, lit: true, size: 13),
-        const SizedBox(height: 4),
-        Text(
-          'Dashboard-wide smoked acrylic control geometry and luminosity.',
-          style: TextStyle(color: _palette.unlit),
-        ),
-        const SizedBox(height: 14),
-        _control(
-          label: 'Cap depth',
-          value: style.bevelDepth,
-          min: 0.06,
-          max: 0.18,
-          onChanged: (value) => onChanged(style.copyWith(bevelDepth: value)),
-        ),
-        _control(
-          label: 'Smoke density',
-          value: style.faceOpacity,
-          min: 0.60,
-          max: 0.95,
-          onChanged: (value) => onChanged(style.copyWith(faceOpacity: value)),
-        ),
-        _control(
-          label: 'Inactive legend',
-          value: style.inactiveLuminosity,
-          min: 0,
-          max: 0.5,
-          onChanged: (value) =>
-              onChanged(style.copyWith(inactiveLuminosity: value)),
-        ),
-        _control(
-          label: 'Active backlight',
-          value: style.activeLuminosity,
-          min: 0.25,
-          max: 2,
-          onChanged: (value) =>
-              onChanged(style.copyWith(activeLuminosity: value)),
-        ),
-      ],
-    ),
-  );
-
-  Widget _control({
-    required String label,
-    required double value,
-    required double min,
-    required double max,
-    required ValueChanged<double> onChanged,
-  }) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            Expanded(child: VfdLegend(label, palette: _palette, size: 10)),
-            VfdLegend(
-              value.toStringAsFixed(2),
-              palette: _palette,
-              lit: true,
-              size: 10,
-            ),
-            const SizedBox(width: 8),
-            PrismButton(
-              label: '-',
-              palette: _palette,
-              role: PrismRole.compact,
-              span: PrismSpan.one,
-              style: style,
-              soundEnabled: soundEnabled,
-              hapticsEnabled: hapticsEnabled,
-              onPressed: () => onChanged((value - 0.01).clamp(min, max)),
-            ),
-            const SizedBox(width: 6),
-            PrismButton(
-              label: '+',
-              palette: _palette,
-              role: PrismRole.compact,
-              span: PrismSpan.one,
-              style: style,
-              soundEnabled: soundEnabled,
-              hapticsEnabled: hapticsEnabled,
-              onPressed: () => onChanged((value + 0.01).clamp(min, max)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 7),
-        VfdCellBar(
-          value: value,
-          min: min,
-          max: max,
-          cells: 24,
-          palette: _palette,
-          onChanged: onChanged,
-        ),
-      ],
-    ),
-  );
-}
-
 class _EffectPanelState extends State<EffectPanel> {
-  String? _selectedEffectId;
-
-  List<EffectSpec> get _specs => EffectSpecs.forScope(widget.scope);
-
-  EffectSpec get _selectedSpec {
-    final selected = _selectedEffectId;
-    if (selected != null) {
-      final found = EffectSpecs.byId(selected);
-      if (found != null && found.supports(widget.scope)) return found;
-    }
-    return _specs.first;
-  }
+  String? _selectedChannel;
 
   OpticalProfile get _effective =>
       widget.baseProfile.apply(widget.overrides ?? OpticalOverrides());
 
   VfdPalette get _palette => VfdPalette.of(widget.dashboardProfile.phosphor);
 
-  @override
-  Widget build(BuildContext context) => PrismPanel(
-    palette: _palette,
-    child: SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          VfdLegend(widget.title, palette: _palette, lit: true, size: 13),
-          const SizedBox(height: 12),
-          _colorControls(),
-          const SizedBox(height: 14),
-          _effectGrid(),
-          const SizedBox(height: 16),
-          _effectDetail(_selectedSpec),
-          if (_unknownEffectIds.isNotEmpty) ...<Widget>[
-            const SizedBox(height: 18),
-            VfdLegend('Unavailable effects', palette: _palette, size: 10),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: <Widget>[
-                for (final id in _unknownEffectIds)
-                  PrismButton(
-                    label: id,
-                    value: _effective.effect(id).strength.toStringAsFixed(2),
-                    palette: _palette,
-                    lit: _effective.effect(id).enabled,
-                    enabled: false,
-                    role: PrismRole.standard,
-                    span: PrismSpan.two,
-                    style: widget.prismStyle,
-                    onPressed: null,
-                  ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    ),
-  );
+  List<EffectSpec> get _effectSpecs {
+    final known = EffectSpecs.forScope(widget.scope);
+    return <EffectSpec>[
+      ...known,
+      for (final id in _unknownEffectIds) EffectSpecs.storageSpec(id),
+    ];
+  }
 
   List<String> get _unknownEffectIds {
     final ids = <String>{
@@ -237,108 +69,165 @@ class _EffectPanelState extends State<EffectPanel> {
     return ids.toList()..sort();
   }
 
-  Widget _colorControls() {
-    final local = widget.local;
-    final overrides = widget.overrides;
-    final overridden = overrides?.phosphorName != null;
-    final enabled = widget.editable && (!local || overridden);
+  @override
+  Widget build(BuildContext context) => PrismPanel(
+    palette: _palette,
+    padding: const EdgeInsets.all(10),
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final rows = constraints.maxHeight >= 292 ? 2 : 1;
+        final bankHeight =
+            rows * PrismMetrics.height(PrismRole.standard) + (rows - 1) * 6;
+        final trayHeight = (constraints.maxHeight - bankHeight - 31).clamp(
+          0.0,
+          150.0,
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            VfdLegend(widget.title, palette: _palette, lit: true, size: 12),
+            const SizedBox(height: 8),
+            _channelBank(rows),
+            const SizedBox(height: 8),
+            SizedBox(height: trayHeight, child: _detailTray()),
+          ],
+        );
+      },
+    ),
+  );
+
+  Widget _channelBank(int rows) {
+    final choices = <PrismSelectorChoice<String>>[
+      PrismSelectorChoice<String>(
+        value: _phosphorChannel,
+        label: 'PHOSPHOR',
+        controlKey: const ValueKey('effect-phosphor'),
+        lit: true,
+      ),
+      for (final spec in _effectSpecs)
+        PrismSelectorChoice<String>(
+          value: spec.id,
+          label: spec.controlLabel,
+          controlKey: ValueKey('effect-${spec.id}'),
+          lit: _effective.effect(spec.id).enabled,
+          enabled: EffectSpecs.byId(spec.id) != null,
+        ),
+    ];
+    return PrismSelectorBank<String>(
+      choices: choices,
+      selected: _selectedChannel,
+      palette: _palette,
+      prismStyle: widget.prismStyle,
+      rows: rows,
+      role: PrismRole.standard,
+      soundEnabled: widget.soundEnabled,
+      hapticsEnabled: widget.hapticsEnabled,
+      semanticLabel: '${widget.title} channels',
+      onSelected: _selectChannel,
+    );
+  }
+
+  Widget _detailTray() => LayoutBuilder(
+    builder: (context, constraints) => MechanicalFlipTray(
+      open: _selectedChannel != null,
+      height: constraints.maxHeight,
+      palette: _palette,
+      soundEnabled: widget.soundEnabled,
+      hapticsEnabled: widget.hapticsEnabled,
+      child: Padding(
+        padding: const EdgeInsets.all(9),
+        child: _selectedChannel == _phosphorChannel
+            ? _phosphorDetail()
+            : _effectDetail(_selectedEffect),
+      ),
+    ),
+  );
+
+  EffectSpec? get _selectedEffect {
+    final id = _selectedChannel;
+    if (id == null || id == _phosphorChannel) return null;
+    return EffectSpecs.storageSpec(id);
+  }
+
+  Widget _phosphorDetail() {
+    final overridden = widget.overrides?.phosphorName != null;
+    final editable = widget.editable && (!widget.local || overridden);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Row(
           children: <Widget>[
-            Expanded(child: VfdLegend('Phosphor', palette: _palette, size: 10)),
-            if (local)
-              PrismButton(
-                key: const ValueKey('phosphor-override'),
-                label: overridden ? 'Override' : 'Inherit',
+            Expanded(
+              child: VfdLegend(
+                'Phosphor',
                 palette: _palette,
-                lit: overridden,
-                enabled: widget.editable,
-                role: PrismRole.compact,
-                span: PrismSpan.two,
-                style: widget.prismStyle,
-                soundEnabled: widget.soundEnabled,
-                hapticsEnabled: widget.hapticsEnabled,
-                onPressed: widget.editable
-                    ? () => _setOverrides(
-                        overridden
-                            ? overrides!.withPhosphor(null)
-                            : overrides!.withPhosphor(
-                                widget.baseProfile.phosphorName,
-                              ),
-                      )
-                    : null,
+                lit: true,
+                size: 13,
               ),
+            ),
+            if (widget.local) _phosphorOverrideButton(overridden),
           ],
         ),
+        const SizedBox(height: 5),
+        VfdLegend(
+          'Colour of deposited phosphor emission.',
+          palette: _palette,
+          size: 9,
+        ),
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 7,
-          runSpacing: 7,
-          children: <Widget>[
-            for (final phosphor in Phosphor.all)
-              PrismButton(
-                label: phosphor.name,
-                palette: _palette,
-                lit: _effective.phosphorName == phosphor.name,
-                selected: _effective.phosphorName == phosphor.name,
-                enabled: enabled,
-                role: PrismRole.compact,
-                span: phosphor.name.length > 7 ? PrismSpan.two : PrismSpan.one,
-                style: widget.prismStyle,
-                soundEnabled: widget.soundEnabled,
-                hapticsEnabled: widget.hapticsEnabled,
-                onPressed: enabled ? () => _setPhosphor(phosphor.name) : null,
-              ),
-          ],
+        Expanded(
+          child: PrismSelectorBank<String>(
+            choices: <PrismSelectorChoice<String>>[
+              for (final phosphor in Phosphor.all)
+                PrismSelectorChoice<String>(
+                  value: phosphor.name,
+                  label: phosphor.name,
+                  lit: _effective.phosphorName == phosphor.name,
+                  enabled: editable,
+                ),
+            ],
+            selected: _effective.phosphorName,
+            palette: _palette,
+            prismStyle: widget.prismStyle,
+            rows: 1,
+            role: PrismRole.compact,
+            soundEnabled: widget.soundEnabled,
+            hapticsEnabled: widget.hapticsEnabled,
+            semanticLabel: 'Phosphor colour',
+            onSelected: _setPhosphor,
+          ),
         ),
       ],
     );
   }
 
-  Widget _effectGrid() => LayoutBuilder(
-    builder: (context, constraints) {
-      const gap = 8.0;
-      final preferred = PrismMetrics.width(PrismRole.standard, PrismSpan.two);
-      final columns = ((constraints.maxWidth + gap) / (preferred + gap))
-          .floor()
-          .clamp(1, 3);
-      final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
-      return Wrap(
-        spacing: gap,
-        runSpacing: gap,
-        children: <Widget>[
-          for (final spec in _specs)
-            SizedBox(
-              width: width,
-              child: PrismButton(
-                key: ValueKey('effect-${spec.id}'),
-                label: spec.label,
-                value: _effective
-                    .effect(spec.id)
-                    .strength
-                    .toStringAsFixed(spec.precision),
-                palette: _palette,
-                lit: _effective.effect(spec.id).enabled,
-                selected: _selectedSpec.id == spec.id,
-                role: PrismRole.standard,
-                span: PrismSpan.two,
-                style: widget.prismStyle,
-                soundEnabled: widget.soundEnabled,
-                hapticsEnabled: widget.hapticsEnabled,
-                onPressed: () => setState(() => _selectedEffectId = spec.id),
-              ),
-            ),
-        ],
-      );
-    },
+  Widget _phosphorOverrideButton(bool overridden) => PrismButton(
+    key: const ValueKey('phosphor-override'),
+    label: overridden ? 'Override' : 'Inherit',
+    palette: _palette,
+    lit: overridden,
+    enabled: widget.editable,
+    role: PrismRole.compact,
+    span: PrismSpan.two,
+    style: widget.prismStyle,
+    soundEnabled: widget.soundEnabled,
+    hapticsEnabled: widget.hapticsEnabled,
+    onPressed: widget.editable
+        ? () => _setOverrides(
+            overridden
+                ? widget.overrides!.withPhosphor(null)
+                : widget.overrides!.withPhosphor(
+                    widget.baseProfile.phosphorName,
+                  ),
+          )
+        : null,
   );
 
-  Widget _effectDetail(EffectSpec spec) {
-    final overrides = widget.overrides;
-    final overridden = overrides?.overrides(spec.id) ?? false;
-    final editable = widget.editable && (!widget.local || overridden);
+  Widget _effectDetail(EffectSpec? spec) {
+    if (spec == null) return const SizedBox.shrink();
+    final known = EffectSpecs.byId(spec.id) != null;
+    final overridden = widget.overrides?.overrides(spec.id) ?? false;
+    final editable = known && widget.editable && (!widget.local || overridden);
     final setting = _effective.effect(spec.id);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -350,132 +239,120 @@ class _EffectPanelState extends State<EffectPanel> {
                 spec.label,
                 palette: _palette,
                 lit: setting.enabled,
-                size: 14,
-              ),
-            ),
-            if (widget.local) ...<Widget>[
-              PrismButton(
-                key: ValueKey('effect-override-${spec.id}'),
-                label: overridden ? 'Override' : 'Inherit',
-                palette: _palette,
-                lit: overridden,
-                enabled: widget.editable,
-                role: PrismRole.compact,
-                span: PrismSpan.two,
-                style: widget.prismStyle,
-                soundEnabled: widget.soundEnabled,
-                hapticsEnabled: widget.hapticsEnabled,
-                onPressed: widget.editable
-                    ? () => _toggleOverride(spec, overridden)
-                    : null,
-              ),
-              const SizedBox(width: 8),
-            ],
-            PrismButton(
-              key: ValueKey('effect-power-${spec.id}'),
-              label: setting.enabled ? 'On' : 'Off',
-              palette: _palette,
-              lit: setting.enabled,
-              enabled: editable,
-              role: PrismRole.compact,
-              span: PrismSpan.one,
-              style: widget.prismStyle,
-              soundEnabled: widget.soundEnabled,
-              hapticsEnabled: widget.hapticsEnabled,
-              onPressed: editable
-                  ? () => _setEffect(spec, setting.toggled(spec))
-                  : null,
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        VfdLegend(spec.description, palette: _palette, size: 9),
-        const SizedBox(height: 12),
-        IgnorePointer(
-          ignoring: !editable,
-          child: Opacity(
-            opacity: editable ? 1 : 0.42,
-            child: LayoutBuilder(
-              builder: (context, constraints) => Stack(
-                children: <Widget>[
-                  VfdCellBar(
-                    value: setting.strength,
-                    min: 0,
-                    max: spec.maxStrength,
-                    palette: _palette,
-                    cells: 40,
-                    height: 20,
-                    onChanged: (value) =>
-                        _setEffect(spec, setting.withStrength(value, spec)),
-                  ),
-                  Positioned(
-                    left: constraints.maxWidth / spec.maxStrength - 0.5,
-                    top: -2,
-                    bottom: -2,
-                    child: Container(
-                      width: 1,
-                      color: _palette.unlit.withValues(alpha: 0.72),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 9),
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: VfdLegend(
-                setting.strength.toStringAsFixed(spec.precision),
-                palette: _palette,
-                lit: setting.enabled,
                 size: 13,
               ),
             ),
-            PrismButton(
-              label: '-',
-              palette: _palette,
-              enabled: editable,
-              role: PrismRole.compact,
-              span: PrismSpan.one,
-              style: widget.prismStyle,
-              soundEnabled: widget.soundEnabled,
-              hapticsEnabled: widget.hapticsEnabled,
-              onPressed: editable
-                  ? () => _setEffect(
-                      spec,
-                      setting.withStrength(setting.strength - spec.step, spec),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 7),
-            PrismButton(
-              label: '+',
-              palette: _palette,
-              enabled: editable,
-              role: PrismRole.compact,
-              span: PrismSpan.one,
-              style: widget.prismStyle,
-              soundEnabled: widget.soundEnabled,
-              hapticsEnabled: widget.hapticsEnabled,
-              onPressed: editable
-                  ? () => _setEffect(
-                      spec,
-                      setting.withStrength(setting.strength + spec.step, spec),
-                    )
-                  : null,
-            ),
+            if (widget.local && known) ...<Widget>[
+              _overrideButton(spec, overridden),
+              const SizedBox(width: 6),
+            ],
+            _powerButton(spec, setting, editable),
           ],
+        ),
+        const SizedBox(height: 4),
+        VfdLegend(spec.description, palette: _palette, size: 9),
+        const Spacer(),
+        Opacity(
+          opacity: editable ? 1 : 0.42,
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: VfdCellBar(
+                  key: ValueKey('effect-bar-${spec.id}'),
+                  value: setting.strength,
+                  min: 0,
+                  max: spec.maxStrength,
+                  palette: _palette,
+                  cells: 32,
+                  height: 20,
+                  step: spec.step,
+                  precision: spec.precision,
+                  semanticLabel: '${spec.label} strength',
+                  onChanged: editable
+                      ? (value) =>
+                            _setEffect(spec, setting.withStrength(value, spec))
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 42,
+                child: VfdLegend(
+                  setting.strength.toStringAsFixed(spec.precision),
+                  palette: _palette,
+                  lit: setting.enabled,
+                  size: 11,
+                ),
+              ),
+              _stepButton('-', spec, setting, editable, -spec.step),
+              const SizedBox(width: 5),
+              _stepButton('+', spec, setting, editable, spec.step),
+            ],
+          ),
         ),
       ],
     );
   }
 
+  Widget _overrideButton(EffectSpec spec, bool overridden) => PrismButton(
+    key: ValueKey('effect-override-${spec.id}'),
+    label: overridden ? 'Override' : 'Inherit',
+    palette: _palette,
+    lit: overridden,
+    enabled: widget.editable,
+    role: PrismRole.compact,
+    span: PrismSpan.two,
+    style: widget.prismStyle,
+    soundEnabled: widget.soundEnabled,
+    hapticsEnabled: widget.hapticsEnabled,
+    onPressed: widget.editable ? () => _toggleOverride(spec, overridden) : null,
+  );
+
+  Widget _powerButton(EffectSpec spec, EffectSetting setting, bool editable) =>
+      PrismButton(
+        key: ValueKey('effect-power-${spec.id}'),
+        label: setting.enabled ? 'On' : 'Off',
+        palette: _palette,
+        lit: setting.enabled,
+        enabled: editable,
+        role: PrismRole.compact,
+        style: widget.prismStyle,
+        soundEnabled: widget.soundEnabled,
+        hapticsEnabled: widget.hapticsEnabled,
+        onPressed: editable
+            ? () => _setEffect(spec, setting.toggled(spec))
+            : null,
+      );
+
+  Widget _stepButton(
+    String label,
+    EffectSpec spec,
+    EffectSetting setting,
+    bool editable,
+    double delta,
+  ) => PrismButton(
+    label: label,
+    palette: _palette,
+    enabled: editable,
+    role: PrismRole.compact,
+    style: widget.prismStyle,
+    soundEnabled: widget.soundEnabled,
+    hapticsEnabled: widget.hapticsEnabled,
+    onPressed: editable
+        ? () => _setEffect(
+            spec,
+            setting.withStrength(setting.strength + delta, spec),
+          )
+        : null,
+  );
+
+  void _selectChannel(String id) {
+    setState(() => _selectedChannel = _selectedChannel == id ? null : id);
+  }
+
   void _toggleOverride(EffectSpec spec, bool overridden) {
-    final overrides = widget.overrides!;
     _setOverrides(
-      overrides.withEffect(
+      widget.overrides!.withEffect(
         spec.id,
         overridden ? null : widget.baseProfile.effect(spec.id),
       ),
@@ -502,4 +379,167 @@ class _EffectPanelState extends State<EffectPanel> {
 
   void _setOverrides(OpticalOverrides value) =>
       widget.onOverridesChanged?.call(value);
+}
+
+class PrismStyleEditor extends StatefulWidget {
+  const PrismStyleEditor({
+    super.key,
+    required this.profile,
+    required this.style,
+    required this.soundEnabled,
+    required this.hapticsEnabled,
+    required this.onChanged,
+  });
+
+  final OpticalProfile profile;
+  final PrismStyle style;
+  final bool soundEnabled;
+  final bool hapticsEnabled;
+  final ValueChanged<PrismStyle> onChanged;
+
+  @override
+  State<PrismStyleEditor> createState() => _PrismStyleEditorState();
+}
+
+class _PrismStyleEditorState extends State<PrismStyleEditor> {
+  String? _selected;
+
+  static const _channels = <_PrismChannel>[
+    _PrismChannel('depth', 'Cap depth', 0.06, 0.18),
+    _PrismChannel('smoke', 'Smoke density', 0.60, 0.95),
+    _PrismChannel('inactive', 'Inactive legend', 0, 0.5),
+    _PrismChannel('active', 'Active backlight', 0.25, 2),
+  ];
+
+  VfdPalette get _palette => VfdPalette.of(widget.profile.phosphor);
+
+  @override
+  Widget build(BuildContext context) => PrismPanel(
+    palette: _palette,
+    padding: const EdgeInsets.all(10),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        VfdLegend('Prism', palette: _palette, lit: true, size: 12),
+        const SizedBox(height: 8),
+        PrismSelectorBank<String>(
+          choices: <PrismSelectorChoice<String>>[
+            for (final channel in _channels)
+              PrismSelectorChoice<String>(
+                value: channel.id,
+                label: channel.label,
+                lit: _selected == channel.id,
+              ),
+          ],
+          selected: _selected,
+          palette: _palette,
+          prismStyle: widget.style,
+          rows: 2,
+          soundEnabled: widget.soundEnabled,
+          hapticsEnabled: widget.hapticsEnabled,
+          semanticLabel: 'Prism style channels',
+          onSelected: (id) =>
+              setState(() => _selected = _selected == id ? null : id),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 140,
+          child: MechanicalFlipTray(
+            open: _selected != null,
+            height: 140,
+            palette: _palette,
+            soundEnabled: widget.soundEnabled,
+            hapticsEnabled: widget.hapticsEnabled,
+            child: _styleDetail(),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _styleDetail() {
+    final channel = _channels.where((item) => item.id == _selected).firstOrNull;
+    if (channel == null) return const SizedBox.shrink();
+    final value = _value(channel.id);
+    return Padding(
+      padding: const EdgeInsets.all(9),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          VfdLegend(channel.label, palette: _palette, lit: true, size: 13),
+          const Spacer(),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: VfdCellBar(
+                  value: value,
+                  min: channel.min,
+                  max: channel.max,
+                  palette: _palette,
+                  step: 0.01,
+                  precision: 2,
+                  semanticLabel: channel.label,
+                  onChanged: (next) => _setValue(channel.id, next),
+                ),
+              ),
+              const SizedBox(width: 8),
+              VfdLegend(
+                value.toStringAsFixed(2),
+                palette: _palette,
+                lit: true,
+                size: 11,
+              ),
+              const SizedBox(width: 8),
+              _styleStep('-', channel, value, -0.01),
+              const SizedBox(width: 5),
+              _styleStep('+', channel, value, 0.01),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _styleStep(
+    String label,
+    _PrismChannel channel,
+    double value,
+    double delta,
+  ) => PrismButton(
+    label: label,
+    palette: _palette,
+    role: PrismRole.compact,
+    style: widget.style,
+    soundEnabled: widget.soundEnabled,
+    hapticsEnabled: widget.hapticsEnabled,
+    onPressed: () =>
+        _setValue(channel.id, (value + delta).clamp(channel.min, channel.max)),
+  );
+
+  double _value(String id) => switch (id) {
+    'depth' => widget.style.bevelDepth,
+    'smoke' => widget.style.faceOpacity,
+    'inactive' => widget.style.inactiveLuminosity,
+    'active' => widget.style.activeLuminosity,
+    _ => 0,
+  };
+
+  void _setValue(String id, double value) {
+    widget.onChanged(switch (id) {
+      'depth' => widget.style.copyWith(bevelDepth: value),
+      'smoke' => widget.style.copyWith(faceOpacity: value),
+      'inactive' => widget.style.copyWith(inactiveLuminosity: value),
+      'active' => widget.style.copyWith(activeLuminosity: value),
+      _ => widget.style,
+    });
+  }
+}
+
+class _PrismChannel {
+  const _PrismChannel(this.id, this.label, this.min, this.max);
+
+  final String id;
+  final String label;
+  final double min;
+  final double max;
 }

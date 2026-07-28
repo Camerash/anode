@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 
 import '../model/optical_profile.dart';
 import 'prism_glyphs.dart';
@@ -123,7 +123,7 @@ class _PrismButtonState extends State<PrismButton> {
                     key: const ValueKey('prism-cap'),
                     offset: Offset(0, _pressed ? 0.07 : 0),
                     duration: pressDuration,
-                    curve: Curves.easeOutQuart,
+                    curve: Curves.linear,
                     child: RepaintBoundary(
                       child: CustomPaint(
                         painter: _PrismCapPainter(

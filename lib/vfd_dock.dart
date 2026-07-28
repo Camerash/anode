@@ -27,7 +27,7 @@ class VfdDock extends StatelessWidget {
     required this.onProfileChanged,
   });
 
-  static const double height = 264;
+  static const double height = 360;
 
   final VfdController controller;
   final DashboardSettings settings;

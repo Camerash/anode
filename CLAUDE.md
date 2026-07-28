@@ -385,11 +385,12 @@ that immediately. Presets authored before the editor exists will encode
 assumptions the editor breaks.
 
 The first Stage 4 boundary deliberately built a plain-Material developer editor
-to stress placement, params, persistence, and copy-on-customize. Before any
-shipped preset is authored, extend that editor with live optical controls and
-the reusable Prism control system. This is still model work: generic effect
-metadata, inheritance, variants, modules, and actions must prove themselves in
-the editor before preset authoring starts.
+to stress placement, params, persistence, and copy-on-customize. That exemption
+ended during the Stage 4 mechanical refinement: no visible Material control,
+route transition, content scroller, or app shell remains. Before any shipped
+preset is authored, the editor must continue proving generic effect metadata,
+inheritance, variants, modules, and actions without falling back to stock form
+controls.
 
 Prism controls become editor-wide UI. Do not spend this pass on onboarding or
 unrelated ornament, but the Prism button's bevel, light, press depth, sound, and
@@ -480,9 +481,13 @@ Do not force both through one renderer. Do not give design components their own
 widgets or fragment surfaces.
 
 Effect selection is a non-scrolling button grid. Tapping an effect button
-selects its detail; it does not toggle the effect. The detail shows label,
-physical description, segmented strength bar, precise number, minus/plus
-steppers, and an explicit power control.
+selects its detail; it does not toggle the effect. `PHOSPHOR` is the first
+optical channel. Channel caps show labels only; illumination conveys enabled
+state and external locator ticks convey selection. A fixed-height fascia below
+the bank flips down to reveal label, physical description, segmented strength
+bar, precise number, minus/plus steppers, and an explicit power control.
+Selecting the active channel again closes the fascia; selecting another channel
+keeps it open and changes its indexed contents.
 
 With no component selected, the editor shows `DESIGN EFFECTS`. With a component
 selected it shows a named `LOCAL EFFECTS` context. Each local effect exposes
@@ -494,6 +499,32 @@ cannot silently change what identical controls mean.
 An immutable preset exposes effect values read-only. `CUSTOMIZE` performs the
 same explicit, visible fork as Edit before any value can change. Never silently
 fork a preset on a slider drag.
+
+### Mechanical UI contract
+
+The whole app is switchgear, not a Material app wearing a VFD theme:
+
+- `WidgetsApp` supplies navigation, focus, semantics, and native text input.
+  Routes cut directly with no transition.
+- User content never uses a kinetic `Scrollable`, `ListView`, or `PageView`.
+  Native caret and selection scrolling inside `EditableText` is the one
+  exception.
+- Overflow becomes fixed pages. A detented rail selects an integer page,
+  snaps its carriage in 60ms, exposes adjustable semantics, and has Prism
+  previous/next controls when height permits them. Crossing one detent emits one
+  configured click/haptic.
+- Hidden service surfaces move as mechanisms. A drawer releases its latch for
+  20ms, travels linearly for 130ms, and hard-seats for 30ms. An optical fascia
+  flips about its top hinge in 150ms while retaining its full closed-layout
+  height. Reduced-motion resolves either state immediately.
+- Continuous direct manipulation remains for component drag/resize and
+  segmented strength bars. This is not content navigation and must not acquire
+  fling or inertial behaviour.
+- Text and unbounded-number authoring use a recessed `EditableText` field so
+  platform keyboard, caret, selection, and accessibility behaviour survive
+  beneath custom chrome.
+- Fork and other route feedback uses a persistent VFD annunciator with explicit
+  acknowledgement. It is never a transient snackbar.
 
 ### Navigation, explicit controls, and no root gestures
 
@@ -515,7 +546,7 @@ tilt comes from the gravity vector.
 
 Library, Settings, and editing sit behind one deliberate path:
 
-    cluster --gear--> dock --[Library]--> route with tabs
+    cluster --gear--> dock --[Library]--> hard-cut switch bank
                                           [ Designs | Settings ]
 
 Tapping a design card activates it; opening the editor requires the card's
@@ -547,6 +578,20 @@ selection/drag/resize overlays. It does not embed component shaders or create
 per-component raster surfaces. Selection chrome may be lifted above the canvas
 so handles remain reachable; this does not change component list order or
 runtime z-order.
+
+The 48px top rail contains only `BACK`, dashboard identity, and orientation.
+Every other control lives in a manually latched right-side service drawer that
+overlays the canvas. Opening the drawer, selecting a part, and switching
+sections must never resize, reflow, or rescale the authored frame. The closed
+drawer leaves a 44px triangular latch target.
+
+Right, bottom, and bottom-right resize handles retain small visual grips but
+have 44x44 touch regions. Edge resizing applies one pointer delta, not the old
+symmetric two-delta transform. The grabbed right/bottom edge moves; the
+opposite edge remains fixed by shifting the resolved centre by half the applied
+size delta and recomputing anchor-relative offset. Minimum size is `0.03`, with
+centre correction applied after clamping. Placements remain intentionally
+unclamped to the frame.
 
 ### Model findings from the developer editor
 

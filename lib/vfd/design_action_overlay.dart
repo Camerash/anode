@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../actions/action_registry.dart';
 import '../model/component_instance.dart';

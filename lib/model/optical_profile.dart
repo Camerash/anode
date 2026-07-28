@@ -9,16 +9,18 @@ class EffectSpec {
   const EffectSpec({
     required this.id,
     required this.label,
+    String? controlLabel,
     required this.description,
     required this.scopes,
     this.defaultStrength = 1,
     this.maxStrength = 2,
     this.step = 0.01,
     this.precision = 2,
-  });
+  }) : controlLabel = controlLabel ?? label;
 
   final String id;
   final String label;
+  final String controlLabel;
   final String description;
   final Set<EffectScope> scopes;
   final double defaultStrength;
@@ -68,6 +70,7 @@ abstract final class EffectSpecs {
     EffectSpec(
       id: EffectIds.phosphorTexture,
       label: 'Phosphor texture',
+      controlLabel: 'Texture',
       description: 'Local irregularity in the deposited phosphor coating.',
       scopes: <EffectScope>{
         EffectScope.dashboard,
@@ -89,6 +92,7 @@ abstract final class EffectSpecs {
     EffectSpec(
       id: EffectIds.unlitPhosphor,
       label: 'Unlit',
+      controlLabel: 'Unlit',
       description: 'Visible phosphor coating on unpowered segments.',
       scopes: <EffectScope>{
         EffectScope.dashboard,
@@ -109,12 +113,14 @@ abstract final class EffectSpecs {
     EffectSpec(
       id: EffectIds.glassGrain,
       label: 'Glass grain',
+      controlLabel: 'Grain',
       description: 'Glass and sensor noise across a physical VFD module.',
       scopes: <EffectScope>{EffectScope.dashboard, EffectScope.module},
     ),
     EffectSpec(
       id: EffectIds.filamentWires,
       label: 'Filaments',
+      controlLabel: 'Filament',
       description: 'Cathode wires stretched across a physical VFD module.',
       scopes: <EffectScope>{EffectScope.dashboard, EffectScope.module},
     ),
@@ -143,6 +149,7 @@ abstract final class EffectSpecs {
       EffectSpec(
         id: id,
         label: id,
+        controlLabel: id,
         description: 'Unavailable effect from another Anode version.',
         scopes: const <EffectScope>{
           EffectScope.dashboard,

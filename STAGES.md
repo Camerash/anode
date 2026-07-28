@@ -13,7 +13,7 @@ their boundary.
 | 1 | Full bleed | Done — `444a836` |
 | 2 | Component data model | Done — `bdd4d01`, `80831c0` |
 | 3 | Single-pass renderer | Done — `de91249` |
-| 4 | Editor and optical authoring | Done — `4d511ed`; optical extension complete |
+| 4 | Editor and optical authoring | Done — developer, optical, Prism, and mechanical refinements complete |
 | 5 | Speed estimation | Not started |
 
 ---
@@ -379,6 +379,71 @@ handcrafted digit variant was authored during it.
 - [x] Expand Prism device guard for atlas legend output, localized light, dark
       face, fixed socket, moving cap, and opaque filament-wire occlusion.
 - [x] End extension in its own reviewed commit. Stop before Stage 5.
+
+#### Mechanical UI refinement — DONE
+
+- [x] Replace `MaterialApp` and visible Material chrome with `WidgetsApp`,
+      zero-duration routes, Prism switch banks, recessed `EditableText`, and
+      persistent VFD annunciators.
+- [x] Reject user-content `Scrollable`, `ListView`, and `PageView` use through
+      an architecture test. Native text caret/selection scrolling remains
+      exempt.
+- [x] Add reusable `MechanicalDrawer`, `MechanicalFlipTray`,
+      `MechanicalPager`, `PrismSelectorBank`, `VfdEditableField`, and
+      `VfdAnnunciator`.
+- [x] Replace free/inertial overflow with integer pages, a draggable detented
+      rail, 60ms carriage snap, Prism previous/next controls, adjustable
+      semantics, and one feedback event per detent.
+- [x] Make effect caps label-only. Add `PHOSPHOR` as first channel and reveal
+      all values, inheritance, power, segmented strength, and steppers in a
+      fixed-height top-hinged fascia.
+- [x] Add non-persisted `EffectSpec.controlLabel`; persisted effect ids and
+      values remain unchanged. Unknown ids remain retained and visible.
+- [x] Rebuild editor around a 48px rail, full remaining canvas, and manually
+      latched overlay service drawer. Component selection never opens it and
+      drawer state never changes canvas size.
+- [x] Page rack slots; move reorder, visibility, and removal to explicit
+      selected-item controls. Generic param, variant, module, action, anchor,
+      and placement controls use the shared mechanical primitives.
+- [x] Add three-decimal X/Y/W/H readouts and 0.005-unit placement/size nudges.
+- [x] Correct edge resize: one delta, half-delta centre correction, opposite
+      edge invariant, minimum `0.03` correction after clamp, no frame clamp.
+- [x] Strengthen frame authoring chrome with matte outside region,
+      dashboard-coloured double boundary, corner registration marks, and exact
+      orientation/aspect readout.
+- [x] Rebuild Library and Settings as hard-cut Prism surfaces with detented
+      design paging and fixed device-feedback controls.
+- [x] Add responsive checks at 320×568, 393×852, 874×402, tablet, and desktop;
+      add mechanical surface goldens for editor closed/open, effect fascia
+      closed/open, pager, Library, and Settings.
+
+Mechanical refinement model findings:
+
+1. **No new persisted-model gap was found.** Paging, drawer state, selected
+   editor section, fascia state, compact labels, and mechanical motion are
+   presentation state and correctly remain outside dashboard JSON.
+2. **Existing unresolved gaps remain unchanged:** per-orientation params and
+   optics, declarative interactive action state, and renderer coverage for
+   outside temperature, battery, and altitude.
+3. **Z-order remains implicit list order and is still sufficient.** Explicit
+   `UP`/`DOWN` controls proved reorder needs no separate layer field.
+4. **Phosphor is intentionally a synthetic optical channel in presentation.**
+   It selects a colour while effect channels select calibrated scalar physics;
+   forcing both into one persisted scalar schema would weaken the model.
+
+Mechanical refinement verification:
+
+- `flutter analyze`: clean.
+- `flutter test`: 98 passing, including architecture, detent/fascia,
+  resize-transform, responsive, and new golden coverage.
+- Existing Prism golden remains unchanged except shared VFD typography now uses
+  the bundled Barlow face.
+- `integration_test/halo_compounding_test.dart`: four tests passing on iPhone
+  17 Pro simulator, iOS 26.3, Impeller. Original seam/halo assertion remains
+  unchanged.
+- Fresh debug launch verified the `WidgetsApp` hard-cut shell on device after
+  explicit termination. Native portrait and landscape screenshots were
+  inspected; the latter retains the documented 90-degree screenshot rotation.
 
 Extension verification:
 

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -9,6 +9,8 @@ import 'actions/action_registry.dart';
 import 'app_state.dart';
 import 'data/design_repository.dart';
 import 'library/library_page.dart';
+import 'mechanical/hard_cut_route.dart';
+import 'mechanical/vfd_annunciator.dart';
 import 'model/component_type.dart';
 import 'model/dev_design.dart';
 import 'model/placement.dart';
@@ -46,14 +48,27 @@ class AnodeApp extends StatefulWidget {
 class _AnodeAppState extends State<AnodeApp> {
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return WidgetsApp(
+      color: const Color(0xFF000000),
       title: 'Anode',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(useMaterial3: true),
+      textStyle: const TextStyle(
+        color: Color(0xFF7C8681),
+        decoration: TextDecoration.none,
+      ),
+      pageRouteBuilder: hardCutPageRoute,
       home: ClusterPage(renderAssets: widget.renderAssets, state: widget.state),
-      routes: <String, WidgetBuilder>{
-        '/library': (context) =>
-            LibraryPage(state: widget.state, renderAssets: widget.renderAssets),
+      onGenerateRoute: (settings) {
+        if (settings.name == '/library') {
+          return hardCutRoute<void>(
+            (_) => LibraryPage(
+              state: widget.state,
+              renderAssets: widget.renderAssets,
+            ),
+            settings: settings,
+          );
+        }
+        return null;
       },
     );
   }
@@ -89,6 +104,7 @@ class _ClusterPageState extends State<ClusterPage>
   bool _autoDrive = true;
   bool _dockOpen = false;
   double _manualKph = 95;
+  String? _annunciation;
 
   @override
   void initState() {
@@ -133,13 +149,10 @@ class _ClusterPageState extends State<ClusterPage>
   void _customize() {
     final source = widget.state.activeDesign;
     final dashboard = widget.state.customizeActiveDesign();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Forked ${source.name}. Editing user dashboard "${dashboard.name}".',
-        ),
-      ),
-    );
+    setState(() {
+      _annunciation =
+          'Forked ${source.name}. User dashboard ${dashboard.name} active.';
+    });
   }
 
   @override
@@ -158,9 +171,9 @@ class _ClusterPageState extends State<ClusterPage>
       bottom: _dockOpen ? dockExtent : windowPadding.bottom,
     );
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF000000),
-      body: Stack(
+    return ColoredBox(
+      color: const Color(0xFF000000),
+      child: Stack(
         fit: StackFit.expand,
         children: [
           // Full bleed: the substrate reaches the fragment bounds.
@@ -247,6 +260,20 @@ class _ClusterPageState extends State<ClusterPage>
                     _controller.speedKph = v;
                   }),
                 ),
+              ),
+            ),
+          if (_annunciation case final message?)
+            Positioned(
+              left: windowPadding.left + 12,
+              right: windowPadding.right + 12,
+              top: windowPadding.top + 12,
+              child: VfdAnnunciator(
+                message: message,
+                palette: VfdPalette.of(_controller.phosphor),
+                prismStyle: widget.state.activeDesign.renderSettings.prismStyle,
+                soundEnabled: widget.state.globalSettings.soundEnabled,
+                hapticsEnabled: widget.state.globalSettings.hapticsEnabled,
+                onAcknowledge: () => setState(() => _annunciation = null),
               ),
             ),
         ],

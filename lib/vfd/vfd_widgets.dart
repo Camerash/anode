@@ -51,6 +51,8 @@ class VfdLegend extends StatelessWidget {
       text.toUpperCase(),
       style: TextStyle(
         color: color,
+        fontFamily: 'Barlow Condensed',
+        fontStyle: FontStyle.italic,
         fontSize: size,
         letterSpacing: 1.4,
         fontWeight: FontWeight.w600,
@@ -115,50 +117,77 @@ class VfdCellBar extends StatelessWidget {
     required this.min,
     required this.max,
     required this.palette,
-    required this.onChanged,
+    this.onChanged,
     this.cells = 24,
     this.height = 16,
+    this.step,
+    this.precision = 2,
+    this.semanticLabel = 'Value',
   });
 
   final double value;
   final double min;
   final double max;
   final VfdPalette palette;
-  final ValueChanged<double> onChanged;
+  final ValueChanged<double>? onChanged;
   final int cells;
   final double height;
+  final double? step;
+  final int precision;
+  final String semanticLabel;
 
   @override
   Widget build(BuildContext context) {
     final fraction = ((value - min) / (max - min)).clamp(0.0, 1.0);
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        void set(Offset local) {
-          final f = (local.dx / constraints.maxWidth).clamp(0.0, 1.0);
-          onChanged(min + f * (max - min));
-        }
+    final enabled = onChanged != null;
+    final resolvedStep = step ?? (max - min) / cells;
+    double snapped(double raw) {
+      final units = ((raw - min) / resolvedStep).round();
+      return (min + units * resolvedStep).clamp(min, max);
+    }
 
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (d) => set(d.localPosition),
-          onHorizontalDragUpdate: (d) => set(d.localPosition),
-          child: SizedBox(
-            height: height,
-            child: Row(
-              children: <Widget>[
-                for (var i = 0; i < cells; i++)
-                  Expanded(
-                    child: _Cell(
-                      lit: (i + 0.5) / cells <= fraction,
-                      palette: palette,
+    void change(double raw) => onChanged?.call(snapped(raw));
+
+    return Semantics(
+      slider: true,
+      enabled: enabled,
+      label: semanticLabel,
+      value: value.toStringAsFixed(precision),
+      increasedValue: snapped(value + resolvedStep).toStringAsFixed(precision),
+      decreasedValue: snapped(value - resolvedStep).toStringAsFixed(precision),
+      onIncrease: enabled ? () => change(value + resolvedStep) : null,
+      onDecrease: enabled ? () => change(value - resolvedStep) : null,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          void set(Offset local) {
+            final f = (local.dx / constraints.maxWidth).clamp(0.0, 1.0);
+            change(min + f * (max - min));
+          }
+
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: enabled ? (d) => set(d.localPosition) : null,
+            onHorizontalDragUpdate: enabled
+                ? (d) => set(d.localPosition)
+                : null,
+            child: SizedBox(
+              height: height,
+              child: Row(
+                children: <Widget>[
+                  for (var i = 0; i < cells; i++)
+                    Expanded(
+                      child: _Cell(
+                        lit: (i + 0.5) / cells <= fraction,
+                        palette: palette,
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

@@ -1,6 +1,13 @@
-import 'package:flutter/material.dart';
+import 'dart:math' as math;
+
+import 'package:flutter/widgets.dart';
 
 import '../actions/action_registry.dart';
+import '../mechanical/mechanical_drawer.dart';
+import '../mechanical/mechanical_pager.dart';
+import '../mechanical/prism_selector_bank.dart';
+import '../mechanical/vfd_annunciator.dart';
+import '../mechanical/vfd_editable_field.dart';
 import '../model/action_binding.dart';
 import '../model/component_instance.dart';
 import '../model/component_type.dart';
@@ -15,6 +22,9 @@ import '../vfd/vfd_widgets.dart';
 import 'editor_canvas.dart';
 import 'effect_panel.dart';
 import 'param_editor.dart';
+import 'placement_transform.dart';
+
+enum _EditorSection { rack, design, part, module, optics, prism, place }
 
 class EditorPage extends StatefulWidget {
   const EditorPage({
@@ -45,155 +55,177 @@ class _EditorPageState extends State<EditorPage> {
   late DesignOrientation _orientation = _dashboard.supportedOrientations.first;
   String? _selectedId;
   String? _selectedModuleId;
+  bool _drawerOpen = false;
+  bool _showForkNotice = true;
 
   VfdPalette get _palette =>
       VfdPalette.of(_dashboard.settings.opticalProfile.phosphor);
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: const Color(0xFF050807),
-    appBar: AppBar(
-      backgroundColor: const Color(0xFF050807),
-      foregroundColor: _palette.unlit,
-      title: VfdLegend(
-        'Edit ${_dashboard.name}',
-        palette: _palette,
-        lit: true,
-        size: 15,
-      ),
-    ),
-    body: SafeArea(
-      top: false,
+  Widget build(BuildContext context) => ColoredBox(
+    color: const Color(0xFF050807),
+    child: SafeArea(
       child: Column(
         children: <Widget>[
-          if (widget.forkedFrom != null) _forkBanner(),
-          _toolbar(),
-          Expanded(child: _responsiveWorkspace()),
+          SizedBox(height: 48, child: _topRail(context)),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) => _workspace(constraints),
+            ),
+          ),
         ],
       ),
     ),
   );
 
-  Widget _forkBanner() => MaterialBanner(
-    content: Text(
-      'Forked from ${widget.forkedFrom}. '
-      'Editing user dashboard "${_dashboard.name}".',
-    ),
-    actions: <Widget>[const Text('USER COPY')],
-  );
-
-  Widget _toolbar() => PrismPanel(
+  Widget _topRail(BuildContext context) => PrismPanel(
     palette: _palette,
-    padding: const EdgeInsets.fromLTRB(12, 7, 12, 7),
+    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
     child: Row(
       children: <Widget>[
+        PrismButton(
+          label: 'Back',
+          palette: _palette,
+          role: PrismRole.compact,
+          style: _dashboard.settings.prismStyle,
+          soundEnabled: widget.soundEnabled,
+          hapticsEnabled: widget.hapticsEnabled,
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        const SizedBox(width: 7),
+        Expanded(
+          child: VfdLegend(
+            _dashboard.name,
+            palette: _palette,
+            lit: true,
+            size: 12,
+          ),
+        ),
         for (final value in _dashboard.supportedOrientations) ...<Widget>[
           PrismButton(
+            key: ValueKey('orientation-${value.name}'),
             label: value.name,
             palette: _palette,
             lit: value == _orientation,
             selected: value == _orientation,
             role: PrismRole.compact,
-            span: PrismSpan.two,
             style: _dashboard.settings.prismStyle,
             soundEnabled: widget.soundEnabled,
             hapticsEnabled: widget.hapticsEnabled,
             onPressed: () => setState(() => _orientation = value),
           ),
-          const SizedBox(width: 7),
+          const SizedBox(width: 4),
         ],
-        const SizedBox(width: 16),
-        SizedBox(
-          width: 150,
-          child: _AspectField(
-            orientation: _orientation,
-            value: _dashboard.frameAspect(_orientation),
-            onChanged: _setFrameAspect,
-          ),
-        ),
       ],
     ),
   );
 
-  Widget _responsiveWorkspace() => LayoutBuilder(
-    builder: (context, constraints) {
-      final canvas = _canvas();
-      final inspector = _sidebar();
-      if (constraints.maxWidth >= 700) {
-        return Row(
-          children: <Widget>[
-            Expanded(child: canvas),
-            SizedBox(width: 380, child: inspector),
-          ],
-        );
-      }
-      return Column(
-        children: <Widget>[
-          Expanded(flex: 3, child: canvas),
-          Expanded(flex: 2, child: inspector),
-        ],
-      );
-    },
-  );
+  Widget _workspace(BoxConstraints constraints) {
+    final drawerWidth = math.min(380.0, constraints.maxWidth - 16);
+    return Stack(
+      key: const ValueKey('editor-workspace'),
+      fit: StackFit.expand,
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.all(4),
+          child: EditorCanvas(
+            dashboard: _dashboard,
+            orientation: _orientation,
+            selectedId: _selectedId,
+            selectedModuleId: _selectedModuleId,
+            onSelect: _selectComponent,
+            onPlacementChanged: _setPlacement,
+            onModulePlacementChanged: _setModulePlacement,
+            renderAssets: widget.renderAssets,
+          ),
+        ),
+        if (widget.forkedFrom != null && _showForkNotice)
+          Positioned(
+            left: 12,
+            top: 12,
+            width: math.min(420, constraints.maxWidth - 24),
+            child: VfdAnnunciator(
+              message: 'Forked from ${widget.forkedFrom}. Editing user copy.',
+              palette: _palette,
+              prismStyle: _dashboard.settings.prismStyle,
+              soundEnabled: widget.soundEnabled,
+              hapticsEnabled: widget.hapticsEnabled,
+              onAcknowledge: () => setState(() => _showForkNotice = false),
+            ),
+          ),
+        Positioned(
+          top: 0,
+          bottom: 0,
+          right: 0,
+          child: MechanicalDrawer(
+            open: _drawerOpen,
+            width: drawerWidth,
+            palette: _palette,
+            soundEnabled: widget.soundEnabled,
+            hapticsEnabled: widget.hapticsEnabled,
+            onOpenChanged: (open) => setState(() => _drawerOpen = open),
+            child: _EditorServicePanel(
+              dashboard: _dashboard,
+              orientation: _orientation,
+              selectedId: _selectedId,
+              selectedModuleId: _selectedModuleId,
+              palette: _palette,
+              soundEnabled: widget.soundEnabled,
+              hapticsEnabled: widget.hapticsEnabled,
+              actionRegistry:
+                  widget.actionRegistry ?? ActionRegistry.forAuthoring(),
+              onSelectComponent: _selectComponent,
+              onSelectModule: _selectModule,
+              onAddComponent: _addComponent,
+              onAddModule: _addModule,
+              onRemoveComponent: _removeComponent,
+              onRemoveModule: _removeModule,
+              onMoveComponent: _moveComponent,
+              onVisibilityChanged: _setVisibility,
+              onComponentChanged: _replaceComponent,
+              onDashboardChanged: _replaceDashboard,
+              onFrameAspectChanged: _setFrameAspect,
+              onPlacementChanged: _setPlacement,
+              onModulePlacementChanged: _setModulePlacement,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
-  Widget _canvas() => Padding(
-    padding: const EdgeInsets.all(12),
-    child: EditorCanvas(
-      dashboard: _dashboard,
-      orientation: _orientation,
-      selectedId: _selectedId,
-      selectedModuleId: _selectedModuleId,
-      onSelect: (id) => setState(() {
-        _selectedId = id;
-        _selectedModuleId = null;
-      }),
-      onPlacementChanged: _setPlacement,
-      onModulePlacementChanged: _setModulePlacement,
-      renderAssets: widget.renderAssets,
-    ),
-  );
+  void _selectComponent(String? id) => setState(() {
+    _selectedId = id;
+    _selectedModuleId = null;
+  });
 
-  Widget _sidebar() => _EditorSidebar(
-    dashboard: _dashboard,
-    orientation: _orientation,
-    selectedId: _selectedId,
-    selectedModuleId: _selectedModuleId,
-    onSelected: (id) => setState(() {
-      _selectedId = id;
-      _selectedModuleId = null;
-    }),
-    onModuleSelected: (id) => setState(() {
-      _selectedId = null;
-      _selectedModuleId = id;
-    }),
-    onAdd: _addComponent,
-    onRemove: _removeComponent,
-    onReorder: _reorderComponent,
-    onVisibilityChanged: _setVisibility,
-    onComponentChanged: _replaceComponent,
-    onDashboardChanged: _replaceDashboard,
-    soundEnabled: widget.soundEnabled,
-    hapticsEnabled: widget.hapticsEnabled,
-    actionRegistry: widget.actionRegistry ?? ActionRegistry.forAuthoring(),
-  );
+  void _selectModule(String id) => setState(() {
+    _selectedId = null;
+    _selectedModuleId = id;
+  });
 
   void _setFrameAspect(double value) {
-    final aspects = <DesignOrientation, double>{..._dashboard.frameAspects};
-    aspects[_orientation] = value;
-    _replaceDashboard(_dashboard.copyWith(frameAspects: aspects));
+    if (!value.isFinite || value <= 0) return;
+    _replaceDashboard(
+      _dashboard.copyWith(
+        frameAspects: <DesignOrientation, double>{
+          ..._dashboard.frameAspects,
+          _orientation: value,
+        },
+      ),
+    );
   }
 
-  void _setPlacement(String componentId, Placement placement) {
-    final component = _component(componentId);
-    if (component == null) return;
-    _replaceComponent(component.withPlacement(_orientation, placement));
+  void _setPlacement(String id, Placement placement) {
+    final component = _component(id);
+    if (component != null) {
+      _replaceComponent(component.withPlacement(_orientation, placement));
+    }
   }
 
-  void _setModulePlacement(String moduleId, Placement placement) {
-    final module = _dashboard.modules
-        .where((candidate) => candidate.id == moduleId)
-        .firstOrNull;
-    if (module == null || module.id == kMainVfdModuleId) return;
+  void _setModulePlacement(String id, Placement placement) {
+    final module = _module(id);
+    if (module == null || id == kMainVfdModuleId) return;
     _replaceDashboard(
       _dashboard.withModule(
         module.copyWith(
@@ -207,8 +239,13 @@ class _EditorPageState extends State<EditorPage> {
   }
 
   void _setVisibility(ComponentInstance component, bool visible) {
-    final placement = visible ? const Placement() : null;
-    _replaceComponent(component.withPlacement(_orientation, placement));
+    final existing = component.placements[_orientation];
+    _replaceComponent(
+      component.withPlacement(
+        _orientation,
+        visible ? (existing ?? const Placement()) : null,
+      ),
+    );
   }
 
   void _addComponent(ComponentTypeSpec type) {
@@ -220,19 +257,44 @@ class _EditorPageState extends State<EditorPage> {
         _orientation: const Placement(),
       },
     );
-    _selectedId = component.id;
     _replaceDashboard(_dashboard.withComponent(component));
+    _selectComponent(component.id);
+  }
+
+  void _addModule() {
+    var index = 2;
+    var id = 'module-$index';
+    final ids = _dashboard.modules.map((module) => module.id).toSet();
+    while (ids.contains(id)) {
+      id = 'module-${++index}';
+    }
+    final module = VfdModule(
+      id: id,
+      name: 'VFD module $index',
+      regions: <DesignOrientation, Placement>{
+        _orientation: const Placement(size: Size(1, 0.5)),
+      },
+    );
+    _replaceDashboard(_dashboard.withModule(module));
+    _selectModule(id);
   }
 
   void _removeComponent(ComponentInstance component) {
-    final next = _dashboard.withoutComponent(component.id);
-    _selectedId = next.components.isEmpty ? null : next.components.first.id;
-    _replaceDashboard(next);
+    _replaceDashboard(_dashboard.withoutComponent(component.id));
+    _selectComponent(null);
   }
 
-  void _reorderComponent(int oldIndex, int newIndex) {
-    final target = newIndex > oldIndex ? newIndex - 1 : newIndex;
-    _replaceDashboard(_dashboard.reorderComponent(oldIndex, target));
+  void _removeModule(VfdModule module) {
+    _replaceDashboard(_dashboard.withoutModule(module.id));
+    _selectModule(kMainVfdModuleId);
+  }
+
+  void _moveComponent(ComponentInstance component, int delta) {
+    final from = _dashboard.components.indexOf(component);
+    final to = (from + delta).clamp(0, _dashboard.components.length - 1);
+    if (to != from) {
+      _replaceDashboard(_dashboard.reorderComponent(from, to));
+    }
   }
 
   void _replaceComponent(ComponentInstance component) =>
@@ -243,17 +305,16 @@ class _EditorPageState extends State<EditorPage> {
     widget.onChanged(next);
   }
 
-  ComponentInstance? _component(String id) {
-    for (final component in _dashboard.components) {
-      if (component.id == id) return component;
-    }
-    return null;
-  }
+  ComponentInstance? _component(String id) =>
+      _dashboard.components.where((item) => item.id == id).firstOrNull;
+
+  VfdModule? _module(String id) =>
+      _dashboard.modules.where((item) => item.id == id).firstOrNull;
 
   String _nextComponentId(String typeId) {
     var index = 1;
     var candidate = '$typeId-$index';
-    final ids = _dashboard.components.map((component) => component.id).toSet();
+    final ids = _dashboard.components.map((item) => item.id).toSet();
     while (ids.contains(candidate)) {
       candidate = '$typeId-${++index}';
     }
@@ -261,707 +322,890 @@ class _EditorPageState extends State<EditorPage> {
   }
 }
 
-class _EditorSidebar extends StatelessWidget {
-  const _EditorSidebar({
+class _EditorServicePanel extends StatefulWidget {
+  const _EditorServicePanel({
     required this.dashboard,
     required this.orientation,
     required this.selectedId,
     required this.selectedModuleId,
-    required this.onSelected,
-    required this.onModuleSelected,
-    required this.onAdd,
-    required this.onRemove,
-    required this.onReorder,
-    required this.onVisibilityChanged,
-    required this.onComponentChanged,
-    required this.onDashboardChanged,
+    required this.palette,
     required this.soundEnabled,
     required this.hapticsEnabled,
     required this.actionRegistry,
+    required this.onSelectComponent,
+    required this.onSelectModule,
+    required this.onAddComponent,
+    required this.onAddModule,
+    required this.onRemoveComponent,
+    required this.onRemoveModule,
+    required this.onMoveComponent,
+    required this.onVisibilityChanged,
+    required this.onComponentChanged,
+    required this.onDashboardChanged,
+    required this.onFrameAspectChanged,
+    required this.onPlacementChanged,
+    required this.onModulePlacementChanged,
   });
 
   final Dashboard dashboard;
   final DesignOrientation orientation;
   final String? selectedId;
   final String? selectedModuleId;
-  final ValueChanged<String> onSelected;
-  final ValueChanged<String> onModuleSelected;
-  final ValueChanged<ComponentTypeSpec> onAdd;
-  final ValueChanged<ComponentInstance> onRemove;
-  final void Function(int oldIndex, int newIndex) onReorder;
+  final VfdPalette palette;
+  final bool soundEnabled;
+  final bool hapticsEnabled;
+  final ActionRegistry actionRegistry;
+  final ValueChanged<String?> onSelectComponent;
+  final ValueChanged<String> onSelectModule;
+  final ValueChanged<ComponentTypeSpec> onAddComponent;
+  final VoidCallback onAddModule;
+  final ValueChanged<ComponentInstance> onRemoveComponent;
+  final ValueChanged<VfdModule> onRemoveModule;
+  final void Function(ComponentInstance component, int delta) onMoveComponent;
   final void Function(ComponentInstance component, bool visible)
   onVisibilityChanged;
   final ValueChanged<ComponentInstance> onComponentChanged;
   final ValueChanged<Dashboard> onDashboardChanged;
-  final bool soundEnabled;
-  final bool hapticsEnabled;
-  final ActionRegistry actionRegistry;
-
-  VfdPalette get _palette =>
-      VfdPalette.of(dashboard.settings.opticalProfile.phosphor);
+  final ValueChanged<double> onFrameAspectChanged;
+  final void Function(String id, Placement placement) onPlacementChanged;
+  final void Function(String id, Placement placement) onModulePlacementChanged;
 
   @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: const Color(0xFF050807),
-        border: Border(
-          left: BorderSide(color: _palette.unlit.withValues(alpha: 0.28)),
-        ),
-      ),
-      child: Column(
-        children: <Widget>[
-          _listHeader(),
-          Expanded(child: _componentList()),
-          const Divider(height: 1),
-          Expanded(child: _inspector()),
-        ],
-      ),
-    );
+  State<_EditorServicePanel> createState() => _EditorServicePanelState();
+}
+
+class _EditorServicePanelState extends State<_EditorServicePanel> {
+  _EditorSection _section = _EditorSection.rack;
+
+  List<_EditorSection> get _sections {
+    if (widget.selectedId != null) {
+      return const <_EditorSection>[
+        _EditorSection.rack,
+        _EditorSection.part,
+        _EditorSection.optics,
+        _EditorSection.place,
+      ];
+    }
+    if (widget.selectedModuleId != null) {
+      return const <_EditorSection>[
+        _EditorSection.rack,
+        _EditorSection.module,
+        _EditorSection.optics,
+        _EditorSection.place,
+      ];
+    }
+    return const <_EditorSection>[
+      _EditorSection.rack,
+      _EditorSection.design,
+      _EditorSection.optics,
+      _EditorSection.prism,
+    ];
   }
 
-  Widget _listHeader() => Padding(
-    padding: const EdgeInsets.all(10),
+  @override
+  void didUpdateWidget(covariant _EditorServicePanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_sections.contains(_section)) _section = _EditorSection.rack;
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(8),
     child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        VfdLegend('Components', palette: _palette, lit: true, size: 12),
-        const SizedBox(height: 8),
-        Row(
-          children: <Widget>[
-            PopupMenuButton<ComponentTypeSpec>(
-              tooltip: 'Add component',
-              onSelected: onAdd,
-              itemBuilder: (context) => <PopupMenuEntry<ComponentTypeSpec>>[
-                for (final type in ComponentTypes.all)
-                  PopupMenuItem(value: type, child: Text(type.displayName)),
-              ],
-              child: IgnorePointer(
-                child: PrismButton(
-                  label: 'Add component',
-                  palette: _palette,
-                  role: PrismRole.compact,
-                  span: PrismSpan.two,
-                  style: dashboard.settings.prismStyle,
-                  onPressed: () {},
-                ),
+        PrismSelectorBank<_EditorSection>(
+          choices: <PrismSelectorChoice<_EditorSection>>[
+            for (final section in _sections)
+              PrismSelectorChoice<_EditorSection>(
+                value: section,
+                label: section.name,
+                lit: section == _section,
               ),
-            ),
-            const SizedBox(width: 8),
-            PrismButton(
-              label: 'Add module',
-              palette: _palette,
-              role: PrismRole.compact,
-              span: PrismSpan.two,
-              style: dashboard.settings.prismStyle,
-              soundEnabled: soundEnabled,
-              hapticsEnabled: hapticsEnabled,
-              onPressed: _addModule,
-            ),
           ],
+          selected: _section,
+          palette: widget.palette,
+          prismStyle: widget.dashboard.settings.prismStyle,
+          rows: 1,
+          role: PrismRole.compact,
+          soundEnabled: widget.soundEnabled,
+          hapticsEnabled: widget.hapticsEnabled,
+          semanticLabel: 'Editor service section',
+          onSelected: (section) => setState(() => _section = section),
         ),
-        if (dashboard.modules.length > 1) ...<Widget>[
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: <Widget>[
-              for (final module in dashboard.modules)
-                PrismButton(
-                  label: module.name,
-                  value: module.id == kMainVfdModuleId ? 'Default' : module.id,
-                  palette: _palette,
-                  lit: module.id == selectedModuleId,
-                  selected: module.id == selectedModuleId,
-                  role: PrismRole.compact,
-                  span: PrismSpan.two,
-                  style: dashboard.settings.prismStyle,
-                  soundEnabled: soundEnabled,
-                  hapticsEnabled: hapticsEnabled,
-                  onPressed: () => onModuleSelected(module.id),
-                ),
-              for (final module in dashboard.modules.where(
-                (value) => value.id != kMainVfdModuleId,
-              ))
-                PrismButton(
-                  label: 'Remove ${module.name}',
-                  palette: _palette,
-                  role: PrismRole.compact,
-                  span: PrismSpan.three,
-                  style: dashboard.settings.prismStyle,
-                  soundEnabled: soundEnabled,
-                  hapticsEnabled: hapticsEnabled,
-                  onPressed: () =>
-                      onDashboardChanged(dashboard.withoutModule(module.id)),
-                ),
-            ],
-          ),
-        ],
+        const SizedBox(height: 8),
+        Expanded(child: _sectionBody()),
       ],
     ),
   );
 
-  Widget _componentList() => ReorderableListView.builder(
-    buildDefaultDragHandles: false,
-    itemCount: dashboard.components.length,
-    onReorder: onReorder,
-    itemBuilder: (context, index) {
-      final component = dashboard.components[index];
-      return _componentTile(component, index);
-    },
-  );
-
-  Widget _componentTile(ComponentInstance component, int index) {
-    final visible = component.appearsIn(orientation);
-    final name =
-        ComponentTypes.byId(component.typeId)?.displayName ?? component.typeId;
-    return Padding(
-      key: ValueKey(component.id),
-      padding: const EdgeInsets.fromLTRB(8, 3, 8, 3),
-      child: Row(
-        children: <Widget>[
-          ReorderableDragStartListener(
-            index: index,
-            child: PrismButton(
-              label: 'Move',
-              palette: _palette,
-              role: PrismRole.compact,
-              span: PrismSpan.one,
-              style: dashboard.settings.prismStyle,
-              onPressed: () {},
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: PrismButton(
-              label: name,
-              value: component.id,
-              palette: _palette,
-              lit: component.id == selectedId,
-              selected: component.id == selectedId,
-              role: PrismRole.compact,
-              span: PrismSpan.two,
-              style: dashboard.settings.prismStyle,
-              soundEnabled: soundEnabled,
-              hapticsEnabled: hapticsEnabled,
-              onPressed: () => onSelected(component.id),
-            ),
-          ),
-          const SizedBox(width: 6),
-          PrismButton(
-            label: visible ? 'On' : 'Off',
-            palette: _palette,
-            lit: visible,
-            role: PrismRole.compact,
-            span: PrismSpan.one,
-            style: dashboard.settings.prismStyle,
-            soundEnabled: soundEnabled,
-            hapticsEnabled: hapticsEnabled,
-            onPressed: () => onVisibilityChanged(component, !visible),
-          ),
-          const SizedBox(width: 6),
-          PrismButton(
-            label: 'Remove',
-            palette: _palette,
-            role: PrismRole.compact,
-            span: PrismSpan.one,
-            style: dashboard.settings.prismStyle,
-            soundEnabled: soundEnabled,
-            hapticsEnabled: hapticsEnabled,
-            onPressed: () => onRemove(component),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _addModule() {
-    var index = 2;
-    var id = 'module-$index';
-    final ids = dashboard.modules.map((module) => module.id).toSet();
-    while (ids.contains(id)) {
-      id = 'module-${++index}';
-    }
-    onDashboardChanged(
-      dashboard.withModule(
-        VfdModule(
-          id: id,
-          name: 'VFD module $index',
-          regions: <DesignOrientation, Placement>{
-            orientation: const Placement(size: Size(1, 0.5)),
-          },
+  Widget _sectionBody() => switch (_section) {
+    _EditorSection.rack => _RackPanel(host: widget),
+    _EditorSection.design => _DesignPanel(host: widget),
+    _EditorSection.part => _PartPanel(host: widget),
+    _EditorSection.module => _ModulePanel(host: widget),
+    _EditorSection.optics => _optics(),
+    _EditorSection.prism => PrismStyleEditor(
+      profile: widget.dashboard.settings.opticalProfile,
+      style: widget.dashboard.settings.prismStyle,
+      soundEnabled: widget.soundEnabled,
+      hapticsEnabled: widget.hapticsEnabled,
+      onChanged: (style) => widget.onDashboardChanged(
+        widget.dashboard.copyWith(
+          settings: widget.dashboard.settings.copyWith(prismStyle: style),
         ),
       ),
-    );
-    onModuleSelected(id);
-  }
+    ),
+    _EditorSection.place => _PlacementPanel(host: widget),
+  };
 
-  Widget _inspector() {
-    final component = _selectedComponent();
-    if (component == null) {
-      final selectedModule = _selectedModule();
-      if (selectedModule != null) {
-        final region = selectedModule.regionIn(orientation);
-        return ListView(
-          padding: EdgeInsets.zero,
-          children: <Widget>[
-            if (selectedModule.id != kMainVfdModuleId)
-              SwitchListTile(
-                title: Text('Module region in ${orientation.name}'),
-                subtitle: const Text(
-                  'Region owns physical glass grain and filament geometry.',
-                ),
-                value: region != null,
-                onChanged: (visible) {
-                  final regions = <DesignOrientation, Placement>{
-                    ...selectedModule.regions,
-                  };
-                  if (visible) {
-                    regions[orientation] = const Placement(size: Size(1, 0.5));
-                  } else {
-                    regions.remove(orientation);
-                  }
-                  onDashboardChanged(
-                    dashboard.withModule(
-                      selectedModule.copyWith(regions: regions),
-                    ),
-                  );
-                },
-              ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: DropdownButtonFormField<VariantReference>(
-                initialValue: selectedModule.filamentVariant,
-                decoration: const InputDecoration(
-                  labelText: 'Filament geometry',
-                ),
-                items: <DropdownMenuItem<VariantReference>>[
-                  if (FilamentVariants.byReference(
-                        selectedModule.filamentVariant,
-                      ) ==
-                      null)
-                    DropdownMenuItem(
-                      value: selectedModule.filamentVariant,
-                      child: Text(
-                        'Missing: ${selectedModule.filamentVariant.id} '
-                        '· r${selectedModule.filamentVariant.revision}',
-                      ),
-                    ),
-                  for (final variant in FilamentVariants.all)
-                    DropdownMenuItem(
-                      value: variant.reference,
-                      child: Text(
-                        '${variant.displayName} '
-                        '· r${variant.reference.revision}',
-                      ),
-                    ),
-                ],
-                onChanged: (reference) {
-                  if (reference == null) return;
-                  onDashboardChanged(
-                    dashboard.withModule(
-                      selectedModule.copyWith(filamentVariant: reference),
-                    ),
-                  );
-                },
-              ),
-            ),
-            EffectPanel(
-              title: '${selectedModule.name} · Module effects',
-              dashboardProfile: dashboard.settings.opticalProfile,
-              baseProfile: dashboard.settings.opticalProfile,
-              overrides: selectedModule.opticalOverrides,
-              scope: EffectScope.module,
-              prismStyle: dashboard.settings.prismStyle,
-              soundEnabled: soundEnabled,
-              hapticsEnabled: hapticsEnabled,
-              onOverridesChanged: (overrides) => onDashboardChanged(
-                dashboard.withModule(
-                  selectedModule.copyWith(opticalOverrides: overrides),
-                ),
-              ),
-            ),
-          ],
-        );
-      }
-      return ListView(
-        padding: EdgeInsets.zero,
-        children: <Widget>[
-          EffectPanel(
-            title: 'Design effects',
-            dashboardProfile: dashboard.settings.opticalProfile,
-            baseProfile: dashboard.settings.opticalProfile,
-            scope: EffectScope.dashboard,
-            prismStyle: dashboard.settings.prismStyle,
-            soundEnabled: soundEnabled,
-            hapticsEnabled: hapticsEnabled,
-            onProfileChanged: (profile) => onDashboardChanged(
-              dashboard.copyWith(
-                settings: dashboard.settings.copyWith(opticalProfile: profile),
-              ),
-            ),
-          ),
-          PrismStyleEditor(
-            profile: dashboard.settings.opticalProfile,
-            style: dashboard.settings.prismStyle,
-            soundEnabled: soundEnabled,
-            hapticsEnabled: hapticsEnabled,
-            onChanged: (style) => onDashboardChanged(
-              dashboard.copyWith(
-                settings: dashboard.settings.copyWith(prismStyle: style),
-              ),
-            ),
-          ),
-        ],
+  Widget _optics() {
+    final component = _selectedComponent;
+    if (component != null) {
+      final module = widget.dashboard.moduleFor(component);
+      final inherited = widget.dashboard.settings.opticalProfile.apply(
+        module.opticalOverrides,
+      );
+      return EffectPanel(
+        title:
+            '${ComponentTypes.byId(component.typeId)?.displayName ?? component.typeId} · Local effects',
+        dashboardProfile: widget.dashboard.settings.opticalProfile,
+        baseProfile: inherited,
+        overrides: component.opticalOverrides,
+        scope: EffectScope.component,
+        prismStyle: widget.dashboard.settings.prismStyle,
+        soundEnabled: widget.soundEnabled,
+        hapticsEnabled: widget.hapticsEnabled,
+        onOverridesChanged: (value) =>
+            widget.onComponentChanged(component.withOpticalOverrides(value)),
       );
     }
-    final module = dashboard.moduleFor(component);
-    final inherited = dashboard.settings.opticalProfile.apply(
-      module.opticalOverrides,
+    final module = _selectedModule;
+    if (module != null) {
+      return EffectPanel(
+        title: '${module.name} · Module effects',
+        dashboardProfile: widget.dashboard.settings.opticalProfile,
+        baseProfile: widget.dashboard.settings.opticalProfile,
+        overrides: module.opticalOverrides,
+        scope: EffectScope.module,
+        prismStyle: widget.dashboard.settings.prismStyle,
+        soundEnabled: widget.soundEnabled,
+        hapticsEnabled: widget.hapticsEnabled,
+        onOverridesChanged: (value) => widget.onDashboardChanged(
+          widget.dashboard.withModule(module.copyWith(opticalOverrides: value)),
+        ),
+      );
+    }
+    return EffectPanel(
+      title: 'Design effects',
+      dashboardProfile: widget.dashboard.settings.opticalProfile,
+      baseProfile: widget.dashboard.settings.opticalProfile,
+      scope: EffectScope.dashboard,
+      prismStyle: widget.dashboard.settings.prismStyle,
+      soundEnabled: widget.soundEnabled,
+      hapticsEnabled: widget.hapticsEnabled,
+      onProfileChanged: (profile) => widget.onDashboardChanged(
+        widget.dashboard.copyWith(
+          settings: widget.dashboard.settings.copyWith(opticalProfile: profile),
+        ),
+      ),
     );
-    return ListView(
-      padding: EdgeInsets.zero,
+  }
+
+  ComponentInstance? get _selectedComponent => widget.dashboard.components
+      .where((item) => item.id == widget.selectedId)
+      .firstOrNull;
+
+  VfdModule? get _selectedModule => widget.dashboard.modules
+      .where((item) => item.id == widget.selectedModuleId)
+      .firstOrNull;
+}
+
+class _RackPanel extends StatefulWidget {
+  const _RackPanel({required this.host});
+
+  final _EditorServicePanel host;
+
+  @override
+  State<_RackPanel> createState() => _RackPanelState();
+}
+
+class _RackPanelState extends State<_RackPanel> {
+  bool _addingComponent = false;
+  bool _addingModule = false;
+
+  _EditorServicePanel get host => widget.host;
+
+  @override
+  Widget build(BuildContext context) => PrismPanel(
+    palette: host.palette,
+    padding: const EdgeInsets.all(9),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        _ComponentInspector(
-          component: component,
-          dashboard: dashboard,
-          orientation: orientation,
-          aspect: dashboard.frameAspect(orientation),
-          onVisibilityChanged: (visible) =>
-              onVisibilityChanged(component, visible),
-          onChanged: onComponentChanged,
-          onDashboardChanged: onDashboardChanged,
-          actionRegistry: actionRegistry,
+        VfdLegend('Rack', palette: host.palette, lit: true, size: 12),
+        const SizedBox(height: 8),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final rows = ((constraints.maxHeight + 6) / 50).floor().clamp(
+                1,
+                4,
+              );
+              return _rackContent(rows);
+            },
+          ),
         ),
-        EffectPanel(
-          title:
-              '${ComponentTypes.byId(component.typeId)?.displayName ?? component.typeId} · Local effects',
-          dashboardProfile: dashboard.settings.opticalProfile,
-          baseProfile: inherited,
-          overrides: component.opticalOverrides,
-          scope: EffectScope.component,
-          prismStyle: dashboard.settings.prismStyle,
-          soundEnabled: soundEnabled,
-          hapticsEnabled: hapticsEnabled,
-          onOverridesChanged: (overrides) =>
-              onComponentChanged(component.withOpticalOverrides(overrides)),
+        const SizedBox(height: 8),
+        _selectedActions(),
+        const SizedBox(height: 7),
+        Row(
+          children: <Widget>[
+            Expanded(child: _addButton('Add part', true)),
+            const SizedBox(width: 6),
+            Expanded(child: _addButton('Add module', false)),
+          ],
         ),
+      ],
+    ),
+  );
+
+  Widget _rackContent(int rows) {
+    if (_addingComponent) {
+      return PrismSelectorBank<ComponentTypeSpec>(
+        choices: <PrismSelectorChoice<ComponentTypeSpec>>[
+          for (final type in ComponentTypes.all)
+            PrismSelectorChoice<ComponentTypeSpec>(
+              value: type,
+              label: type.displayName,
+            ),
+        ],
+        selected: null,
+        palette: host.palette,
+        prismStyle: host.dashboard.settings.prismStyle,
+        rows: rows,
+        soundEnabled: host.soundEnabled,
+        hapticsEnabled: host.hapticsEnabled,
+        semanticLabel: 'Add component',
+        onSelected: (type) {
+          host.onAddComponent(type);
+          setState(() => _addingComponent = false);
+        },
+      );
+    }
+    if (_addingModule) {
+      return PrismSelectorBank<String>(
+        choices: const <PrismSelectorChoice<String>>[
+          PrismSelectorChoice<String>(value: 'vfd', label: 'VFD module'),
+        ],
+        selected: null,
+        palette: host.palette,
+        prismStyle: host.dashboard.settings.prismStyle,
+        rows: 1,
+        soundEnabled: host.soundEnabled,
+        hapticsEnabled: host.hapticsEnabled,
+        semanticLabel: 'Add module',
+        onSelected: (_) {
+          host.onAddModule();
+          setState(() => _addingModule = false);
+        },
+      );
+    }
+    final items = <_RackItem>[
+      for (final component in host.dashboard.components)
+        _RackItem.component(component),
+      if (host.dashboard.modules.length > 1)
+        for (final module in host.dashboard.modules) _RackItem.module(module),
+    ];
+    if (items.isEmpty) {
+      return VfdLegend('Rack empty', palette: host.palette, size: 10);
+    }
+    return PrismSelectorBank<_RackItem>(
+      choices: <PrismSelectorChoice<_RackItem>>[
+        for (final item in items)
+          PrismSelectorChoice<_RackItem>(
+            value: item,
+            label: item.label,
+            lit: item.visibleIn(host.orientation),
+          ),
+      ],
+      selected: items.where((item) => item.isSelected(host)).firstOrNull,
+      palette: host.palette,
+      prismStyle: host.dashboard.settings.prismStyle,
+      rows: rows,
+      soundEnabled: host.soundEnabled,
+      hapticsEnabled: host.hapticsEnabled,
+      semanticLabel: 'Rack items',
+      onSelected: (item) => item.select(host),
+    );
+  }
+
+  Widget _selectedActions() {
+    final component = host.dashboard.components
+        .where((item) => item.id == host.selectedId)
+        .firstOrNull;
+    final module = host.dashboard.modules
+        .where((item) => item.id == host.selectedModuleId)
+        .firstOrNull;
+    if (component == null && module == null) {
+      return SizedBox(
+        height: PrismMetrics.height(PrismRole.compact),
+        child: VfdLegend('Select rack item', palette: host.palette, size: 9),
+      );
+    }
+    final visible =
+        component?.appearsIn(host.orientation) ??
+        (module?.regionIn(host.orientation) != null);
+    return Row(
+      children: <Widget>[
+        if (component != null) ...<Widget>[
+          _action('Up', () => host.onMoveComponent(component, -1)),
+          const SizedBox(width: 4),
+          _action('Down', () => host.onMoveComponent(component, 1)),
+          const SizedBox(width: 4),
+        ],
+        _action(
+          visible ? 'Visible' : 'Hidden',
+          component != null
+              ? () => host.onVisibilityChanged(component, !visible)
+              : () => _toggleModuleVisibility(module!, visible),
+          lit: visible,
+        ),
+        if (component != null || module?.id != kMainVfdModuleId) ...<Widget>[
+          const SizedBox(width: 4),
+          _action(
+            'Remove',
+            component != null
+                ? () => host.onRemoveComponent(component)
+                : () => host.onRemoveModule(module!),
+          ),
+        ],
       ],
     );
   }
 
-  ComponentInstance? _selectedComponent() {
-    for (final component in dashboard.components) {
-      if (component.id == selectedId) return component;
-    }
-    return null;
-  }
+  Widget _action(String label, VoidCallback onPressed, {bool lit = false}) =>
+      Expanded(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: PrismButton(
+            label: label,
+            palette: host.palette,
+            lit: lit,
+            role: PrismRole.compact,
+            style: host.dashboard.settings.prismStyle,
+            soundEnabled: host.soundEnabled,
+            hapticsEnabled: host.hapticsEnabled,
+            onPressed: onPressed,
+          ),
+        ),
+      );
 
-  VfdModule? _selectedModule() {
-    for (final module in dashboard.modules) {
-      if (module.id == selectedModuleId) return module;
+  Widget _addButton(String label, bool component) => FittedBox(
+    fit: BoxFit.scaleDown,
+    child: PrismButton(
+      label: label,
+      palette: host.palette,
+      lit: component ? _addingComponent : _addingModule,
+      selected: component ? _addingComponent : _addingModule,
+      role: PrismRole.compact,
+      span: PrismSpan.two,
+      style: host.dashboard.settings.prismStyle,
+      soundEnabled: host.soundEnabled,
+      hapticsEnabled: host.hapticsEnabled,
+      onPressed: () => setState(() {
+        _addingComponent = component && !_addingComponent;
+        _addingModule = !component && !_addingModule;
+      }),
+    ),
+  );
+
+  void _toggleModuleVisibility(VfdModule module, bool visible) {
+    final regions = <DesignOrientation, Placement>{...module.regions};
+    if (visible) {
+      regions.remove(host.orientation);
+    } else {
+      regions[host.orientation] = const Placement(size: Size(1, 0.5));
     }
-    return null;
+    host.onDashboardChanged(
+      host.dashboard.withModule(module.copyWith(regions: regions)),
+    );
   }
 }
 
-class _ComponentInspector extends StatelessWidget {
-  const _ComponentInspector({
-    required this.component,
-    required this.dashboard,
-    required this.orientation,
-    required this.aspect,
-    required this.onVisibilityChanged,
-    required this.onChanged,
-    required this.onDashboardChanged,
-    required this.actionRegistry,
-  });
+class _RackItem {
+  const _RackItem._({this.component, this.module});
 
-  final ComponentInstance component;
-  final Dashboard dashboard;
-  final DesignOrientation orientation;
-  final double aspect;
-  final ValueChanged<bool> onVisibilityChanged;
-  final ValueChanged<ComponentInstance> onChanged;
-  final ValueChanged<Dashboard> onDashboardChanged;
-  final ActionRegistry actionRegistry;
+  factory _RackItem.component(ComponentInstance value) =>
+      _RackItem._(component: value);
+  factory _RackItem.module(VfdModule value) => _RackItem._(module: value);
+
+  final ComponentInstance? component;
+  final VfdModule? module;
+
+  String get label => component == null
+      ? module!.name
+      : ComponentTypes.byId(component!.typeId)?.displayName ??
+            component!.typeId;
+
+  bool visibleIn(DesignOrientation orientation) =>
+      component?.appearsIn(orientation) ??
+      (module?.regionIn(orientation) != null);
+
+  bool isSelected(_EditorServicePanel host) =>
+      component?.id == host.selectedId || module?.id == host.selectedModuleId;
+
+  void select(_EditorServicePanel host) {
+    if (component != null) {
+      host.onSelectComponent(component!.id);
+    } else {
+      host.onSelectModule(module!.id);
+    }
+  }
+}
+
+class _DesignPanel extends StatelessWidget {
+  const _DesignPanel({required this.host});
+
+  final _EditorServicePanel host;
+
+  @override
+  Widget build(BuildContext context) => PrismPanel(
+    palette: host.palette,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        VfdLegend('Design', palette: host.palette, lit: true, size: 12),
+        const SizedBox(height: 12),
+        VfdEditableField(
+          label: 'Frame aspect · ${host.orientation.name}',
+          value: host.dashboard
+              .frameAspect(host.orientation)
+              .toStringAsFixed(3),
+          palette: host.palette,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          onChanged: (_) {},
+          onSubmitted: (raw) {
+            final value = double.tryParse(raw);
+            if (value != null) host.onFrameAspectChanged(value);
+          },
+        ),
+      ],
+    ),
+  );
+}
+
+class _PartPanel extends StatelessWidget {
+  const _PartPanel({required this.host});
+
+  final _EditorServicePanel host;
 
   @override
   Widget build(BuildContext context) {
-    final type = ComponentTypes.byId(component.typeId);
-    final placement = component.placements[orientation];
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            type?.displayName ?? component.typeId,
-            style: Theme.of(context).textTheme.titleMedium,
+    final component = host.dashboard.components
+        .where((item) => item.id == host.selectedId)
+        .firstOrNull;
+    final type = component == null
+        ? null
+        : ComponentTypes.byId(component.typeId);
+    if (component == null || type == null) {
+      return VfdLegend('No part selected', palette: host.palette);
+    }
+    return PrismPanel(
+      palette: host.palette,
+      padding: const EdgeInsets.all(9),
+      child: MechanicalPager(
+        pages: <Widget>[
+          _variant(component, type),
+          _module(component),
+          if (component.typeId == ComponentTypes.prismButton)
+            _action(component),
+          ParamEditor(
+            specs: type.paramsFor(component.effectiveVariant),
+            values: component.effectiveParams,
+            palette: host.palette,
+            prismStyle: host.dashboard.settings.prismStyle,
+            soundEnabled: host.soundEnabled,
+            hapticsEnabled: host.hapticsEnabled,
+            onChanged: (key, value) =>
+                host.onComponentChanged(component.withParam(key, value)),
           ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text('Visible in ${orientation.name}'),
-            value: placement != null,
-            onChanged: onVisibilityChanged,
-          ),
-          if (placement != null) ..._placementControls(placement),
-          if (type != null) ...<Widget>[
-            const Divider(),
-            ..._variantControls(type, placement),
-            _moduleControl(),
-            if (component.typeId == ComponentTypes.prismButton)
-              _actionControl(context),
-            const Divider(),
-            Text('Parameters', style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 12),
-            ParamEditor(
-              specs: type.paramsFor(component.effectiveVariant),
-              values: component.effectiveParams,
-              onChanged: (key, value) =>
-                  onChanged(component.withParam(key, value)),
-            ),
-          ],
         ],
+        palette: host.palette,
+        prismStyle: host.dashboard.settings.prismStyle,
+        soundEnabled: host.soundEnabled,
+        hapticsEnabled: host.hapticsEnabled,
+        semanticLabel: 'Part controls',
       ),
     );
   }
 
-  List<Widget> _variantControls(ComponentTypeSpec type, Placement? placement) {
+  Widget _variant(ComponentInstance component, ComponentTypeSpec type) {
     final known = type.variant(component.effectiveVariant);
     final variants = <ComponentVariantSpec>[
       ...type.availableVariants,
-      if (known != null &&
-          known.deprecated &&
-          !type.availableVariants.contains(known))
-        known,
+      if (known != null && known.deprecated) known,
       if (known == null)
         ComponentVariantSpec(
           reference: component.effectiveVariant,
-          displayName: 'Missing: ${component.effectiveVariant.id}',
+          displayName: 'Missing ${component.effectiveVariant.id}',
           recommendedSize: type.defaultSize,
           deprecated: true,
         ),
     ];
-    return <Widget>[
-      DropdownButtonFormField<VariantReference>(
-        initialValue: component.effectiveVariant,
-        decoration: const InputDecoration(labelText: 'Design variant'),
-        items: <DropdownMenuItem<VariantReference>>[
-          for (final variant in variants)
-            DropdownMenuItem(
-              value: variant.reference,
-              child: Text(
-                '${variant.displayName} · r${variant.reference.revision}',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        VfdLegend('Variant', palette: host.palette, lit: true, size: 11),
+        const SizedBox(height: 8),
+        PrismSelectorBank<VariantReference>(
+          choices: <PrismSelectorChoice<VariantReference>>[
+            for (final variant in variants)
+              PrismSelectorChoice<VariantReference>(
+                value: variant.reference,
+                label: variant.displayName,
+                lit: variant.reference == component.effectiveVariant,
               ),
+          ],
+          selected: component.effectiveVariant,
+          palette: host.palette,
+          prismStyle: host.dashboard.settings.prismStyle,
+          rows: 2,
+          soundEnabled: host.soundEnabled,
+          hapticsEnabled: host.hapticsEnabled,
+          semanticLabel: 'Design variant',
+          onSelected: (value) =>
+              host.onComponentChanged(component.copyWith(variant: value)),
+        ),
+        const Spacer(),
+        PrismButton(
+          label: 'Reset to variant size',
+          palette: host.palette,
+          role: PrismRole.compact,
+          span: PrismSpan.three,
+          style: host.dashboard.settings.prismStyle,
+          soundEnabled: host.soundEnabled,
+          hapticsEnabled: host.hapticsEnabled,
+          onPressed: () => _resetSize(component, type),
+        ),
+      ],
+    );
+  }
+
+  Widget _module(ComponentInstance component) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      VfdLegend('VFD module', palette: host.palette, lit: true, size: 11),
+      const SizedBox(height: 8),
+      PrismSelectorBank<String>(
+        choices: <PrismSelectorChoice<String>>[
+          if (!host.dashboard.modules.any(
+            (item) => item.id == component.moduleId,
+          ))
+            PrismSelectorChoice<String>(
+              value: component.moduleId,
+              label: 'Missing ${component.moduleId}',
+              lit: true,
+              enabled: false,
+            ),
+          for (final module in host.dashboard.modules)
+            PrismSelectorChoice<String>(
+              value: module.id,
+              label: module.name,
+              lit: module.id == component.moduleId,
             ),
         ],
-        onChanged: (reference) {
-          if (reference != null) {
-            onChanged(component.copyWith(variant: reference));
-          }
-        },
+        selected: component.moduleId,
+        palette: host.palette,
+        prismStyle: host.dashboard.settings.prismStyle,
+        rows: 2,
+        soundEnabled: host.soundEnabled,
+        hapticsEnabled: host.hapticsEnabled,
+        semanticLabel: 'VFD module',
+        onSelected: (id) =>
+            host.onComponentChanged(component.copyWith(moduleId: id)),
       ),
-      if (placement != null) ...<Widget>[
+    ],
+  );
+
+  Widget _action(ComponentInstance component) {
+    final selected = component.actionBinding?.actionId ?? '';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        VfdLegend('Action', palette: host.palette, lit: true, size: 11),
         const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton(
-            onPressed: () {
-              final variant =
-                  type.variant(component.effectiveVariant) ??
-                  type.legacyVariantSpec;
-              onChanged(
-                component.withPlacement(
-                  orientation,
-                  placement.copyWith(size: variant.recommendedSize),
-                ),
-              );
-            },
-            child: const Text('RESET TO VARIANT SIZE'),
+        PrismSelectorBank<String>(
+          choices: <PrismSelectorChoice<String>>[
+            PrismSelectorChoice<String>(
+              value: '',
+              label: 'No action',
+              lit: selected.isEmpty,
+            ),
+            if (selected.isNotEmpty && host.actionRegistry[selected] == null)
+              PrismSelectorChoice<String>(
+                value: selected,
+                label: 'Unavailable',
+                lit: true,
+                enabled: false,
+              ),
+            for (final action in host.actionRegistry.actions)
+              PrismSelectorChoice<String>(
+                value: action.spec.id,
+                label: action.spec.label,
+                lit: action.spec.id == selected,
+              ),
+          ],
+          selected: selected,
+          palette: host.palette,
+          prismStyle: host.dashboard.settings.prismStyle,
+          rows: 3,
+          soundEnabled: host.soundEnabled,
+          hapticsEnabled: host.hapticsEnabled,
+          semanticLabel: 'Action',
+          onSelected: (id) => host.onComponentChanged(
+            component.withAction(
+              id.isEmpty ? null : ActionBinding(actionId: id),
+            ),
           ),
         ),
       ],
-      const SizedBox(height: 12),
-    ];
+    );
   }
 
-  Widget _moduleControl() => DropdownButtonFormField<String>(
-    initialValue: component.moduleId,
-    decoration: const InputDecoration(labelText: 'VFD module'),
-    items: <DropdownMenuItem<String>>[
-      if (!dashboard.modules.any((module) => module.id == component.moduleId))
-        DropdownMenuItem(
-          value: component.moduleId,
-          child: Text('Missing: ${component.moduleId}'),
-        ),
-      for (final module in dashboard.modules)
-        DropdownMenuItem(value: module.id, child: Text(module.name)),
-    ],
-    onChanged: (moduleId) {
-      if (moduleId != null) {
-        onChanged(component.copyWith(moduleId: moduleId));
-      }
-    },
-  );
+  void _resetSize(ComponentInstance component, ComponentTypeSpec type) {
+    final placement = component.placements[host.orientation];
+    if (placement == null) return;
+    final variant =
+        type.variant(component.effectiveVariant) ?? type.legacyVariantSpec;
+    host.onComponentChanged(
+      component.withPlacement(
+        host.orientation,
+        placement.copyWith(size: variant.recommendedSize),
+      ),
+    );
+  }
+}
 
-  Widget _actionControl(BuildContext context) {
-    final binding = component.actionBinding;
-    final registered = binding == null
-        ? null
-        : actionRegistry[binding.actionId];
-    final unknown = binding != null && registered == null;
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
+class _ModulePanel extends StatelessWidget {
+  const _ModulePanel({required this.host});
+
+  final _EditorServicePanel host;
+
+  @override
+  Widget build(BuildContext context) {
+    final module = host.dashboard.modules
+        .where((item) => item.id == host.selectedModuleId)
+        .firstOrNull;
+    if (module == null) {
+      return VfdLegend('No module selected', palette: host.palette);
+    }
+    return PrismPanel(
+      palette: host.palette,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          DropdownButtonFormField<String>(
-            initialValue: binding?.actionId ?? '',
-            decoration: const InputDecoration(labelText: 'Action'),
-            items: <DropdownMenuItem<String>>[
-              const DropdownMenuItem(value: '', child: Text('No action')),
-              if (unknown)
-                DropdownMenuItem(
-                  value: binding.actionId,
-                  child: Text('Unavailable: ${binding.actionId}'),
+          VfdLegend(module.name, palette: host.palette, lit: true, size: 12),
+          const SizedBox(height: 10),
+          PrismSelectorBank<VariantReference>(
+            choices: <PrismSelectorChoice<VariantReference>>[
+              if (FilamentVariants.byReference(module.filamentVariant) == null)
+                PrismSelectorChoice<VariantReference>(
+                  value: module.filamentVariant,
+                  label: 'Missing filament',
+                  enabled: false,
                 ),
-              for (final action in actionRegistry.actions)
-                DropdownMenuItem(
-                  value: action.spec.id,
-                  child: Text(
-                    action.available
-                        ? action.spec.label
-                        : '${action.spec.label} · unavailable',
-                  ),
+              for (final variant in FilamentVariants.all)
+                PrismSelectorChoice<VariantReference>(
+                  value: variant.reference,
+                  label: variant.displayName,
+                  lit: variant.reference == module.filamentVariant,
                 ),
             ],
-            onChanged: (actionId) {
-              onChanged(
-                component.withAction(
-                  actionId == null || actionId.isEmpty
-                      ? null
-                      : ActionBinding(actionId: actionId),
-                ),
-              );
-            },
-          ),
-          if (registered?.unavailableReason case final reason?) ...<Widget>[
-            const SizedBox(height: 8),
-            Text(reason, style: Theme.of(context).textTheme.bodySmall),
-          ],
-          if (registered != null && registered.spec.params.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            ParamEditor(
-              specs: registered.spec.params,
-              values: binding?.params ?? const <String, Object?>{},
-              onChanged: (key, value) => onChanged(
-                component.withAction(
-                  ActionBinding(
-                    actionId: registered.spec.id,
-                    params: <String, Object?>{...?binding?.params, key: value},
-                  ),
-                ),
+            selected: module.filamentVariant,
+            palette: host.palette,
+            prismStyle: host.dashboard.settings.prismStyle,
+            rows: 2,
+            soundEnabled: host.soundEnabled,
+            hapticsEnabled: host.hapticsEnabled,
+            semanticLabel: 'Filament geometry',
+            onSelected: (value) => host.onDashboardChanged(
+              host.dashboard.withModule(
+                module.copyWith(filamentVariant: value),
               ),
             ),
-          ],
+          ),
         ],
       ),
     );
   }
-
-  List<Widget> _placementControls(Placement placement) => <Widget>[
-    DropdownButtonFormField<Anchor>(
-      initialValue: placement.anchor,
-      decoration: const InputDecoration(labelText: 'Anchor'),
-      items: <DropdownMenuItem<Anchor>>[
-        for (final anchor in Anchor.values)
-          DropdownMenuItem(value: anchor, child: Text(anchor.name)),
-      ],
-      onChanged: (anchor) {
-        if (anchor == null) return;
-        onChanged(
-          component.withPlacement(
-            orientation,
-            _changeAnchor(placement, anchor),
-          ),
-        );
-      },
-    ),
-    const SizedBox(height: 12),
-    Text(
-      'Offset: ${placement.offset.dx.toStringAsFixed(3)}, '
-      '${placement.offset.dy.toStringAsFixed(3)}',
-    ),
-    const SizedBox(height: 4),
-    Text(_sizeLabel(placement)),
-  ];
-
-  Placement _changeAnchor(Placement placement, Anchor anchor) {
-    final center = placement.resolve(aspect);
-    return placement.copyWith(
-      anchor: anchor,
-      offset: center - anchor.pointIn(aspect),
-    );
-  }
-
-  String _sizeLabel(Placement placement) {
-    final size = placement.resolveSize(
-      ComponentTypes.byId(component.typeId),
-      variant: component.effectiveVariant,
-    );
-    return 'Size: ${size.width.toStringAsFixed(3)} × '
-        '${size.height.toStringAsFixed(3)}';
-  }
 }
 
-class _AspectField extends StatefulWidget {
-  const _AspectField({
-    required this.orientation,
-    required this.value,
-    required this.onChanged,
-  });
+class _PlacementPanel extends StatelessWidget {
+  const _PlacementPanel({required this.host});
 
-  final DesignOrientation orientation;
-  final double value;
-  final ValueChanged<double> onChanged;
+  final _EditorServicePanel host;
+  static const _nudge = 0.005;
 
   @override
-  State<_AspectField> createState() => _AspectFieldState();
-}
+  Widget build(BuildContext context) {
+    final component = host.dashboard.components
+        .where((item) => item.id == host.selectedId)
+        .firstOrNull;
+    final module = host.dashboard.modules
+        .where((item) => item.id == host.selectedModuleId)
+        .firstOrNull;
+    final placement =
+        component?.placements[host.orientation] ??
+        module?.regionIn(host.orientation);
+    if (placement == null) {
+      return VfdLegend('Not present in orientation', palette: host.palette);
+    }
+    final type = component == null
+        ? null
+        : ComponentTypes.byId(component.typeId);
+    final size = component == null
+        ? (placement.size ?? const Size(1, 1))
+        : placement.resolveSize(type, variant: component.effectiveVariant);
+    final aspect = host.dashboard.frameAspect(host.orientation);
+    final center = placement.resolve(aspect);
+    return PrismPanel(
+      palette: host.palette,
+      padding: const EdgeInsets.all(9),
+      child: MechanicalPager(
+        pages: <Widget>[
+          _anchorPage(placement, aspect, component, module),
+          _axisPage('X', center.dx, -_nudge, _nudge, (delta) {
+            _write(component, module, nudgePlacement(placement, dx: delta));
+          }),
+          _axisPage('Y', center.dy, -_nudge, _nudge, (delta) {
+            _write(component, module, nudgePlacement(placement, dy: delta));
+          }),
+          _axisPage('W', size.width, -_nudge, _nudge, (delta) {
+            _write(
+              component,
+              module,
+              placement.copyWith(
+                size: Size(
+                  math.max(minimumAuthoredSize, size.width + delta),
+                  size.height,
+                ),
+              ),
+            );
+          }),
+          _axisPage('H', size.height, -_nudge, _nudge, (delta) {
+            _write(
+              component,
+              module,
+              placement.copyWith(
+                size: Size(
+                  size.width,
+                  math.max(minimumAuthoredSize, size.height + delta),
+                ),
+              ),
+            );
+          }),
+        ],
+        palette: host.palette,
+        prismStyle: host.dashboard.settings.prismStyle,
+        soundEnabled: host.soundEnabled,
+        hapticsEnabled: host.hapticsEnabled,
+        semanticLabel: 'Placement control',
+      ),
+    );
+  }
 
-class _AspectFieldState extends State<_AspectField> {
-  late final TextEditingController _controller = TextEditingController(
-    text: widget.value.toStringAsFixed(3),
+  Widget _anchorPage(
+    Placement placement,
+    double aspect,
+    ComponentInstance? component,
+    VfdModule? module,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      VfdLegend('Anchor', palette: host.palette, lit: true, size: 11),
+      const SizedBox(height: 8),
+      PrismSelectorBank<Anchor>(
+        choices: <PrismSelectorChoice<Anchor>>[
+          for (final anchor in Anchor.values)
+            PrismSelectorChoice<Anchor>(
+              value: anchor,
+              label: anchor.name,
+              lit: anchor == placement.anchor,
+            ),
+        ],
+        selected: placement.anchor,
+        palette: host.palette,
+        prismStyle: host.dashboard.settings.prismStyle,
+        rows: 3,
+        soundEnabled: host.soundEnabled,
+        hapticsEnabled: host.hapticsEnabled,
+        semanticLabel: 'Anchor',
+        onSelected: (anchor) {
+          final center = placement.resolve(aspect);
+          _write(
+            component,
+            module,
+            placement.copyWith(
+              anchor: anchor,
+              offset: center - anchor.pointIn(aspect),
+            ),
+          );
+        },
+      ),
+    ],
   );
 
-  @override
-  void didUpdateWidget(covariant _AspectField oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.orientation != widget.orientation ||
-        oldWidget.value != widget.value) {
-      _controller.text = widget.value.toStringAsFixed(3);
+  Widget _axisPage(
+    String axis,
+    double value,
+    double decrease,
+    double increase,
+    ValueChanged<double> onNudge,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      VfdLegend('$axis placement', palette: host.palette, lit: true, size: 11),
+      const Spacer(),
+      Center(
+        child: VfdLegend(
+          value.toStringAsFixed(3),
+          palette: host.palette,
+          lit: true,
+          size: 18,
+        ),
+      ),
+      const Spacer(),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          _nudgeButton('$axis -', () => onNudge(decrease)),
+          const SizedBox(width: 8),
+          _nudgeButton('$axis +', () => onNudge(increase)),
+        ],
+      ),
+    ],
+  );
+
+  Widget _nudgeButton(String label, VoidCallback onPressed) => PrismButton(
+    label: label,
+    palette: host.palette,
+    role: PrismRole.compact,
+    span: PrismSpan.two,
+    style: host.dashboard.settings.prismStyle,
+    soundEnabled: host.soundEnabled,
+    hapticsEnabled: host.hapticsEnabled,
+    onPressed: onPressed,
+  );
+
+  void _write(
+    ComponentInstance? component,
+    VfdModule? module,
+    Placement placement,
+  ) {
+    if (component != null) {
+      host.onPlacementChanged(component.id, placement);
+    } else if (module != null) {
+      host.onModulePlacementChanged(module.id, placement);
     }
   }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => TextField(
-    controller: _controller,
-    decoration: const InputDecoration(labelText: 'Frame aspect', isDense: true),
-    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-    onSubmitted: (raw) {
-      final value = double.tryParse(raw);
-      if (value != null && value.isFinite && value > 0) {
-        widget.onChanged(value);
-      } else {
-        _controller.text = widget.value.toStringAsFixed(3);
-      }
-    },
-  );
 }

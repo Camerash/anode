@@ -1,7 +1,5 @@
-import 'dart:math' as math;
-
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../model/component_instance.dart';
 import '../model/component_type.dart';
@@ -10,6 +8,8 @@ import '../model/placement.dart';
 import '../model/vfd_module.dart';
 import '../vfd/vfd_cluster.dart';
 import '../vfd/vfd_render_assets.dart';
+import '../vfd/vfd_widgets.dart';
+import 'placement_transform.dart';
 
 class EditorCanvas extends StatelessWidget {
   const EditorCanvas({
@@ -38,50 +38,71 @@ class EditorCanvas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final aspect = dashboard.frameAspect(orientation);
+    final palette = VfdPalette.of(dashboard.settings.opticalProfile.phosphor);
     return ColoredBox(
-      color: const Color(0xFF050807),
-      child: Center(
-        child: AspectRatio(
-          key: const ValueKey('editor-canvas'),
-          aspectRatio: aspect,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.black87,
-              border: Border.all(
-                color: Theme.of(context).colorScheme.outline,
-                width: 2,
-              ),
-            ),
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => onSelect(null),
-              child: Stack(
-                fit: StackFit.expand,
-                children: <Widget>[
-                  if (renderAssets != null)
-                    _LiveVfdPreview(
-                      renderAssets: renderAssets!,
-                      dashboard: dashboard,
-                      orientation: orientation,
+      color: const Color(0xFF161917),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: AspectRatio(
+            key: const ValueKey('editor-canvas'),
+            aspectRatio: aspect,
+            child: Stack(
+              fit: StackFit.expand,
+              clipBehavior: Clip.none,
+              children: <Widget>[
+                DecoratedBox(
+                  decoration: const BoxDecoration(color: Color(0xFF000000)),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => onSelect(null),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: <Widget>[
+                        if (renderAssets != null)
+                          _LiveVfdPreview(
+                            renderAssets: renderAssets!,
+                            dashboard: dashboard,
+                            orientation: orientation,
+                          ),
+                        _ComponentStack(
+                          dashboard: dashboard,
+                          orientation: orientation,
+                          selectedId: selectedId,
+                          livePreview: renderAssets != null,
+                          onSelect: onSelect,
+                          onPlacementChanged: onPlacementChanged,
+                        ),
+                        if (selectedModuleId != null &&
+                            onModulePlacementChanged != null)
+                          _ModuleOverlay(
+                            dashboard: dashboard,
+                            orientation: orientation,
+                            selectedModuleId: selectedModuleId!,
+                            onPlacementChanged: onModulePlacementChanged!,
+                          ),
+                      ],
                     ),
-                  _ComponentStack(
-                    dashboard: dashboard,
-                    orientation: orientation,
-                    selectedId: selectedId,
-                    livePreview: renderAssets != null,
-                    onSelect: onSelect,
-                    onPlacementChanged: onPlacementChanged,
                   ),
-                  if (selectedModuleId != null &&
-                      onModulePlacementChanged != null)
-                    _ModuleOverlay(
-                      dashboard: dashboard,
-                      orientation: orientation,
-                      selectedModuleId: selectedModuleId!,
-                      onPlacementChanged: onModulePlacementChanged!,
+                ),
+                IgnorePointer(
+                  child: CustomPaint(
+                    painter: _AuthoredFramePainter(palette: palette),
+                  ),
+                ),
+                Positioned(
+                  left: 7,
+                  top: 7,
+                  child: IgnorePointer(
+                    child: VfdLegend(
+                      '${orientation.name} · ${aspect.toStringAsFixed(3)}:1',
+                      palette: palette,
+                      lit: true,
+                      size: 9,
                     ),
-                ],
-              ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -188,17 +209,16 @@ class _ComponentBox extends StatefulWidget {
 }
 
 class _ComponentBoxState extends State<_ComponentBox> {
-  static const double _minimumSize = 0.03;
-  static const double _handleExtent = 18;
+  static const double _handleExtent = 44;
 
   Offset? _pointerOrigin;
   late Placement _initialPlacement = widget.placement;
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.selected
-        ? Theme.of(context).colorScheme.primary
-        : Theme.of(context).colorScheme.outline;
+    const selectedColor = Color(0xFF5DFFC2);
+    const idleColor = Color(0xFF7C8681);
+    final color = widget.selected ? selectedColor : idleColor;
     return Stack(
       clipBehavior: Clip.none,
       children: <Widget>[
@@ -248,7 +268,7 @@ class _ComponentBoxState extends State<_ComponentBox> {
       top: 0,
       bottom: 0,
       cursor: SystemMouseCursors.resizeLeftRight,
-      onPan: (delta) => _resize(widthDelta: 2 * delta.dx / widget.scale),
+      onPan: (delta) => _resize(widthDelta: delta.dx / widget.scale),
     ),
     _handle(
       key: const ValueKey('resize-height'),
@@ -257,7 +277,7 @@ class _ComponentBoxState extends State<_ComponentBox> {
       right: 0,
       bottom: 0,
       cursor: SystemMouseCursors.resizeUpDown,
-      onPan: (delta) => _resize(heightDelta: 2 * delta.dy / widget.scale),
+      onPan: (delta) => _resize(heightDelta: delta.dy / widget.scale),
     ),
     _handle(
       key: const ValueKey('resize-both'),
@@ -266,8 +286,8 @@ class _ComponentBoxState extends State<_ComponentBox> {
       bottom: 0,
       cursor: SystemMouseCursors.resizeDownRight,
       onPan: (delta) => _resize(
-        widthDelta: 2 * delta.dx / widget.scale,
-        heightDelta: 2 * delta.dy / widget.scale,
+        widthDelta: delta.dx / widget.scale,
+        heightDelta: delta.dy / widget.scale,
       ),
     ),
   ];
@@ -323,17 +343,63 @@ class _ComponentBoxState extends State<_ComponentBox> {
   void _resize({double widthDelta = 0, double heightDelta = 0}) {
     final size = _initialPlacement.size ?? widget.defaultSize;
     widget.onChanged(
-      _initialPlacement.copyWith(
-        size: Size(
-          math.max(_minimumSize, size.width + widthDelta),
-          math.max(_minimumSize, size.height + heightDelta),
-        ),
+      resizePlacementFromEdges(
+        placement: _initialPlacement,
+        resolvedSize: size,
+        frameAspect: 1,
+        widthDelta: widthDelta,
+        heightDelta: heightDelta,
       ),
     );
   }
 
   Offset _pointerDelta(DragUpdateDetails details) =>
       details.globalPosition - (_pointerOrigin ?? details.globalPosition);
+}
+
+class _AuthoredFramePainter extends CustomPainter {
+  const _AuthoredFramePainter({required this.palette});
+
+  final VfdPalette palette;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bright = Paint()
+      ..color = palette.lit.withValues(alpha: 0.82)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    final dim = Paint()
+      ..color = palette.unlit.withValues(alpha: 0.58)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    canvas.drawRect(Offset.zero & size, bright);
+    canvas.drawRect(Rect.fromLTWH(4, 4, size.width - 8, size.height - 8), dim);
+    const mark = 13.0;
+    const gap = 4.0;
+    final segments = <(Offset, Offset)>[
+      (const Offset(-gap - mark, -gap), const Offset(-gap, -gap)),
+      (const Offset(-gap, -gap - mark), const Offset(-gap, -gap)),
+      (Offset(size.width + gap, -gap), Offset(size.width + gap + mark, -gap)),
+      (Offset(size.width + gap, -gap - mark), Offset(size.width + gap, -gap)),
+      (Offset(-gap - mark, size.height + gap), Offset(-gap, size.height + gap)),
+      (Offset(-gap, size.height + gap), Offset(-gap, size.height + gap + mark)),
+      (
+        Offset(size.width + gap, size.height + gap),
+        Offset(size.width + gap + mark, size.height + gap),
+      ),
+      (
+        Offset(size.width + gap, size.height + gap),
+        Offset(size.width + gap, size.height + gap + mark),
+      ),
+    ];
+    for (final segment in segments) {
+      canvas.drawLine(segment.$1, segment.$2, bright);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _AuthoredFramePainter oldDelegate) =>
+      oldDelegate.palette != palette;
 }
 
 class _ModuleOverlay extends StatelessWidget {
