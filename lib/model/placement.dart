@@ -3,6 +3,7 @@ import 'dart:ui' show Offset, Size;
 import 'package:flutter/foundation.dart';
 
 import 'component_type.dart';
+import 'variant.dart';
 
 /// Layouts are authored per orientation, never reflowed from one another.
 enum DesignOrientation {
@@ -117,8 +118,12 @@ class Placement {
 
   Offset resolve(double aspect) => anchor.pointIn(aspect) + offset;
 
-  Size resolveSize(ComponentTypeSpec? type) =>
-      size ?? type?.defaultSize ?? const Size(1, 1);
+  Size resolveSize(ComponentTypeSpec? type, {VariantReference? variant}) =>
+      size ??
+      (type == null
+          ? const Size(1, 1)
+          : type.variant(variant ?? type.legacyVariant)?.recommendedSize ??
+                type.defaultSize);
 
   Placement copyWith({Anchor? anchor, Offset? offset, Size? size}) => Placement(
     anchor: anchor ?? this.anchor,

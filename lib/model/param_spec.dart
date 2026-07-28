@@ -16,7 +16,11 @@ class ParamSpec {
     required this.defaultValue,
     this.min,
     this.max,
+    this.step,
+    this.precision,
+    this.unitSuffix,
     this.options = const <String>[],
+    this.optionLabels = const <String, String>{},
   });
 
   final String key;
@@ -25,7 +29,13 @@ class ParamSpec {
   final Object? defaultValue;
   final double? min;
   final double? max;
+  final double? step;
+  final int? precision;
+  final String? unitSuffix;
   final List<String> options;
+  final Map<String, String> optionLabels;
+
+  String labelForOption(String option) => optionLabels[option] ?? option;
 
   /// Forces [raw] into something this spec allows, falling back to
   /// [defaultValue] rather than throwing. Stored dashboards outlive the code

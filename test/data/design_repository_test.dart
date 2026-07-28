@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:anode/app_state.dart';
 import 'package:anode/data/design_repository.dart';
 import 'package:anode/model/component_type.dart';
+import 'package:anode/model/dashboard.dart';
 import 'package:anode/model/design_preset.dart';
+import 'package:anode/model/optical_profile.dart';
 import 'package:anode/model/settings.dart';
-import 'package:anode/vfd/vfd_layers.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -26,9 +29,7 @@ void main() {
 
     final fork = first.forkPreset(source, at: DateTime.utc(2026, 7, 27, 12));
     first.updateActiveComponentParam(ComponentTypes.speedDigits, 'digits', 2);
-    first.updateGlobalSettings(
-      const GlobalSettings(layers: VfdLayers(grain: false)),
-    );
+    first.updateGlobalSettings(const GlobalSettings(soundEnabled: false));
     await first.flush();
 
     final restored = AnodeState.load(
@@ -43,7 +44,7 @@ void main() {
       restored.dashboards.single.components.first.effectiveParams['digits'],
       2,
     );
-    expect(restored.globalSettings.layers.grain, isFalse);
+    expect(restored.globalSettings.soundEnabled, isFalse);
   });
 
   test('activating a preset does not create a dashboard', () async {
@@ -72,5 +73,40 @@ void main() {
     expect(state.activeReference.kind, DesignKind.dashboard);
     expect(state.dashboards.single.settings.phosphorName, 'Red');
     expect(source.defaults.phosphorName, 'Amber');
+  });
+
+  test('legacy global layer booleans migrate into legacy dashboards', () async {
+    final legacyDashboard = Dashboard.forkFrom(source, id: 'legacy').toJson();
+    (legacyDashboard['settings'] as Map).remove('opticalProfile');
+    (legacyDashboard['settings'] as Map)['phosphorName'] = 'Amber';
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'anode.dashboards.v1': jsonEncode(<Object?>[legacyDashboard]),
+      'anode.globalSettings.v1': jsonEncode(<String, Object?>{
+        'demoMode': true,
+        'layers': <String, bool>{
+          'bloom': false,
+          'grain': false,
+          'gridMesh': true,
+        },
+      }),
+    });
+    final preferences = await SharedPreferences.getInstance();
+
+    final stored = DesignRepository(preferences).load();
+
+    expect(stored.dashboards.single.settings.phosphorName, 'Amber');
+    expect(
+      stored.dashboards.single.settings.opticalProfile
+          .effect(EffectIds.bloom)
+          .strength,
+      0,
+    );
+    expect(
+      stored.dashboards.single.settings.opticalProfile
+          .effect(EffectIds.gridMesh)
+          .strength,
+      1,
+    );
+    expect(stored.globalSettings.demoMode, isTrue);
   });
 }

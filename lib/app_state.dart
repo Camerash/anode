@@ -81,6 +81,9 @@ class AnodeState extends ChangeNotifier {
   List<Dashboard> get dashboards => List<Dashboard>.unmodifiable(_dashboards);
   DesignReference get activeReference => _activeReference;
   GlobalSettings get globalSettings => _globalSettings;
+  Dashboard? get activeDashboard =>
+      activeDesign is Dashboard ? activeDesign as Dashboard : null;
+  bool get activeDesignEditable => activeDashboard != null;
 
   Design get activeDesign {
     final design = designFor(_activeReference);
@@ -119,6 +122,12 @@ class AnodeState extends ChangeNotifier {
     return dashboard;
   }
 
+  Dashboard customizeActiveDesign({DateTime? at}) {
+    final active = activeDesign;
+    if (active is Dashboard) return active;
+    return forkPreset(active as DesignPreset, at: at);
+  }
+
   void updateDashboard(Dashboard dashboard) {
     final index = _dashboards.indexWhere((value) => value.id == dashboard.id);
     if (index < 0) {
@@ -141,6 +150,14 @@ class AnodeState extends ChangeNotifier {
 
   void updateActiveSettings(DashboardSettings settings) {
     final dashboard = _dashboardForCustomization();
+    updateDashboard(dashboard.copyWith(settings: settings));
+  }
+
+  void updateEditableActiveSettings(DashboardSettings settings) {
+    final dashboard = activeDashboard;
+    if (dashboard == null) {
+      throw StateError('Customize the active preset before changing it.');
+    }
     updateDashboard(dashboard.copyWith(settings: settings));
   }
 

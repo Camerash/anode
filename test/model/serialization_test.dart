@@ -21,8 +21,11 @@ void main() {
   });
 
   test('dashboard survives a json round trip, provenance included', () {
-    final original = Dashboard.forkFrom(preset(),
-        id: 'dash.1', at: DateTime.utc(2026, 7, 27, 9, 30));
+    final original = Dashboard.forkFrom(
+      preset(),
+      id: 'dash.1',
+      at: DateTime.utc(2026, 7, 27, 9, 30),
+    );
     final back = Dashboard.fromJson(reencode(original.toJson()));
 
     expect(jsonEncode(back.toJson()), jsonEncode(original.toJson()));
@@ -35,10 +38,14 @@ void main() {
     final back = DesignPreset.fromJson(reencode(preset().toJson()));
     final d = back.components.firstWhere((c) => c.id == 'digits');
 
-    expect(d.placements[DesignOrientation.portrait]!.offset,
-        const Offset(0, 0.20));
-    expect(d.placements[DesignOrientation.landscape]!.offset,
-        const Offset(0, 0.11));
+    expect(
+      d.placements[DesignOrientation.portrait]!.offset,
+      const Offset(0, 0.20),
+    );
+    expect(
+      d.placements[DesignOrientation.landscape]!.offset,
+      const Offset(0, 0.11),
+    );
   });
 
   test('a component type this build does not know is dropped, not thrown', () {
@@ -47,9 +54,7 @@ void main() {
       'id': 'mystery',
       'typeId': 'gauge.from.the.future',
       'params': <String, Object?>{},
-      'placements': <String, Object?>{
-        'landscape': const Placement().toJson(),
-      },
+      'placements': <String, Object?>{'landscape': const Placement().toJson()},
     });
 
     final back = DesignPreset.fromJson(reencode(json));
@@ -63,8 +68,10 @@ void main() {
 
     final back = DesignPreset.fromJson(reencode(json));
     final d = back.components.first;
-    expect(d.placements.keys.map((o) => o.name).toSet(),
-        <String>{'landscape', 'portrait'});
+    expect(d.placements.keys.map((o) => o.name).toSet(), <String>{
+      'landscape',
+      'portrait',
+    });
   });
 
   test('params a newer build wrote are preserved, not silently dropped', () {

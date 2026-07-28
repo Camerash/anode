@@ -39,7 +39,10 @@ class ParamEditor extends StatelessWidget {
         decoration: InputDecoration(labelText: spec.label),
         items: <DropdownMenuItem<String>>[
           for (final option in spec.options)
-            DropdownMenuItem(value: option, child: Text(option)),
+            DropdownMenuItem(
+              value: option,
+              child: Text(spec.labelForOption(option)),
+            ),
         ],
         onChanged: (next) => onChanged(spec.key, next),
       ),
@@ -74,11 +77,17 @@ class _NumericParamControl extends StatelessWidget {
       return _unboundedField();
     }
     final integer = spec.type == ParamType.integer;
-    final divisions = integer ? (spec.max! - spec.min!).round() : null;
+    final step = integer ? 1.0 : spec.step;
+    final divisions = step == null
+        ? null
+        : ((spec.max! - spec.min!) / step).round().clamp(1, 1000);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text('${spec.label}: ${_formatted(integer)}'),
+        Text(
+          '${spec.label}: ${_formatted(integer)}'
+          '${spec.unitSuffix == null ? '' : ' ${spec.unitSuffix}'}',
+        ),
         Slider(
           value: value.toDouble().clamp(spec.min!, spec.max!),
           min: spec.min!,
@@ -101,8 +110,9 @@ class _NumericParamControl extends StatelessWidget {
     },
   );
 
-  String _formatted(bool integer) =>
-      integer ? value.round().toString() : value.toStringAsFixed(2);
+  String _formatted(bool integer) => integer
+      ? value.round().toString()
+      : value.toStringAsFixed(spec.precision ?? 2);
 }
 
 class _TextParamControl extends StatefulWidget {

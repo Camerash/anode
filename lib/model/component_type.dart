@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'capability.dart';
 import 'param_spec.dart';
+import 'variant.dart';
 
 /// A component type is data, not a widget and not a subclass. Everything the
 /// rest of the app needs to know about a kind of component — what it needs from
@@ -16,34 +17,78 @@ class ComponentTypeSpec {
     required this.capabilities,
     required this.params,
     required this.defaultSize,
+    this.variants = const <ComponentVariantSpec>[],
   });
 
   final String id;
   final String displayName;
   final Set<Capability> capabilities;
   final List<ParamSpec> params;
+  final List<ComponentVariantSpec> variants;
 
   /// Nominal extent in design units at scale 1, for editor hit-testing.
   final Size defaultSize;
 
-  ParamSpec? spec(String key) {
-    for (final p in params) {
+  VariantReference get legacyVariant =>
+      VariantReference(id: '$id.legacy', revision: 1);
+
+  ComponentVariantSpec get legacyVariantSpec => ComponentVariantSpec(
+    reference: legacyVariant,
+    displayName: 'Original',
+    recommendedSize: defaultSize,
+  );
+
+  /// Legacy remains registered when later builds add variants. Removing it
+  /// would turn every pre-variant dashboard into an unknown-reference fallback.
+  List<ComponentVariantSpec> get registeredVariants {
+    final declaredLegacy = variants.any(
+      (candidate) => candidate.reference == legacyVariant,
+    );
+    return <ComponentVariantSpec>[
+      if (!declaredLegacy) legacyVariantSpec,
+      ...variants,
+    ];
+  }
+
+  List<ComponentVariantSpec> get availableVariants => registeredVariants
+      .where((candidate) => !candidate.deprecated)
+      .toList(growable: false);
+
+  ComponentVariantSpec? variant(VariantReference reference) {
+    for (final candidate in registeredVariants) {
+      if (candidate.reference == reference) return candidate;
+    }
+    return null;
+  }
+
+  List<ParamSpec> paramsFor(VariantReference reference) => <ParamSpec>[
+    ...params,
+    ...?variant(reference)?.params,
+  ];
+
+  ParamSpec? spec(String key, {VariantReference? variant}) {
+    for (final p in paramsFor(variant ?? legacyVariant)) {
       if (p.key == key) return p;
     }
     return null;
   }
 
   Map<String, Object?> get defaults => <String, Object?>{
-        for (final p in params) p.key: p.defaultValue,
-      };
+    for (final p in params) p.key: p.defaultValue,
+  };
 
   /// Fills in missing params and coerces known ones. Unknown keys are kept
   /// verbatim so a dashboard written by a newer build survives a round trip
   /// through an older one.
-  Map<String, Object?> normalise(Map<String, Object?> raw) {
+  Map<String, Object?> normalise(
+    Map<String, Object?> raw, {
+    VariantReference? variant,
+  }) {
     final out = <String, Object?>{...raw};
-    for (final p in params) {
-      out[p.key] = p.coerce(raw.containsKey(p.key) ? raw[p.key] : p.defaultValue);
+    for (final p in paramsFor(variant ?? legacyVariant)) {
+      out[p.key] = p.coerce(
+        raw.containsKey(p.key) ? raw[p.key] : p.defaultValue,
+      );
     }
     return out;
   }
@@ -61,6 +106,7 @@ abstract final class ComponentTypes {
   static const String outsideTemp = 'outsideTemp';
   static const String phoneBattery = 'phoneBattery';
   static const String altitude = 'altitude';
+  static const String prismButton = 'prismButton';
 
   static const List<ComponentTypeSpec> all = <ComponentTypeSpec>[
     ComponentTypeSpec(
@@ -86,6 +132,7 @@ abstract final class ComponentTypes {
           type: ParamType.option,
           defaultValue: 'kph',
           options: <String>['kph', 'mph'],
+          optionLabels: <String, String>{'kph': 'KM/H', 'mph': 'MPH'},
         ),
         ParamSpec(
           key: 'blankLeadingZeros',
@@ -116,6 +163,9 @@ abstract final class ComponentTypes {
           defaultValue: 260.0,
           min: 20,
           max: 400,
+          step: 5,
+          precision: 0,
+          unitSuffix: 'km/h',
         ),
       ],
     ),
@@ -177,6 +227,26 @@ abstract final class ComponentTypes {
           type: ParamType.option,
           defaultValue: 'metres',
           options: <String>['metres', 'feet'],
+        ),
+      ],
+    ),
+    ComponentTypeSpec(
+      id: prismButton,
+      displayName: 'Prism button',
+      capabilities: <Capability>{},
+      defaultSize: Size(0.42, 0.18),
+      params: <ParamSpec>[
+        ParamSpec(
+          key: 'label',
+          label: 'Label',
+          type: ParamType.text,
+          defaultValue: 'ACTION',
+        ),
+        ParamSpec(
+          key: 'lit',
+          label: 'Light',
+          type: ParamType.boolean,
+          defaultValue: false,
         ),
       ],
     ),

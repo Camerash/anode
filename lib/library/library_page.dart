@@ -1,20 +1,25 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
 import '../editor/editor_page.dart';
 import '../model/dashboard.dart';
 import '../model/design_preset.dart';
-import '../vfd/vfd_layers.dart';
+import '../vfd/prism_widgets.dart';
 import '../vfd/vfd_widgets.dart';
 
 class LibraryPage extends StatelessWidget {
-  const LibraryPage({super.key, required this.state});
+  const LibraryPage({super.key, required this.state, this.program});
 
   final AnodeState state;
+  final ui.FragmentProgram? program;
 
   @override
   Widget build(BuildContext context) {
-    final palette = VfdPalette.of(Phosphor.cyanGreen);
+    final palette = VfdPalette.of(
+      state.activeDesign.renderSettings.opticalProfile.phosphor,
+    );
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -40,7 +45,7 @@ class LibraryPage extends StatelessWidget {
             listenable: state,
             builder: (context, _) => TabBarView(
               children: <Widget>[
-                _DesignsTab(state: state, palette: palette),
+                _DesignsTab(state: state, palette: palette, program: program),
                 _SettingsTab(state: state, palette: palette),
               ],
             ),
@@ -52,10 +57,15 @@ class LibraryPage extends StatelessWidget {
 }
 
 class _DesignsTab extends StatelessWidget {
-  const _DesignsTab({required this.state, required this.palette});
+  const _DesignsTab({
+    required this.state,
+    required this.palette,
+    required this.program,
+  });
 
   final AnodeState state;
   final VfdPalette palette;
+  final ui.FragmentProgram? program;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -119,6 +129,9 @@ class _DesignsTab extends StatelessWidget {
         builder: (context) => EditorPage(
           dashboard: dashboard,
           forkedFrom: forkedFrom,
+          program: program,
+          soundEnabled: state.globalSettings.soundEnabled,
+          hapticsEnabled: state.globalSettings.hapticsEnabled,
           onChanged: state.updateDashboard,
         ),
       ),
@@ -160,7 +173,12 @@ class _DesignCard extends StatelessWidget {
             children: <Widget>[
               Expanded(child: _description()),
               const SizedBox(width: 12),
-              VfdButton(label: 'EDIT', palette: palette, onTap: onEdit),
+              PrismButton(
+                label: 'Edit',
+                palette: palette,
+                role: PrismRole.compact,
+                onPressed: onEdit,
+              ),
             ],
           ),
         ),
@@ -192,27 +210,34 @@ class _SettingsTab extends StatelessWidget {
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(16),
     children: <Widget>[
-      VfdLegend('Authenticity layers', palette: palette, size: 14),
+      VfdLegend('Device feedback', palette: palette, size: 14),
       const SizedBox(height: 12),
       Wrap(
         spacing: 8,
         runSpacing: 8,
-        children: <Widget>[for (final key in VfdLayers.keys) _layerButton(key)],
+        children: <Widget>[
+          PrismButton(
+            label: 'Sound',
+            palette: palette,
+            lit: state.globalSettings.soundEnabled,
+            onPressed: () => state.updateGlobalSettings(
+              state.globalSettings.copyWith(
+                soundEnabled: !state.globalSettings.soundEnabled,
+              ),
+            ),
+          ),
+          PrismButton(
+            label: 'Haptics',
+            palette: palette,
+            lit: state.globalSettings.hapticsEnabled,
+            onPressed: () => state.updateGlobalSettings(
+              state.globalSettings.copyWith(
+                hapticsEnabled: !state.globalSettings.hapticsEnabled,
+              ),
+            ),
+          ),
+        ],
       ),
     ],
   );
-
-  Widget _layerButton(String key) {
-    final layers = state.globalSettings.layers;
-    return VfdButton(
-      label: VfdLayers.labels[key]!,
-      palette: palette,
-      lit: layers[key],
-      onTap: () => state.updateGlobalSettings(
-        state.globalSettings.copyWith(
-          layers: layers.withKey(key, !layers[key]),
-        ),
-      ),
-    );
-  }
 }

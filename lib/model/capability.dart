@@ -11,7 +11,8 @@ enum Capability {
   network,
   battery,
   tripStorage,
-  ambientLight;
+  ambientLight,
+  mediaControl;
 
   static Capability? byName(String name) {
     for (final c in Capability.values) {

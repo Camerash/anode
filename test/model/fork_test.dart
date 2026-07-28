@@ -82,7 +82,10 @@ void main() {
   test('a map handed to the constructor cannot be mutated afterwards', () {
     final params = <String, Object?>{'digits': 3};
     final c = ComponentInstance(
-        id: 'd', typeId: ComponentTypes.speedDigits, params: params);
+      id: 'd',
+      typeId: ComponentTypes.speedDigits,
+      params: params,
+    );
 
     params['digits'] = 1;
 

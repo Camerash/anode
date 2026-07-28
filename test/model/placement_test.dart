@@ -39,17 +39,18 @@ void main() {
       const p = Placement(anchor: Anchor.centerRight, offset: Offset(-0.2, 0));
       for (final entry in aspects.entries) {
         final aspect = entry.value;
-        final distanceFromRightEdge =
-            aspect / 2 - p.resolve(aspect).dx;
-        expect(distanceFromRightEdge, closeTo(0.2, 1e-9),
-            reason: 'drifted at ${entry.key}');
+        final distanceFromRightEdge = aspect / 2 - p.resolve(aspect).dx;
+        expect(
+          distanceFromRightEdge,
+          closeTo(0.2, 1e-9),
+          reason: 'drifted at ${entry.key}',
+        );
       }
     });
 
     test('a centre-anchored component does not move with aspect', () {
       const p = Placement(offset: Offset(0.1, 0.11));
-      final positions =
-          aspects.values.map((a) => p.resolve(a)).toSet();
+      final positions = aspects.values.map((a) => p.resolve(a)).toSet();
       expect(positions, hasLength(1));
     });
 
@@ -86,18 +87,21 @@ void main() {
       expect(Placement.fromJson(unsized.toJson()).size, isNull);
     });
 
-    test('a half-written size degrades to the default rather than a zero box',
-        () {
-      final p = Placement.fromJson(<String, Object?>{'w': 1.2});
-      expect(p.size, isNull);
-    });
+    test(
+      'a half-written size degrades to the default rather than a zero box',
+      () {
+        final p = Placement.fromJson(<String, Object?>{'w': 1.2});
+        expect(p.size, isNull);
+      },
+    );
   });
 
   test('placement round trips through json', () {
     const p = Placement(
-        anchor: Anchor.topRight,
-        offset: Offset(-0.25, -0.1),
-        size: Size(0.8, 0.3));
+      anchor: Anchor.topRight,
+      offset: Offset(-0.25, -0.1),
+      size: Size(0.8, 0.3),
+    );
     final back = Placement.fromJson(p.toJson());
     expect(back.anchor, p.anchor);
     expect(back.offset, p.offset);
@@ -105,8 +109,9 @@ void main() {
   });
 
   test('an unknown anchor name degrades to centre rather than throwing', () {
-    final back =
-        Placement.fromJson(<String, Object?>{'anchor': 'someFutureAnchor'});
+    final back = Placement.fromJson(<String, Object?>{
+      'anchor': 'someFutureAnchor',
+    });
     expect(back.anchor, Anchor.center);
   });
 }

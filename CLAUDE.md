@@ -201,8 +201,9 @@ These cost real time to rediscover:
 ## Optical profiles and effect scope
 
 Optical appearance is part of a design's identity, not an app-wide preference.
-The old boolean `VfdLayers` implementation is scaffolding to migrate, not the
-target model.
+The old boolean `VfdLayers` implementation has been removed. Repository loading
+migrates its legacy booleans into the baseline profile of stored legacy
+dashboards; new global settings contain device preferences only.
 
 An effect is declared once through generic metadata: stable id, label,
 description, scope, calibrated default, minimum, maximum, step, precision, and
@@ -528,12 +529,11 @@ else an edge breaks the illusion; here you are authoring the frame, so you have
 to see where it ends. The canvas holds the target orientation's aspect
 regardless of the window shape, and scales to fit.
 
-The completed developer editor represents components as plain bounding boxes.
-The next Stage 4 extension replaces that canvas with one live, shared render of
-the whole design plus non-painting selection/drag/resize overlays. It must not
-embed component shaders or create per-component raster surfaces. Selection
-chrome may be lifted above the canvas so handles remain reachable; this does not
-change component list order or runtime z-order.
+The editor uses one live, shared render of the whole design plus non-painting
+selection/drag/resize overlays. It does not embed component shaders or create
+per-component raster surfaces. Selection chrome may be lifted above the canvas
+so handles remain reachable; this does not change component list order or
+runtime z-order.
 
 ### Model findings from the developer editor
 
@@ -549,25 +549,31 @@ special-casing controls around them:
   list order. Editor reordering edits that list globally; it did not need a
   separate layer field or a per-orientation order. If overlapping instrument
   geometry becomes a real design requirement, revisit this decision.
-- **Unresolved metadata gap:** `ParamSpec` can choose a generic control, but
-  cannot declare human-facing labels for option values, numeric step/precision,
-  or a unit suffix. The developer editor therefore exposes raw option tokens and
-  generic numeric formatting. Do not add bespoke controls; extend the schema
-  when production editor copy requires it.
-- **Tube-level gap has an approved model, not an implementation:** filament
-  wires remain renderer-global constants around the old digit locus. `VfdModule`
-  will own authored regions, filament variants, and glass grain; the implicit
-  `main` module preserves the lightweight single-tube case.
-- **Optical inheritance is not implemented:** current boolean `VfdLayers` cannot
-  express calibrated dashboard values, module defaults, component colour, or
-  sparse component overrides. The approved `OpticalProfile` hierarchy above
-  replaces it.
-- **Variants are not implemented:** component instances cannot yet select a
-  stable, revisioned geometry variant. The compatibility contract above must be
-  in place before handcrafted digit variants are authored.
-- **Actions are not implemented:** components have no persisted action binding
-  or runtime hit semantics. Use the registry contract above; do not put
-  callbacks or platform objects into design data.
+- **Resolved during the extension:** `ParamSpec` now declares option labels,
+  numeric step/precision, and unit suffix, including variant-specific params.
+- **Resolved during the extension:** lightweight `VfdModule`s own authored
+  regions, filament references, glass grain, and sparse overrides. A component
+  references exactly one module; overlapping/shared envelopes are not
+  expressible without adding another grouping relation.
+- **Resolved during the extension:** `OpticalProfile` and sparse overrides
+  express calibrated dashboard, module, and component appearance. Optical
+  values remain component-wide, not per-orientation; different portrait and
+  landscape optics require separate component ids just like different params.
+- **Resolved during the extension:** component instances carry stable,
+  revisioned variant references. Unknown references and params survive and show
+  a missing fallback. No handcrafted shipped variants were authored in this
+  pass.
+- **Resolved during the extension:** persisted action bindings and non-painting
+  hit semantics invoke an open runtime registry. Binding params are generic.
+- **New unresolved interaction-state gap:** a design button can persist one tap
+  action and a static `lit` param, but cannot bind its lamp or legend to runtime
+  action state, declare long-press/double-press behaviour, or choose separate
+  press/release actions. Play/pause state feedback will require a declarative
+  state binding rather than callbacks in design data.
+- **Renderer-only gap:** arbitrary Prism legends are persisted but are not drawn
+  by the shader until the planned SDF glyph atlas exists. Flutter Prism controls
+  draw their labels normally; instrument Prism bodies already render and press
+  in the shared pass.
 - `outsideTemp`, `phoneBattery`, and `altitude` are expressible and editable as
   component data, but the current shader intentionally skips them. This is a
   renderer coverage gap, not a reason to hardcode or remove them from the

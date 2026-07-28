@@ -6,8 +6,12 @@ import 'package:flutter_test/flutter_test.dart';
 /// Values chosen to be unrepresentable in 8 bits, so a silent downconversion of
 /// the texture format shows up as a mismatch rather than passing by luck.
 /// Narrowed to float32 first, since that is what the buffer stores.
-final List<double> awkward =
-    Float32List.fromList(<double>[1 / 3, -1.3, 0.084, 0.6815]).toList();
+final List<double> awkward = Float32List.fromList(<double>[
+  1 / 3,
+  -1.3,
+  0.084,
+  0.6815,
+]).toList();
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +25,18 @@ void main() {
         width: 1.035,
         height: 0.588,
         paramA: 3,
+        variantCode: 7,
+        phosphorR: 0.2,
+        phosphorG: 0.7,
+        phosphorB: 0.4,
+        bloom: 1.5,
+        moduleCenterX: -0.4,
+        moduleWidth: 0.9,
+        prismPressed: 1,
+        filamentVariantCode: 2,
+        prismBevelDepth: 0.16,
+        prismFaceOpacity: 0.8,
+        prismInactiveLuminosity: 0.25,
         segments: List<double>.generate(32, (i) => i / 32),
       ),
       ComponentFrame(
@@ -35,9 +51,24 @@ void main() {
     ]);
 
     // Compared loosely: the buffer narrows to float32, the expectations do not.
-    expect(floats[0], closeTo(ComponentData.encodeType(ShaderType.digits), 1e-7));
+    expect(
+      floats[0],
+      closeTo(ComponentData.encodeType(ShaderType.digits), 1e-7),
+    );
     expect(floats[1], closeTo(ComponentData.encodePosition(awkward[3]), 1e-7));
     expect(floats[6], closeTo(ComponentData.encodeCount(3), 1e-7));
+    expect(floats[9], closeTo(ComponentData.encodeCount(7), 1e-7));
+    expect(floats[12], closeTo(0.2, 1e-7));
+    expect(floats[13], closeTo(0.7, 1e-7));
+    expect(floats[14], closeTo(0.4, 1e-7));
+    expect(floats[17], closeTo(ComponentData.encodeEffect(1.5), 1e-7));
+    expect(floats[24], closeTo(ComponentData.encodePosition(-0.4), 1e-7));
+    expect(floats[26], closeTo(ComponentData.encodeSize(0.9), 1e-7));
+    expect(floats[32], 1);
+    expect(floats[33], closeTo(ComponentData.encodeCount(2), 1e-7));
+    expect(floats[36], closeTo(0.16, 1e-7));
+    expect(floats[37], closeTo(0.8, 1e-7));
+    expect(floats[38], closeTo(0.25, 1e-7));
 
     // First digit starts after the header texels; segments run three per texel.
     const digit0 = ComponentData.headerTexels * 4;
@@ -47,12 +78,19 @@ void main() {
     expect(floats[digit0 + 8], 6 / 32); // segment 6, third texel
 
     // The second digit reads from the segment buffer's stride of eight.
-    const digit1 = (ComponentData.headerTexels + ComponentData.texelsPerDigit) * 4;
+    const digit1 =
+        (ComponentData.headerTexels + ComponentData.texelsPerDigit) * 4;
     expect(floats[digit1 + 0], 8 / 32);
 
     const second = ComponentData.floatsPerComponent;
-    expect(floats[second + 0], closeTo(ComponentData.encodeType(ShaderType.bar), 1e-7));
-    expect(floats[second + 5], closeTo(ComponentData.encodeSize(awkward[2]), 1e-7));
+    expect(
+      floats[second + 0],
+      closeTo(ComponentData.encodeType(ShaderType.bar), 1e-7),
+    );
+    expect(
+      floats[second + 5],
+      closeTo(ComponentData.encodeSize(awkward[2]), 1e-7),
+    );
     expect(floats[second + 8], 0.5); // a fraction, stored raw
   });
 
@@ -95,44 +133,54 @@ void main() {
     }
   });
 
-  test('unused component rows are zeroed so the shader reads nothing stale', () {
-    final floats = ComponentData.pack(<ComponentFrame>[
-      ComponentFrame(
-        type: ShaderType.bar,
-        centerX: 0,
-        centerY: 0,
-        width: 1,
-        height: 1,
-      ),
-    ]);
+  test(
+    'unused component rows are zeroed so the shader reads nothing stale',
+    () {
+      final floats = ComponentData.pack(<ComponentFrame>[
+        ComponentFrame(
+          type: ShaderType.bar,
+          centerX: 0,
+          centerY: 0,
+          width: 1,
+          height: 1,
+        ),
+      ]);
 
-    final rest = floats.sublist(ComponentData.floatsPerComponent);
-    for (var i = 0; i < rest.length; i++) {
-      expect(rest[i], i % 4 == 3 ? 1.0 : 0.0);
-    }
-  });
+      final rest = floats.sublist(ComponentData.floatsPerComponent);
+      for (var i = 0; i < rest.length; i++) {
+        expect(rest[i], i % 4 == 3 ? 1.0 : 0.0);
+      }
+    },
+  );
 
-  test('more components than the texture holds are dropped, not overflowed', () {
-    final many = List<ComponentFrame>.generate(
-      ComponentData.maxComponents + 4,
-      (i) => ComponentFrame(
-        type: ShaderType.bar,
-        centerX: i / 100,
-        centerY: 0,
-        width: 1,
-        height: 1,
-      ),
-    );
+  test(
+    'more components than the texture holds are dropped, not overflowed',
+    () {
+      final many = List<ComponentFrame>.generate(
+        ComponentData.maxComponents + 4,
+        (i) => ComponentFrame(
+          type: ShaderType.bar,
+          centerX: i / 100,
+          centerY: 0,
+          width: 1,
+          height: 1,
+        ),
+      );
 
-    final floats = ComponentData.pack(many);
-    expect(floats.length,
-        ComponentData.maxComponents * ComponentData.floatsPerComponent);
+      final floats = ComponentData.pack(many);
+      expect(
+        floats.length,
+        ComponentData.maxComponents * ComponentData.floatsPerComponent,
+      );
 
-    const lastIndex = ComponentData.maxComponents - 1;
-    const last = lastIndex * ComponentData.floatsPerComponent;
-    expect(floats[last + 1],
-        closeTo(ComponentData.encodePosition(lastIndex / 100), 1e-7));
-  });
+      const lastIndex = ComponentData.maxComponents - 1;
+      const last = lastIndex * ComponentData.floatsPerComponent;
+      expect(
+        floats[last + 1],
+        closeTo(ComponentData.encodePosition(lastIndex / 100), 1e-7),
+      );
+    },
+  );
 
   test('a position beyond the representable range clamps to the edge', () {
     expect(ComponentData.encodePosition(500), 1.0);

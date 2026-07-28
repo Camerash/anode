@@ -7,6 +7,7 @@ abstract final class ShaderType {
   static const double digits = 1;
   static const double bar = 2;
   static const double legend = 3;
+  static const double prism = 4;
 }
 
 /// One component's data for one frame, already flattened to what the shader
@@ -20,6 +21,28 @@ class ComponentFrame {
     required this.height,
     this.paramA = 0,
     this.paramB = 0,
+    this.variantCode = 0,
+    this.phosphorR = 0.30,
+    this.phosphorG = 1.00,
+    this.phosphorB = 0.72,
+    this.emission = 1,
+    this.bloom = 1,
+    this.phosphorTexture = 0,
+    this.grid = 1,
+    this.unlit = 1,
+    this.decay = 1,
+    this.moduleCenterX = 0,
+    this.moduleCenterY = 0,
+    this.moduleWidth = 2.6,
+    this.moduleHeight = 1,
+    this.glassGrain = 1,
+    this.filament = 1,
+    this.prismLit = 0,
+    this.prismPressed = 0,
+    this.filamentVariantCode = 0,
+    this.prismBevelDepth = 0.12,
+    this.prismFaceOpacity = 0.78,
+    this.prismInactiveLuminosity = 0.18,
     List<double>? segments,
   }) : segments = segments ?? const <double>[];
 
@@ -34,6 +57,28 @@ class ComponentFrame {
 
   /// Type-specific: the bar's fill fraction.
   final double paramB;
+  final double variantCode;
+  final double phosphorR;
+  final double phosphorG;
+  final double phosphorB;
+  final double emission;
+  final double bloom;
+  final double phosphorTexture;
+  final double grid;
+  final double unlit;
+  final double decay;
+  final double moduleCenterX;
+  final double moduleCenterY;
+  final double moduleWidth;
+  final double moduleHeight;
+  final double glassGrain;
+  final double filament;
+  final double prismLit;
+  final double prismPressed;
+  final double filamentVariantCode;
+  final double prismBevelDepth;
+  final double prismFaceOpacity;
+  final double prismInactiveLuminosity;
 
   /// Seven-segment brightness with a stride of eight — seven segments plus one
   /// spare for a future decimal point.
@@ -66,6 +111,7 @@ abstract final class ComponentData {
   static const double sizeScale = 8.0;
   static const double typeScale = 8.0;
   static const double countScale = 64.0;
+  static const double effectScale = 2.0;
 
   /// Signed, so it needs an offset as well as a scale.
   static double encodePosition(double v) =>
@@ -74,6 +120,7 @@ abstract final class ComponentData {
   static double encodeSize(double v) => _store(v / sizeScale);
   static double encodeType(double v) => _store(v / typeScale);
   static double encodeCount(double v) => _store(v / countScale);
+  static double encodeEffect(double v) => _store(v / effectScale);
 
   /// Clamped so a component placed absurdly far out degrades to the edge of the
   /// representable range rather than wrapping into another field's value.
@@ -81,13 +128,21 @@ abstract final class ComponentData {
 
   /// texel 0: type, cx, cy
   /// texel 1: w, h, paramA
-  /// texel 2: paramB, spare, spare
-  /// texel 3 + 3k: digit k segments 0..2
-  /// texel 4 + 3k: digit k segments 3..5
-  /// texel 5 + 3k: digit k segment 6, spare, spare
-  static const int headerTexels = 3;
+  /// texel 2: paramB, variant code, prism lit
+  /// texel 3: phosphor r, g, b
+  /// texel 4: emission, bloom, phosphor texture
+  /// texel 5: grid, unlit phosphor, decay
+  /// texel 6: module cx, cy, width
+  /// texel 7: module height, glass grain, filament
+  /// texel 8: prism pressed, filament variant code, spare
+  /// texel 9: prism bevel, face opacity, inactive luminosity
+  /// texel 10 + 3k: digit k segments 0..2
+  /// texel 11 + 3k: digit k segments 3..5
+  /// texel 12 + 3k: digit k segment 6, spare, spare
+  static const int headerTexels = 10;
   static const int texelsPerDigit = 3;
-  static const int texelsPerComponent = headerTexels + maxDigits * texelsPerDigit;
+  static const int texelsPerComponent =
+      headerTexels + maxDigits * texelsPerDigit;
 
   static const int floatsPerComponent = texelsPerComponent * 4;
 
@@ -120,6 +175,35 @@ abstract final class ComponentData {
 
       // Already a fraction in [0, 1]; stored raw.
       out[base + 8] = f.paramB;
+      out[base + 9] = encodeCount(f.variantCode);
+      out[base + 10] = encodeEffect(f.prismLit);
+
+      out[base + 12] = _store(f.phosphorR);
+      out[base + 13] = _store(f.phosphorG);
+      out[base + 14] = _store(f.phosphorB);
+
+      out[base + 16] = encodeEffect(f.emission);
+      out[base + 17] = encodeEffect(f.bloom);
+      out[base + 18] = encodeEffect(f.phosphorTexture);
+
+      out[base + 20] = encodeEffect(f.grid);
+      out[base + 21] = encodeEffect(f.unlit);
+      out[base + 22] = encodeEffect(f.decay);
+
+      out[base + 24] = encodePosition(f.moduleCenterX);
+      out[base + 25] = encodePosition(f.moduleCenterY);
+      out[base + 26] = encodeSize(f.moduleWidth);
+
+      out[base + 28] = encodeSize(f.moduleHeight);
+      out[base + 29] = encodeEffect(f.glassGrain);
+      out[base + 30] = encodeEffect(f.filament);
+
+      out[base + 32] = _store(f.prismPressed);
+      out[base + 33] = encodeCount(f.filamentVariantCode);
+
+      out[base + 36] = _store(f.prismBevelDepth);
+      out[base + 37] = _store(f.prismFaceOpacity);
+      out[base + 38] = _store(f.prismInactiveLuminosity);
 
       for (var d = 0; d < maxDigits; d++) {
         final texel = base + (headerTexels + d * texelsPerDigit) * 4;

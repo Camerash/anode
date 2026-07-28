@@ -1,144 +1,138 @@
 import 'package:flutter/widgets.dart';
 
+import 'editor/effect_panel.dart';
+import 'model/optical_profile.dart';
+import 'model/settings.dart';
+import 'vfd/prism_widgets.dart';
 import 'vfd/vfd_cluster.dart';
-import 'vfd/vfd_layers.dart';
+import 'vfd/vfd_types.dart';
 import 'vfd/vfd_widgets.dart';
 
-/// Runtime controls, docked in the dead space the contain-fit leaves below the
-/// design band. The dock's height is reserved out of the cluster's safe rect, so
-/// growing it shrinks the band uniformly — it never reflows it.
-///
-/// Drawn in the VFD idiom: etched controls on the substrate, no panel fill.
-class VfdDock extends StatefulWidget {
+/// Runtime control panel. Its extent is removed from the safe rect, so opening
+/// it contain-scales the authored frame rather than reflowing components.
+class VfdDock extends StatelessWidget {
   const VfdDock({
     super.key,
     required this.controller,
+    required this.settings,
+    required this.preferences,
+    required this.editable,
     required this.autoDrive,
     required this.manualKph,
     required this.onAutoDriveChanged,
     required this.onManualKphChanged,
     required this.onUnitChanged,
-    required this.onPhosphorChanged,
     required this.onOpenLibrary,
-    required this.onLayersChanged,
+    required this.onCustomize,
+    required this.onProfileChanged,
   });
 
-  /// Height of the controls themselves, excluding the system inset below them.
-  static const double height = 104;
+  static const double height = 260;
 
   final VfdController controller;
+  final DashboardSettings settings;
+  final GlobalSettings preferences;
+  final bool editable;
   final bool autoDrive;
   final double manualKph;
   final ValueChanged<bool> onAutoDriveChanged;
   final ValueChanged<double> onManualKphChanged;
   final ValueChanged<SpeedUnit> onUnitChanged;
-  final ValueChanged<Phosphor> onPhosphorChanged;
   final VoidCallback onOpenLibrary;
-  final ValueChanged<VfdLayers> onLayersChanged;
+  final VoidCallback onCustomize;
+  final ValueChanged<OpticalProfile> onProfileChanged;
 
-  @override
-  State<VfdDock> createState() => _VfdDockState();
-}
-
-class _VfdDockState extends State<VfdDock> {
   @override
   Widget build(BuildContext context) {
-    final controller = widget.controller;
-    final palette = VfdPalette.of(controller.phosphor);
-
+    final palette = VfdPalette.of(settings.opticalProfile.phosphor);
     return SizedBox(
-      height: VfdDock.height,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            SizedBox(
-              height: 44,
+      height: height,
+      child: Column(
+        children: <Widget>[
+          SizedBox(
+            height: 50,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
               child: Row(
                 children: <Widget>[
-                  VfdButton(
-                    label: widget.autoDrive ? 'HOLD' : 'RUN',
+                  PrismButton(
+                    label: autoDrive ? 'Hold' : 'Run',
                     palette: palette,
-                    lit: widget.autoDrive,
-                    onTap: () => widget.onAutoDriveChanged(!widget.autoDrive),
+                    lit: autoDrive,
+                    role: PrismRole.compact,
+                    style: settings.prismStyle,
+                    soundEnabled: preferences.soundEnabled,
+                    hapticsEnabled: preferences.hapticsEnabled,
+                    onPressed: () => onAutoDriveChanged(!autoDrive),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: VfdCellBar(
-                      value: widget.manualKph,
+                      value: manualKph,
                       min: 0,
                       max: 260,
                       palette: palette,
-                      onChanged: widget.onManualKphChanged,
+                      onChanged: onManualKphChanged,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 68,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: VfdLegend(
-                        '${controller.displaySpeed.round()} ${controller.unit.label}',
-                        palette: palette,
-                        lit: true,
-                      ),
+                  const SizedBox(width: 8),
+                  for (final unit in SpeedUnit.values) ...<Widget>[
+                    PrismButton(
+                      label: unit.label,
+                      palette: palette,
+                      lit: controller.unit == unit,
+                      enabled: editable,
+                      role: PrismRole.compact,
+                      style: settings.prismStyle,
+                      soundEnabled: preferences.soundEnabled,
+                      hapticsEnabled: preferences.hapticsEnabled,
+                      onPressed: editable ? () => onUnitChanged(unit) : null,
                     ),
+                    const SizedBox(width: 6),
+                  ],
+                  PrismButton(
+                    label: 'Library',
+                    palette: palette,
+                    role: PrismRole.compact,
+                    style: settings.prismStyle,
+                    soundEnabled: preferences.soundEnabled,
+                    hapticsEnabled: preferences.hapticsEnabled,
+                    onPressed: onOpenLibrary,
                   ),
+                  if (!editable) ...<Widget>[
+                    const SizedBox(width: 6),
+                    PrismButton(
+                      label: 'Customize',
+                      palette: palette,
+                      lit: true,
+                      role: PrismRole.compact,
+                      style: settings.prismStyle,
+                      soundEnabled: preferences.soundEnabled,
+                      hapticsEnabled: preferences.hapticsEnabled,
+                      onPressed: onCustomize,
+                    ),
+                  ],
                 ],
               ),
             ),
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: <Widget>[
-                    _slot(VfdButton(
-                      label: 'LIBRARY',
-                      palette: palette,
-                      onTap: widget.onOpenLibrary,
-                    )),
-                    _slot(VfdRule(palette: palette)),
-                    for (final u in SpeedUnit.values)
-                      _slot(VfdButton(
-                        label: u.label,
-                        palette: palette,
-                        lit: controller.unit == u,
-                        onTap: () => widget.onUnitChanged(u),
-                      )),
-                    _slot(VfdRule(palette: palette)),
-                    for (final p in Phosphor.all)
-                      _slot(VfdButton(
-                        label: p.name,
-                        palette: palette,
-                        lit: controller.phosphor == p,
-                        onTap: () => widget.onPhosphorChanged(p),
-                      )),
-                    _slot(VfdRule(palette: palette)),
-                    for (final key in VfdLayers.keys)
-                      _slot(VfdButton(
-                        label: VfdLayers.labels[key]!,
-                        palette: palette,
-                        lit: controller.layers[key],
-                        onTap: () {
-                          final layers = controller.layers
-                              .withKey(key, !controller.layers[key]);
-                          setState(() => controller.layers = layers);
-                          widget.onLayersChanged(layers);
-                        },
-                      )),
-                  ],
-                ),
-              ),
+          ),
+          Expanded(
+            child: EffectPanel(
+              title: editable
+                  ? 'Design effects'
+                  : 'Design effects · Preset is read-only',
+              dashboardProfile: settings.opticalProfile,
+              baseProfile: settings.opticalProfile,
+              scope: EffectScope.dashboard,
+              prismStyle: settings.prismStyle,
+              soundEnabled: preferences.soundEnabled,
+              hapticsEnabled: preferences.hapticsEnabled,
+              editable: editable,
+              onProfileChanged: onProfileChanged,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
-
-  Widget _slot(Widget child) => Padding(
-        padding: const EdgeInsets.only(right: 8),
-        child: Center(child: child),
-      );
 }

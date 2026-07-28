@@ -35,7 +35,8 @@ class SimulatedSpeedSource implements SpeedSource {
   SimulatedSpeedSource() {
     _timer = Timer.periodic(const Duration(milliseconds: 100), (_) {
       final t = _sw.elapsedMilliseconds / 1000.0;
-      final v = 100 +
+      final v =
+          100 +
           70 * math.sin(t * 0.21) +
           26 * math.sin(t * 0.63 + 1.3) +
           11 * math.sin(t * 1.45);

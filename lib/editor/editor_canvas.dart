@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,8 @@ import '../model/component_instance.dart';
 import '../model/component_type.dart';
 import '../model/dashboard.dart';
 import '../model/placement.dart';
+import '../model/vfd_module.dart';
+import '../vfd/vfd_cluster.dart';
 
 class EditorCanvas extends StatelessWidget {
   const EditorCanvas({
@@ -16,20 +19,27 @@ class EditorCanvas extends StatelessWidget {
     required this.selectedId,
     required this.onSelect,
     required this.onPlacementChanged,
+    this.selectedModuleId,
+    this.onModulePlacementChanged,
+    this.program,
   });
 
   final Dashboard dashboard;
   final DesignOrientation orientation;
   final String? selectedId;
-  final ValueChanged<String> onSelect;
+  final ValueChanged<String?> onSelect;
   final void Function(String componentId, Placement placement)
   onPlacementChanged;
+  final String? selectedModuleId;
+  final void Function(String moduleId, Placement placement)?
+  onModulePlacementChanged;
+  final ui.FragmentProgram? program;
 
   @override
   Widget build(BuildContext context) {
     final aspect = dashboard.frameAspect(orientation);
     return ColoredBox(
-      color: Theme.of(context).colorScheme.surfaceContainerLowest,
+      color: const Color(0xFF050807),
       child: Center(
         child: AspectRatio(
           key: const ValueKey('editor-canvas'),
@@ -42,12 +52,36 @@ class EditorCanvas extends StatelessWidget {
                 width: 2,
               ),
             ),
-            child: _ComponentStack(
-              dashboard: dashboard,
-              orientation: orientation,
-              selectedId: selectedId,
-              onSelect: onSelect,
-              onPlacementChanged: onPlacementChanged,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onSelect(null),
+              child: Stack(
+                fit: StackFit.expand,
+                children: <Widget>[
+                  if (program != null)
+                    _LiveVfdPreview(
+                      program: program!,
+                      dashboard: dashboard,
+                      orientation: orientation,
+                    ),
+                  _ComponentStack(
+                    dashboard: dashboard,
+                    orientation: orientation,
+                    selectedId: selectedId,
+                    livePreview: program != null,
+                    onSelect: onSelect,
+                    onPlacementChanged: onPlacementChanged,
+                  ),
+                  if (selectedModuleId != null &&
+                      onModulePlacementChanged != null)
+                    _ModuleOverlay(
+                      dashboard: dashboard,
+                      orientation: orientation,
+                      selectedModuleId: selectedModuleId!,
+                      onPlacementChanged: onModulePlacementChanged!,
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -61,6 +95,7 @@ class _ComponentStack extends StatelessWidget {
     required this.dashboard,
     required this.orientation,
     required this.selectedId,
+    required this.livePreview,
     required this.onSelect,
     required this.onPlacementChanged,
   });
@@ -68,28 +103,28 @@ class _ComponentStack extends StatelessWidget {
   final Dashboard dashboard;
   final DesignOrientation orientation;
   final String? selectedId;
-  final ValueChanged<String> onSelect;
+  final bool livePreview;
+  final ValueChanged<String?> onSelect;
   final void Function(String componentId, Placement placement)
   onPlacementChanged;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-        builder: (context, constraints) {
-          final scale = constraints.maxHeight;
-          final aspect = dashboard.frameAspect(orientation);
-          final visible = dashboard.componentsIn(orientation);
-          final ordered = <ComponentInstance>[
-            ...visible.where((component) => component.id != selectedId),
-            ...visible.where((component) => component.id == selectedId),
-          ];
-          return Stack(
-            clipBehavior: Clip.none,
-            children: <Widget>[
-              // Selection chrome stays reachable without changing model order.
-              for (final component in ordered)
-                _positionedComponent(component, aspect, scale),
-            ],
-          );
+    builder: (context, constraints) {
+      final scale = constraints.maxHeight;
+      final aspect = dashboard.frameAspect(orientation);
+      final visible = dashboard.componentsIn(orientation);
+      final ordered = <ComponentInstance>[
+        ...visible.where((component) => component.id != selectedId),
+        ...visible.where((component) => component.id == selectedId),
+      ];
+      return Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          for (final component in ordered)
+            _positionedComponent(component, aspect, scale),
+        ],
+      );
     },
   );
 
@@ -101,7 +136,10 @@ class _ComponentStack extends StatelessWidget {
     final type = ComponentTypes.byId(component.typeId);
     final placement = component.placements[orientation]!;
     final center = placement.resolve(aspect);
-    final size = placement.resolveSize(type);
+    final size = placement.resolveSize(
+      type,
+      variant: component.effectiveVariant,
+    );
     return Positioned(
       key: ValueKey('canvas-${component.id}'),
       left: (aspect / 2 + center.dx - size.width / 2) * scale,
@@ -109,10 +147,14 @@ class _ComponentStack extends StatelessWidget {
       width: size.width * scale,
       height: size.height * scale,
       child: _ComponentBox(
-        component: component,
+        label:
+            ComponentTypes.byId(component.typeId)?.displayName ??
+            component.typeId,
         placement: placement,
+        defaultSize: size,
         scale: scale,
         selected: component.id == selectedId,
+        livePreview: livePreview,
         onSelect: () => onSelect(component.id),
         onChanged: (value) => onPlacementChanged(component.id, value),
       ),
@@ -122,18 +164,22 @@ class _ComponentStack extends StatelessWidget {
 
 class _ComponentBox extends StatefulWidget {
   const _ComponentBox({
-    required this.component,
+    required this.label,
     required this.placement,
+    required this.defaultSize,
     required this.scale,
     required this.selected,
+    required this.livePreview,
     required this.onSelect,
     required this.onChanged,
   });
 
-  final ComponentInstance component;
+  final String label;
   final Placement placement;
+  final Size defaultSize;
   final double scale;
   final bool selected;
+  final bool livePreview;
   final VoidCallback onSelect;
   final ValueChanged<Placement> onChanged;
 
@@ -172,16 +218,24 @@ class _ComponentBoxState extends State<_ComponentBox> {
     onPanCancel: () => _pointerOrigin = null,
     child: DecoratedBox(
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.18),
-        border: Border.all(color: color, width: widget.selected ? 2 : 1),
+        color: color.withValues(
+          alpha: widget.livePreview ? (widget.selected ? 0.06 : 0.01) : 0.18,
+        ),
+        border: Border.all(
+          color: color.withValues(
+            alpha: widget.livePreview && !widget.selected ? 0.22 : 1,
+          ),
+          width: widget.selected ? 2 : 1,
+        ),
       ),
       child: Center(
-        child: Text(
-          ComponentTypes.byId(widget.component.typeId)?.displayName ??
-              widget.component.typeId,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: color, fontSize: 11),
-        ),
+        child: widget.livePreview && !widget.selected
+            ? null
+            : Text(
+                widget.label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: color, fontSize: 11),
+              ),
       ),
     ),
   );
@@ -267,8 +321,7 @@ class _ComponentBoxState extends State<_ComponentBox> {
   }
 
   void _resize({double widthDelta = 0, double heightDelta = 0}) {
-    final type = ComponentTypes.byId(widget.component.typeId);
-    final size = _initialPlacement.resolveSize(type);
+    final size = _initialPlacement.size ?? widget.defaultSize;
     widget.onChanged(
       _initialPlacement.copyWith(
         size: Size(
@@ -281,4 +334,106 @@ class _ComponentBoxState extends State<_ComponentBox> {
 
   Offset _pointerDelta(DragUpdateDetails details) =>
       details.globalPosition - (_pointerOrigin ?? details.globalPosition);
+}
+
+class _ModuleOverlay extends StatelessWidget {
+  const _ModuleOverlay({
+    required this.dashboard,
+    required this.orientation,
+    required this.selectedModuleId,
+    required this.onPlacementChanged,
+  });
+
+  final Dashboard dashboard;
+  final DesignOrientation orientation;
+  final String selectedModuleId;
+  final void Function(String moduleId, Placement placement) onPlacementChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    if (selectedModuleId == kMainVfdModuleId) return const SizedBox.shrink();
+    VfdModule? selected;
+    for (final module in dashboard.modules) {
+      if (module.id == selectedModuleId) selected = module;
+    }
+    final placement = selected?.regionIn(orientation);
+    if (selected == null || placement == null) return const SizedBox.shrink();
+    final module = selected;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final scale = constraints.maxHeight;
+        final aspect = dashboard.frameAspect(orientation);
+        final center = placement.resolve(aspect);
+        final size = placement.size ?? Size(aspect, 1);
+        return Stack(
+          clipBehavior: Clip.none,
+          children: <Widget>[
+            Positioned(
+              key: ValueKey('module-${module.id}'),
+              left: (aspect / 2 + center.dx - size.width / 2) * scale,
+              top: (0.5 - center.dy - size.height / 2) * scale,
+              width: size.width * scale,
+              height: size.height * scale,
+              child: _ComponentBox(
+                label: module.name,
+                placement: placement,
+                defaultSize: size,
+                scale: scale,
+                selected: true,
+                livePreview: true,
+                onSelect: () {},
+                onChanged: (value) => onPlacementChanged(module.id, value),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _LiveVfdPreview extends StatefulWidget {
+  const _LiveVfdPreview({
+    required this.program,
+    required this.dashboard,
+    required this.orientation,
+  });
+
+  final ui.FragmentProgram program;
+  final Dashboard dashboard;
+  final DesignOrientation orientation;
+
+  @override
+  State<_LiveVfdPreview> createState() => _LiveVfdPreviewState();
+}
+
+class _LiveVfdPreviewState extends State<_LiveVfdPreview>
+    with SingleTickerProviderStateMixin {
+  late final VfdController _controller = VfdController(
+    vsync: this,
+    design: widget.dashboard,
+    orientation: widget.orientation,
+  )..speedKph = 95;
+
+  @override
+  void didUpdateWidget(covariant _LiveVfdPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _controller
+      ..design = widget.dashboard
+      ..orientation = widget.orientation;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => VfdCluster(
+    program: widget.program,
+    controller: _controller,
+    safeInsets: EdgeInsets.zero,
+  );
 }

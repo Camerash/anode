@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import 'vfd_layers.dart';
+import 'vfd_types.dart';
 
 /// Flutter-side colours for chrome drawn on the substrate. The real emission
 /// comes from the shader; these approximate it flatly and deliberately do not
@@ -56,7 +56,9 @@ class VfdLegend extends StatelessWidget {
         fontWeight: FontWeight.w600,
         height: 1.1,
         shadows: lit
-            ? <Shadow>[Shadow(color: color.withValues(alpha: 0.55), blurRadius: 8)]
+            ? <Shadow>[
+                Shadow(color: color.withValues(alpha: 0.55), blurRadius: 8),
+              ]
             : null,
       ),
     );
@@ -91,7 +93,9 @@ class VfdButton extends StatelessWidget {
           boxShadow: lit
               ? <BoxShadow>[
                   BoxShadow(
-                      color: color.withValues(alpha: 0.20), blurRadius: 10),
+                    color: color.withValues(alpha: 0.20),
+                    blurRadius: 10,
+                  ),
                 ]
               : null,
         ),
@@ -191,8 +195,8 @@ class VfdRule extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: 1,
-        height: height,
-        color: palette.unlit.withValues(alpha: 0.35),
-      );
+    width: 1,
+    height: height,
+    color: palette.unlit.withValues(alpha: 0.35),
+  );
 }

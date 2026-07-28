@@ -1,4 +1,5 @@
 import 'capability.dart';
+import 'action_binding.dart';
 import 'component_instance.dart';
 import 'component_type.dart';
 import 'dashboard.dart';
@@ -24,6 +25,10 @@ Set<Capability> requiredCapabilities(
     final type = ComponentTypes.byId(c.typeId);
     if (type == null) continue;
     out.addAll(type.capabilities);
+    final action = c.actionBinding;
+    if (action != null) {
+      out.addAll(ActionSpecs.byId(action.actionId)?.capabilities ?? const {});
+    }
   }
   return out;
 }

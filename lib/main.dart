@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import 'actions/action_registry.dart';
 import 'app_state.dart';
 import 'data/design_repository.dart';
 import 'library/library_page.dart';
@@ -13,6 +14,8 @@ import 'model/component_type.dart';
 import 'model/dev_design.dart';
 import 'model/placement.dart';
 import 'vfd/speed_source.dart';
+import 'vfd/design_action_overlay.dart';
+import 'vfd/prism_widgets.dart';
 import 'vfd/vfd_cluster.dart';
 import 'vfd/vfd_widgets.dart';
 import 'vfd_dock.dart';
@@ -31,11 +34,7 @@ Future<void> main() async {
 }
 
 class AnodeApp extends StatefulWidget {
-  const AnodeApp({
-    super.key,
-    required this.program,
-    required this.state,
-  });
+  const AnodeApp({super.key, required this.program, required this.state});
 
   final ui.FragmentProgram program;
   final AnodeState state;
@@ -53,7 +52,8 @@ class _AnodeAppState extends State<AnodeApp> {
       theme: ThemeData.dark(useMaterial3: true),
       home: ClusterPage(program: widget.program, state: widget.state),
       routes: <String, WidgetBuilder>{
-        '/library': (context) => LibraryPage(state: widget.state),
+        '/library': (context) =>
+            LibraryPage(state: widget.state, program: widget.program),
       },
     );
   }
@@ -66,11 +66,7 @@ class _AnodeAppState extends State<AnodeApp> {
 }
 
 class ClusterPage extends StatefulWidget {
-  const ClusterPage({
-    super.key,
-    required this.program,
-    required this.state,
-  });
+  const ClusterPage({super.key, required this.program, required this.state});
 
   final ui.FragmentProgram program;
   final AnodeState state;
@@ -84,6 +80,7 @@ class _ClusterPageState extends State<ClusterPage>
   late final VfdController _controller;
   final SimulatedSpeedSource _sim = SimulatedSpeedSource();
   StreamSubscription<double>? _sub;
+  late final ActionRegistry _actions;
   bool _autoDrive = true;
   bool _dockOpen = false;
   double _manualKph = 95;
@@ -97,6 +94,14 @@ class _ClusterPageState extends State<ClusterPage>
       orientation: DesignOrientation.landscape,
     );
     _syncAppState();
+    _actions = ActionRegistry.forCluster(
+      onOpenLibrary: _openLibrary,
+      onToggleDemo: () => widget.state.updateGlobalSettings(
+        widget.state.globalSettings.copyWith(
+          demoMode: !widget.state.globalSettings.demoMode,
+        ),
+      ),
+    );
     widget.state.addListener(_syncAppState);
     _sub = _sim.kph.listen((v) {
       if (_autoDrive) _controller.speedKph = v;
@@ -114,23 +119,28 @@ class _ClusterPageState extends State<ClusterPage>
   }
 
   void _syncAppState() {
-    _controller
-      ..design = widget.state.activeDesign
-      ..layers = widget.state.globalSettings.layers
-      ..phosphor = widget.state.activeDesign.renderSettings.phosphor;
+    _controller.design = widget.state.activeDesign;
     if (mounted) setState(() {});
+  }
+
+  void _openLibrary() => Navigator.of(context).pushNamed<void>('/library');
+
+  void _customize() {
+    final source = widget.state.activeDesign;
+    final dashboard = widget.state.customizeActiveDesign();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Forked ${source.name}. Editing user dashboard "${dashboard.name}".',
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    if (reduceMotion && _controller.layers.tiltParallax) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        setState(() {
-          _controller.layers = _controller.layers.withKey('tiltParallax', false);
-        });
-      });
-    }
+    _controller.reduceMotion = reduceMotion;
 
     final windowPadding = MediaQuery.paddingOf(context);
 
@@ -138,8 +148,7 @@ class _ClusterPageState extends State<ClusterPage>
     // honest: the contain-fit shrinks it uniformly and re-centres it, so the
     // aspect never changes and nothing reflows. The substrate still reaches
     // every edge behind the controls.
-    final dockExtent =
-        _dockOpen ? VfdDock.height + windowPadding.bottom : 0.0;
+    final dockExtent = _dockOpen ? VfdDock.height + windowPadding.bottom : 0.0;
     final clusterInsets = windowPadding.copyWith(
       bottom: _dockOpen ? dockExtent : windowPadding.bottom,
     );
@@ -169,6 +178,13 @@ class _ClusterPageState extends State<ClusterPage>
               );
             },
           ),
+          DesignActionOverlay(
+            design: widget.state.activeDesign,
+            orientation: _controller.orientation,
+            controller: _controller,
+            registry: _actions,
+            safeInsets: clusterInsets,
+          ),
           // Content insets to the safe area; the background does not.
           Padding(
             padding: clusterInsets,
@@ -176,12 +192,16 @@ class _ClusterPageState extends State<ClusterPage>
               alignment: Alignment.bottomRight,
               child: Padding(
                 padding: const EdgeInsets.all(12),
-                child: VfdButton(
+                child: PrismButton(
                   // Auto-hide after a few seconds is still to come.
                   label: 'SET',
                   palette: VfdPalette.of(_controller.phosphor),
                   lit: _dockOpen,
-                  onTap: () => setState(() => _dockOpen = !_dockOpen),
+                  role: PrismRole.compact,
+                  style: widget.state.activeDesign.renderSettings.prismStyle,
+                  soundEnabled: widget.state.globalSettings.soundEnabled,
+                  hapticsEnabled: widget.state.globalSettings.hapticsEnabled,
+                  onPressed: () => setState(() => _dockOpen = !_dockOpen),
                 ),
               ),
             ),
@@ -195,27 +215,26 @@ class _ClusterPageState extends State<ClusterPage>
                 padding: EdgeInsets.only(bottom: windowPadding.bottom),
                 child: VfdDock(
                   controller: _controller,
+                  settings: widget.state.activeDesign.renderSettings,
+                  preferences: widget.state.globalSettings,
+                  editable: widget.state.activeDesignEditable,
                   autoDrive: _autoDrive,
                   manualKph: _manualKph,
                   onAutoDriveChanged: (v) => setState(() => _autoDrive = v),
                   onUnitChanged: (unit) =>
                       widget.state.updateActiveComponentParam(
-                    ComponentTypes.speedDigits,
-                    'unit',
-                    unit.name,
-                  ),
-                  onPhosphorChanged: (phosphor) =>
-                      widget.state.updateActiveSettings(
-                    widget.state.activeDesign.renderSettings.copyWith(
-                      phosphorName: phosphor.name,
-                    ),
-                  ),
-                  onOpenLibrary: () =>
-                      Navigator.of(context).pushNamed<void>('/library'),
-                  onLayersChanged: (layers) =>
-                      widget.state.updateGlobalSettings(
-                    widget.state.globalSettings.copyWith(layers: layers),
-                  ),
+                        ComponentTypes.speedDigits,
+                        'unit',
+                        unit.name,
+                      ),
+                  onOpenLibrary: _openLibrary,
+                  onCustomize: _customize,
+                  onProfileChanged: (profile) =>
+                      widget.state.updateEditableActiveSettings(
+                        widget.state.activeDesign.renderSettings.copyWith(
+                          opticalProfile: profile,
+                        ),
+                      ),
                   onManualKphChanged: (v) => setState(() {
                     _autoDrive = false;
                     _manualKph = v;

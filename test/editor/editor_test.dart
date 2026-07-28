@@ -3,6 +3,7 @@ import 'package:anode/editor/editor_page.dart';
 import 'package:anode/model/dashboard.dart';
 import 'package:anode/model/dev_design.dart';
 import 'package:anode/model/placement.dart';
+import 'package:anode/model/vfd_module.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -25,7 +26,7 @@ void main() {
     );
 
     expect(_canvasAspect(tester), closeTo(2.6, 0.001));
-    await tester.tap(find.text('portrait'));
+    await tester.tap(find.text('PORTRAIT'));
     await tester.pump();
     expect(_canvasAspect(tester), closeTo(1 / 2.6, 0.001));
   });
@@ -49,9 +50,10 @@ void main() {
       ),
     );
 
-    final canvasRight =
-        tester.getTopRight(find.byKey(const ValueKey('editor-canvas'))).dx;
-    final toolsLeft = tester.getTopLeft(find.text('Components')).dx;
+    final canvasRight = tester
+        .getTopRight(find.byKey(const ValueKey('editor-canvas')))
+        .dx;
+    final toolsLeft = tester.getTopLeft(find.text('COMPONENTS')).dx;
     expect(toolsLeft, greaterThan(canvasRight));
   });
 
@@ -150,6 +152,108 @@ void main() {
     );
     expect(find.text('Parameters'), findsOneWidget);
     expect(find.text('celsius'), findsOneWidget);
+  });
+
+  testWidgets('secondary module region drags in displayed orientation', (
+    tester,
+  ) async {
+    var dashboard = Dashboard(
+      id: 'modules',
+      name: 'Modules',
+      supportedOrientations: <DesignOrientation>{
+        DesignOrientation.landscape,
+        DesignOrientation.portrait,
+      },
+      components: const [],
+      modules: <VfdModule>[
+        VfdModule(
+          id: 'secondary',
+          name: 'Secondary',
+          regions: const <DesignOrientation, Placement>{
+            DesignOrientation.landscape: Placement(size: Size(0.8, 0.4)),
+            DesignOrientation.portrait: Placement(
+              offset: Offset(0, 0.2),
+              size: Size(0.4, 0.8),
+            ),
+          },
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: SizedBox(
+            width: 780,
+            height: 300,
+            child: EditorCanvas(
+              dashboard: dashboard,
+              orientation: DesignOrientation.landscape,
+              selectedId: null,
+              selectedModuleId: 'secondary',
+              onSelect: (_) {},
+              onPlacementChanged: (_, _) {},
+              onModulePlacementChanged: (id, placement) {
+                final module = dashboard.modules.firstWhere(
+                  (value) => value.id == id,
+                );
+                dashboard = dashboard.withModule(
+                  module.copyWith(
+                    regions: <DesignOrientation, Placement>{
+                      ...module.regions,
+                      DesignOrientation.landscape: placement,
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.drag(
+      find.byKey(const ValueKey('module-secondary')),
+      const Offset(30, -15),
+    );
+    await tester.pump();
+
+    expect(
+      dashboard.modules.last.regions[DesignOrientation.landscape]!.offset,
+      const Offset(0.1, 0.05),
+    );
+    expect(
+      dashboard.modules.last.regions[DesignOrientation.portrait]!.offset,
+      const Offset(0, 0.2),
+    );
+  });
+
+  testWidgets('reset applies recommended size explicitly', (tester) async {
+    tester.view.physicalSize = const Size(1200, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorPage(
+          dashboard: dashboard,
+          onChanged: (value) => dashboard = value,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('SPEED DIGITS'));
+    await tester.pump();
+    await tester.ensureVisible(find.text('RESET TO VARIANT SIZE'));
+    await tester.tap(find.text('RESET TO VARIANT SIZE'));
+    await tester.pump();
+
+    expect(
+      dashboard.components.first.placements[DesignOrientation.landscape]!.size,
+      const Size(1.035, 0.588),
+    );
   });
 }
 
