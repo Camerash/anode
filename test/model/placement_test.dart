@@ -5,7 +5,7 @@ import 'package:anode/model/placement.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  // The aspect spread a single authored orientation has to absorb.
+  // Representative authored fixed-frame aspects.
   const aspects = <String, double>{
     'authored 2.6:1': 2.6,
     'phone landscape 18:9': 2.0,
@@ -96,7 +96,7 @@ void main() {
     );
   });
 
-  group('adaptive axis sizing', () {
+  group('span axis sizing', () {
     test('horizontal span tracks frame width while preserving insets', () {
       const placement = Placement(
         size: Size(0.4, 0.2),

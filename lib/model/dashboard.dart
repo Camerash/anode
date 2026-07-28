@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'component_instance.dart';
+import 'component_type.dart';
 import 'design.dart';
 import 'design_preset.dart';
 import 'placement.dart';
@@ -18,8 +19,8 @@ class Dashboard implements Design {
   Dashboard({
     required this.id,
     required this.name,
-    required Set<DesignOrientation> supportedOrientations,
     required List<ComponentInstance> components,
+    this.primaryOrientation = DesignOrientation.landscape,
     List<VfdModule>? modules,
     Map<DesignOrientation, FrameSpec>? frameSpecs,
     Map<DesignOrientation, double>? frameAspects,
@@ -27,13 +28,10 @@ class Dashboard implements Design {
     this.sourcePresetId,
     this.sourcePresetVersion,
     this.forkedAt,
-  }) : supportedOrientations = Set<DesignOrientation>.unmodifiable(
-         supportedOrientations,
-       ),
-       components = List<ComponentInstance>.unmodifiable(components),
+  }) : components = List<ComponentInstance>.unmodifiable(components),
        modules = normaliseVfdModules(modules),
        frameSpecs = normaliseFrameSpecs(
-         supportedOrientations,
+         primaryOrientation,
          specs: frameSpecs,
          legacyAspects: frameAspects,
        ),
@@ -49,7 +47,7 @@ class Dashboard implements Design {
   }) => Dashboard(
     id: id,
     name: name ?? preset.name,
-    supportedOrientations: <DesignOrientation>{...preset.supportedOrientations},
+    primaryOrientation: preset.primaryOrientation,
     components: <ComponentInstance>[
       for (final c in preset.components)
         ComponentInstance(
@@ -79,7 +77,7 @@ class Dashboard implements Design {
   }) => Dashboard(
     id: id,
     name: name,
-    supportedOrientations: <DesignOrientation>{...source.supportedOrientations},
+    primaryOrientation: source.primaryOrientation,
     components: <ComponentInstance>[...source.components],
     modules: <VfdModule>[...source.modules],
     frameSpecs: <DesignOrientation, FrameSpec>{...source.frameSpecs},
@@ -94,7 +92,10 @@ class Dashboard implements Design {
   @override
   final String name;
   @override
-  final Set<DesignOrientation> supportedOrientations;
+  final DesignOrientation primaryOrientation;
+  @override
+  Set<DesignOrientation> get authoredOrientations =>
+      Set<DesignOrientation>.unmodifiable(frameSpecs.keys);
   @override
   final List<ComponentInstance> components;
   @override
@@ -114,24 +115,29 @@ class Dashboard implements Design {
   final DateTime? forkedAt;
 
   @override
-  bool supports(DesignOrientation orientation) =>
-      supportedOrientations.contains(orientation);
+  bool hasAuthoredLayout(DesignOrientation orientation) =>
+      frameSpecs.containsKey(orientation);
+
+  @override
+  DesignOrientation layoutForViewport(DesignOrientation orientation) =>
+      hasAuthoredLayout(orientation) ? orientation : primaryOrientation;
 
   @override
   DashboardSettings get renderSettings => settings;
 
   @override
   FrameSpec frameSpec(DesignOrientation orientation) =>
-      frameSpecs[orientation] ??
-      FrameSpec(referenceAspect: kDefaultFrameAspects[orientation]!);
+      frameSpecs[orientation] ?? frameSpecs[primaryOrientation]!;
 
   @override
-  double frameAspect(DesignOrientation orientation, {double? viewportAspect}) =>
-      frameSpec(orientation).resolve(viewportAspect: viewportAspect);
+  double frameAspect(DesignOrientation orientation) =>
+      frameSpec(orientation).referenceAspect;
 
   @override
   List<ComponentInstance> componentsIn(DesignOrientation orientation) =>
-      components.where((c) => c.appearsIn(orientation)).toList();
+      components
+          .where((c) => c.appearsIn(layoutForViewport(orientation)))
+          .toList();
 
   @override
   VfdModule moduleFor(ComponentInstance component) => modules.firstWhere(
@@ -142,7 +148,7 @@ class Dashboard implements Design {
   Dashboard copyWith({
     String? id,
     String? name,
-    Set<DesignOrientation>? supportedOrientations,
+    DesignOrientation? primaryOrientation,
     List<ComponentInstance>? components,
     List<VfdModule>? modules,
     Map<DesignOrientation, FrameSpec>? frameSpecs,
@@ -151,7 +157,7 @@ class Dashboard implements Design {
   }) => Dashboard(
     id: id ?? this.id,
     name: name ?? this.name,
-    supportedOrientations: supportedOrientations ?? this.supportedOrientations,
+    primaryOrientation: primaryOrientation ?? this.primaryOrientation,
     components: components ?? this.components,
     modules: modules ?? this.modules,
     frameSpecs:
@@ -159,7 +165,7 @@ class Dashboard implements Design {
         (frameAspects == null
             ? this.frameSpecs
             : normaliseFrameSpecs(
-                supportedOrientations ?? this.supportedOrientations,
+                primaryOrientation ?? this.primaryOrientation,
                 legacyAspects: frameAspects,
               )),
     settings: settings ?? this.settings,
@@ -216,11 +222,91 @@ class Dashboard implements Design {
     );
   }
 
+  /// Creates an independently editable alternate layout whose initial visual
+  /// appearance matches the contained primary layout.
+  Dashboard withBakedLayout(
+    DesignOrientation orientation, {
+    required double aspect,
+  }) {
+    if (hasAuthoredLayout(orientation) || !aspect.isFinite || aspect <= 0) {
+      return this;
+    }
+    final sourceOrientation = primaryOrientation;
+    final sourceAspect = frameAspect(sourceOrientation);
+    final bakedComponents = <ComponentInstance>[
+      for (final component in components)
+        if (component.appearsIn(sourceOrientation))
+          component.withPlacement(
+            orientation,
+            bakeContainedPlacement(
+              placement: component.placements[sourceOrientation]!,
+              resolvedSize: component.placements[sourceOrientation]!
+                  .resolveSizeForAspect(
+                    sourceAspect,
+                    ComponentTypes.byId(component.typeId),
+                    variant: component.effectiveVariant,
+                  ),
+              sourceAspect: sourceAspect,
+              targetAspect: aspect,
+            ),
+          )
+        else
+          component,
+    ];
+    final bakedModules = <VfdModule>[
+      for (final module in modules)
+        if (module.regionIn(sourceOrientation) case final region?)
+          module.copyWith(
+            regions: <DesignOrientation, Placement>{
+              ...module.regions,
+              orientation: bakeContainedPlacement(
+                placement: region,
+                resolvedSize: region.resolveSizeForAspect(sourceAspect, null),
+                sourceAspect: sourceAspect,
+                targetAspect: aspect,
+              ),
+            },
+          )
+        else
+          module,
+    ];
+    return copyWith(
+      frameSpecs: <DesignOrientation, FrameSpec>{
+        ...frameSpecs,
+        orientation: FrameSpec(referenceAspect: aspect),
+      },
+      components: bakedComponents,
+      modules: bakedModules,
+    );
+  }
+
+  Dashboard withoutLayout(DesignOrientation orientation) {
+    if (orientation == primaryOrientation || !hasAuthoredLayout(orientation)) {
+      return this;
+    }
+    final nextSpecs = <DesignOrientation, FrameSpec>{...frameSpecs}
+      ..remove(orientation);
+    return copyWith(
+      frameSpecs: nextSpecs,
+      components: <ComponentInstance>[
+        for (final component in components)
+          component.withPlacement(orientation, null),
+      ],
+      modules: <VfdModule>[
+        for (final module in modules)
+          module.copyWith(
+            regions: <DesignOrientation, Placement>{...module.regions}
+              ..remove(orientation),
+          ),
+      ],
+    );
+  }
+
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': kSchemaVersion,
     'id': id,
     'name': name,
-    'supportedOrientations': supportedOrientations.map((o) => o.name).toList(),
+    'primaryOrientation': primaryOrientation.name,
     'frameSpecs': frameSpecsToJson(frameSpecs),
     'components': components.map((c) => c.toJson()).toList(),
     'modules': modules.map((module) => module.toJson()).toList(),
@@ -230,23 +316,32 @@ class Dashboard implements Design {
     'forkedAt': forkedAt?.toIso8601String(),
   };
 
-  factory Dashboard.fromJson(Map<String, Object?> json) => Dashboard(
-    id: json['id'] as String? ?? '',
-    name: json['name'] as String? ?? '',
-    supportedOrientations: parseOrientations(json['supportedOrientations']),
-    frameSpecs: parseFrameSpecs(json['frameSpecs']),
-    frameAspects: parseFrameAspects(json['frameAspects']),
-    components: parseComponents(json['components']),
-    modules: parseVfdModules(json['modules']),
-    settings: DashboardSettings.fromJson(
-      (json['settings'] as Map?)?.cast<String, Object?>() ??
-          const <String, Object?>{},
-    ),
-    sourcePresetId: json['sourcePresetId'] as String?,
-    sourcePresetVersion: (json['sourcePresetVersion'] as num?)?.toInt(),
-    forkedAt: switch (json['forkedAt']) {
-      final String s => DateTime.tryParse(s),
-      _ => null,
-    },
-  );
+  factory Dashboard.fromJson(Map<String, Object?> json) {
+    final specs = parseFrameSpecs(json['frameSpecs']);
+    final legacyAspects = parseFrameAspects(json['frameAspects']);
+    return Dashboard(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      primaryOrientation: parsePrimaryOrientation(
+        json['primaryOrientation'],
+        specs: specs,
+        legacyAspects: legacyAspects,
+        legacySupported: json['supportedOrientations'],
+      ),
+      frameSpecs: specs,
+      frameAspects: legacyAspects,
+      components: parseComponents(json['components']),
+      modules: parseVfdModules(json['modules']),
+      settings: DashboardSettings.fromJson(
+        (json['settings'] as Map?)?.cast<String, Object?>() ??
+            const <String, Object?>{},
+      ),
+      sourcePresetId: json['sourcePresetId'] as String?,
+      sourcePresetVersion: (json['sourcePresetVersion'] as num?)?.toInt(),
+      forkedAt: switch (json['forkedAt']) {
+        final String s => DateTime.tryParse(s),
+        _ => null,
+      },
+    );
+  }
 }

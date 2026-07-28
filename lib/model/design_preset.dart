@@ -7,7 +7,7 @@ import 'settings.dart';
 import 'vfd_module.dart';
 
 /// Bumped when the stored shape changes in a way older builds cannot read.
-const int kSchemaVersion = 3;
+const int kSchemaVersion = 4;
 
 /// A shipped design: immutable, versioned, and never edited in place. Editing
 /// one forks it into a [Dashboard].
@@ -17,19 +17,16 @@ class DesignPreset implements Design {
     required this.id,
     required this.name,
     required this.version,
-    required Set<DesignOrientation> supportedOrientations,
     required List<ComponentInstance> components,
+    this.primaryOrientation = DesignOrientation.landscape,
     List<VfdModule>? modules,
     Map<DesignOrientation, FrameSpec>? frameSpecs,
     Map<DesignOrientation, double>? frameAspects,
     DashboardSettings? defaults,
-  }) : supportedOrientations = Set<DesignOrientation>.unmodifiable(
-         supportedOrientations,
-       ),
-       components = List<ComponentInstance>.unmodifiable(components),
+  }) : components = List<ComponentInstance>.unmodifiable(components),
        modules = normaliseVfdModules(modules),
        frameSpecs = normaliseFrameSpecs(
-         supportedOrientations,
+         primaryOrientation,
          specs: frameSpecs,
          legacyAspects: frameAspects,
        ),
@@ -41,7 +38,10 @@ class DesignPreset implements Design {
   final String name;
   final int version;
   @override
-  final Set<DesignOrientation> supportedOrientations;
+  final DesignOrientation primaryOrientation;
+  @override
+  Set<DesignOrientation> get authoredOrientations =>
+      Set<DesignOrientation>.unmodifiable(frameSpecs.keys);
   @override
   final List<ComponentInstance> components;
   @override
@@ -59,21 +59,26 @@ class DesignPreset implements Design {
   DashboardSettings get renderSettings => defaults;
 
   @override
-  bool supports(DesignOrientation orientation) =>
-      supportedOrientations.contains(orientation);
+  bool hasAuthoredLayout(DesignOrientation orientation) =>
+      frameSpecs.containsKey(orientation);
+
+  @override
+  DesignOrientation layoutForViewport(DesignOrientation orientation) =>
+      hasAuthoredLayout(orientation) ? orientation : primaryOrientation;
 
   @override
   FrameSpec frameSpec(DesignOrientation orientation) =>
-      frameSpecs[orientation] ??
-      FrameSpec(referenceAspect: kDefaultFrameAspects[orientation]!);
+      frameSpecs[orientation] ?? frameSpecs[primaryOrientation]!;
 
   @override
-  double frameAspect(DesignOrientation orientation, {double? viewportAspect}) =>
-      frameSpec(orientation).resolve(viewportAspect: viewportAspect);
+  double frameAspect(DesignOrientation orientation) =>
+      frameSpec(orientation).referenceAspect;
 
   @override
   List<ComponentInstance> componentsIn(DesignOrientation orientation) =>
-      components.where((c) => c.appearsIn(orientation)).toList();
+      components
+          .where((c) => c.appearsIn(layoutForViewport(orientation)))
+          .toList();
 
   @override
   VfdModule moduleFor(ComponentInstance component) => modules.firstWhere(
@@ -86,36 +91,57 @@ class DesignPreset implements Design {
     'id': id,
     'name': name,
     'version': version,
-    'supportedOrientations': supportedOrientations.map((o) => o.name).toList(),
+    'primaryOrientation': primaryOrientation.name,
     'frameSpecs': frameSpecsToJson(frameSpecs),
     'components': components.map((c) => c.toJson()).toList(),
     'modules': modules.map((module) => module.toJson()).toList(),
     'defaults': defaults.toJson(),
   };
 
-  factory DesignPreset.fromJson(Map<String, Object?> json) => DesignPreset(
-    id: json['id'] as String? ?? '',
-    name: json['name'] as String? ?? '',
-    version: (json['version'] as num?)?.toInt() ?? 1,
-    supportedOrientations: parseOrientations(json['supportedOrientations']),
-    frameSpecs: parseFrameSpecs(json['frameSpecs']),
-    frameAspects: parseFrameAspects(json['frameAspects']),
-    components: parseComponents(json['components']),
-    modules: parseVfdModules(json['modules']),
-    defaults: DashboardSettings.fromJson(
-      (json['defaults'] as Map?)?.cast<String, Object?>() ??
-          const <String, Object?>{},
-    ),
-  );
+  factory DesignPreset.fromJson(Map<String, Object?> json) {
+    final specs = parseFrameSpecs(json['frameSpecs']);
+    final legacyAspects = parseFrameAspects(json['frameAspects']);
+    return DesignPreset(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      version: (json['version'] as num?)?.toInt() ?? 1,
+      primaryOrientation: parsePrimaryOrientation(
+        json['primaryOrientation'],
+        specs: specs,
+        legacyAspects: legacyAspects,
+        legacySupported: json['supportedOrientations'],
+      ),
+      frameSpecs: specs,
+      frameAspects: legacyAspects,
+      components: parseComponents(json['components']),
+      modules: parseVfdModules(json['modules']),
+      defaults: DashboardSettings.fromJson(
+        (json['defaults'] as Map?)?.cast<String, Object?>() ??
+            const <String, Object?>{},
+      ),
+    );
+  }
 }
 
-Set<DesignOrientation> parseOrientations(Object? raw) {
-  final out = <DesignOrientation>{};
-  for (final v in (raw as List?) ?? const <Object?>[]) {
-    final o = DesignOrientation.byName(v as String? ?? '');
-    if (o != null) out.add(o);
+DesignOrientation parsePrimaryOrientation(
+  Object? raw, {
+  required Map<DesignOrientation, FrameSpec> specs,
+  required Map<DesignOrientation, double> legacyAspects,
+  Object? legacySupported,
+}) {
+  final explicit = DesignOrientation.byName(raw as String? ?? '');
+  if (explicit != null) return explicit;
+  if (specs.containsKey(DesignOrientation.landscape) ||
+      legacyAspects.containsKey(DesignOrientation.landscape)) {
+    return DesignOrientation.landscape;
   }
-  return out.isEmpty ? <DesignOrientation>{DesignOrientation.landscape} : out;
+  for (final value in (legacySupported as List?) ?? const <Object?>[]) {
+    final parsed = DesignOrientation.byName(value as String? ?? '');
+    if (parsed != null) return parsed;
+  }
+  return specs.keys.firstOrNull ??
+      legacyAspects.keys.firstOrNull ??
+      DesignOrientation.landscape;
 }
 
 /// Unknown types survive so imported designs from newer builds round-trip

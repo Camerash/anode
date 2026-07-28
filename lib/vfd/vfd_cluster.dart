@@ -82,35 +82,23 @@ class VfdController extends ChangeNotifier {
     required Design design,
     DesignOrientation orientation = DesignOrientation.landscape,
   }) : _design = design,
-       _orientation = design.supports(orientation)
-           ? orientation
-           : design.supportedOrientations.first {
+       _viewportOrientation = orientation,
+       _orientation = design.layoutForViewport(orientation) {
     _ticker = vsync.createTicker(_onTick)..start();
   }
 
+  DesignOrientation _viewportOrientation;
   DesignOrientation _orientation;
   DesignOrientation get orientation => _orientation;
   set orientation(DesignOrientation value) {
-    if (!_design.supports(value) || value == _orientation) return;
-    _orientation = value;
+    _viewportOrientation = value;
+    final next = _design.layoutForViewport(value);
+    if (next == _orientation) return;
+    _orientation = next;
     _banks.clear();
   }
 
-  double? _viewportAspect;
-
-  /// Fixed faces retain their authored reference aspect. Adaptive faces resolve
-  /// against the current safe viewport supplied by [VfdCluster].
-  double get aspect => _design.frameAspect(
-    _orientation,
-    viewportAspect: _viewportAspect == null
-        ? null
-        : orientViewportAspect(_viewportAspect!, _orientation),
-  );
-
-  set viewportAspect(double value) {
-    if (!value.isFinite || value <= 0 || value == _viewportAspect) return;
-    _viewportAspect = value;
-  }
+  double get aspect => _design.frameAspect(_orientation);
 
   late final Ticker _ticker;
   Duration _last = Duration.zero;
@@ -129,9 +117,7 @@ class VfdController extends ChangeNotifier {
   set design(Design value) {
     if (identical(value, _design)) return;
     _design = value;
-    if (!value.supports(_orientation)) {
-      _orientation = value.supportedOrientations.first;
-    }
+    _orientation = value.layoutForViewport(_viewportOrientation);
     _banks.clear();
   }
 
@@ -456,8 +442,7 @@ class VfdCluster extends StatefulWidget {
   final VfdController controller;
 
   /// Where content may be laid out inside this widget. Defaults to the window
-  /// padding, which is only correct when the cluster fills the window — a
-  /// parent that shrinks it (the settings dock) must pass its own insets.
+  /// padding, which is only correct when the cluster fills the window.
   final EdgeInsets? safeInsets;
 
   @override
@@ -488,9 +473,6 @@ class _VfdClusterState extends State<VfdCluster> {
             math.max(padding.left + 1, size.width - padding.right),
             math.max(padding.top + 1, size.height - padding.bottom),
           );
-          widget.controller.viewportAspect =
-              safeRect.width / math.max(1, safeRect.height);
-
           return CustomPaint(
             painter: VfdPainter(
               shader: _shader,

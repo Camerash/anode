@@ -27,7 +27,8 @@ class EditorCanvas extends StatefulWidget {
     this.selectedModuleId,
     this.onModulePlacementChanged,
     this.renderAssets,
-    this.adaptiveAspect,
+    this.previewOrientation,
+    this.editable = true,
   });
 
   final Dashboard dashboard;
@@ -40,7 +41,8 @@ class EditorCanvas extends StatefulWidget {
   final void Function(String moduleId, Placement placement)?
   onModulePlacementChanged;
   final VfdRenderAssets? renderAssets;
-  final double? adaptiveAspect;
+  final DesignOrientation? previewOrientation;
+  final bool editable;
 
   @override
   State<EditorCanvas> createState() => _EditorCanvasState();
@@ -55,6 +57,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
   void didUpdateWidget(covariant EditorCanvas oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.orientation != widget.orientation ||
+        oldWidget.previewOrientation != widget.previewOrientation ||
         oldWidget.dashboard.id != widget.dashboard.id) {
       _fit();
     }
@@ -68,10 +71,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
 
   @override
   Widget build(BuildContext context) {
-    final aspect = widget.dashboard.frameAspect(
-      widget.orientation,
-      viewportAspect: widget.adaptiveAspect,
-    );
+    final aspect = widget.dashboard.frameAspect(widget.orientation);
     final palette = VfdPalette.of(
       widget.dashboard.settings.opticalProfile.phosphor,
     );
@@ -187,7 +187,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
     size: sceneSize,
     child: GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: _mode == CanvasInteractionMode.edit
+      onTap: _mode == CanvasInteractionMode.edit && widget.editable
           ? () => widget.onSelect(null)
           : null,
       child: Stack(
@@ -207,7 +207,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
             ),
           ),
           IgnorePointer(
-            ignoring: _mode == CanvasInteractionMode.navigate,
+            ignoring:
+                _mode == CanvasInteractionMode.navigate || !widget.editable,
             child: _ComponentStack(
               dashboard: widget.dashboard,
               orientation: widget.orientation,
@@ -223,7 +224,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
           if (widget.selectedModuleId != null &&
               widget.onModulePlacementChanged != null)
             IgnorePointer(
-              ignoring: _mode == CanvasInteractionMode.navigate,
+              ignoring:
+                  _mode == CanvasInteractionMode.navigate || !widget.editable,
               child: _ModuleOverlay(
                 dashboard: widget.dashboard,
                 orientation: widget.orientation,
@@ -250,7 +252,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
             top: frame.top + 7,
             child: IgnorePointer(
               child: VfdLegend(
-                '${widget.orientation.name} · ${aspect.toStringAsFixed(3)}:1',
+                _frameLabel(aspect),
                 palette: palette,
                 lit: true,
                 size: 9,
@@ -261,6 +263,15 @@ class _EditorCanvasState extends State<EditorCanvas> {
       ),
     ),
   );
+
+  String _frameLabel(double aspect) {
+    final preview = widget.previewOrientation ?? widget.orientation;
+    if (preview == widget.orientation) {
+      return '${preview.name} · ${aspect.toStringAsFixed(3)}:1';
+    }
+    return '${preview.name} preview · inherited ${widget.orientation.name} · '
+        '${aspect.toStringAsFixed(3)}:1';
+  }
 
   void _fit() {
     _camera.value = Matrix4.identity();

@@ -49,10 +49,7 @@ class EditorPage extends StatefulWidget {
 
 class _EditorPageState extends State<EditorPage> {
   late Dashboard _dashboard = widget.dashboard;
-  late DesignOrientation _orientation =
-      _dashboard.supports(DesignOrientation.portrait)
-      ? DesignOrientation.portrait
-      : _dashboard.supportedOrientations.first;
+  late DesignOrientation _orientation = _dashboard.primaryOrientation;
   bool _initialOrientationResolved = false;
   String? _selectedId;
   String? _selectedModuleId;
@@ -60,6 +57,9 @@ class _EditorPageState extends State<EditorPage> {
 
   VfdPalette get _palette =>
       VfdPalette.of(_dashboard.settings.opticalProfile.phosphor);
+  DesignOrientation get _layoutOrientation =>
+      _dashboard.layoutForViewport(_orientation);
+  bool get _layoutInherited => _layoutOrientation != _orientation;
 
   @override
   void didChangeDependencies() {
@@ -70,7 +70,7 @@ class _EditorPageState extends State<EditorPage> {
     final current = size.width > size.height
         ? DesignOrientation.landscape
         : DesignOrientation.portrait;
-    if (_dashboard.supports(current)) _orientation = current;
+    _orientation = current;
   }
 
   @override
@@ -113,7 +113,7 @@ class _EditorPageState extends State<EditorPage> {
             size: 12,
           ),
         ),
-        for (final value in _dashboard.supportedOrientations) ...<Widget>[
+        for (final value in DesignOrientation.values) ...<Widget>[
           PrismButton(
             key: ValueKey('orientation-${value.name}'),
             label: value.name,
@@ -124,7 +124,11 @@ class _EditorPageState extends State<EditorPage> {
             style: _dashboard.settings.prismStyle,
             soundEnabled: widget.soundEnabled,
             hapticsEnabled: widget.hapticsEnabled,
-            onPressed: () => setState(() => _orientation = value),
+            onPressed: () => setState(() {
+              _orientation = value;
+              _selectedId = null;
+              _selectedModuleId = null;
+            }),
           ),
           const SizedBox(width: 4),
         ],
@@ -134,9 +138,6 @@ class _EditorPageState extends State<EditorPage> {
 
   Widget _workspace(BoxConstraints constraints) {
     final portrait = _orientation == DesignOrientation.portrait;
-    final windowAspect =
-        constraints.maxWidth / math.max(1, constraints.maxHeight);
-    final adaptiveAspect = orientViewportAspect(windowAspect, _orientation);
     final maxExtent = portrait
         ? math.max(160.0, constraints.maxHeight - 120)
         : math.max(240.0, constraints.maxWidth - 60);
@@ -153,8 +154,9 @@ class _EditorPageState extends State<EditorPage> {
       padding: const EdgeInsets.all(4),
       child: EditorCanvas(
         dashboard: _dashboard,
-        orientation: _orientation,
-        adaptiveAspect: adaptiveAspect,
+        orientation: _layoutOrientation,
+        previewOrientation: _orientation,
+        editable: !_layoutInherited,
         selectedId: _selectedId,
         selectedModuleId: _selectedModuleId,
         onSelect: _selectComponent,
@@ -175,11 +177,10 @@ class _EditorPageState extends State<EditorPage> {
       content: canvas,
       drawer: _EditorServicePanel(
         dashboard: _dashboard,
-        orientation: _orientation,
-        frameAspect: _dashboard.frameAspect(
-          _orientation,
-          viewportAspect: adaptiveAspect,
-        ),
+        orientation: _layoutOrientation,
+        previewOrientation: _orientation,
+        layoutInherited: _layoutInherited,
+        frameAspect: _dashboard.frameAspect(_layoutOrientation),
         selectedId: _selectedId,
         selectedModuleId: _selectedModuleId,
         palette: _palette,
@@ -197,7 +198,8 @@ class _EditorPageState extends State<EditorPage> {
         onComponentChanged: _replaceComponent,
         onDashboardChanged: _replaceDashboard,
         onFrameAspectChanged: _setFrameAspect,
-        onFrameModeChanged: _setFrameMode,
+        onCreateLayout: _createPreviewLayout,
+        onRemoveLayout: _removePreviewLayout,
         onPlacementChanged: _setPlacement,
         onModulePlacementChanged: _setModulePlacement,
       ),
@@ -215,34 +217,39 @@ class _EditorPageState extends State<EditorPage> {
   });
 
   void _setFrameAspect(double value) {
-    if (!value.isFinite || value <= 0) return;
-    final current = _dashboard.frameSpec(_orientation);
+    if (_layoutInherited || !value.isFinite || value <= 0) return;
+    final current = _dashboard.frameSpec(_layoutOrientation);
     _replaceDashboard(
       _dashboard.copyWith(
         frameSpecs: <DesignOrientation, FrameSpec>{
           ..._dashboard.frameSpecs,
-          _orientation: current.copyWith(referenceAspect: value),
+          _layoutOrientation: current.copyWith(referenceAspect: value),
         },
       ),
     );
   }
 
-  void _setFrameMode(FrameAspectMode value) {
-    final current = _dashboard.frameSpec(_orientation);
-    _replaceDashboard(
-      _dashboard.copyWith(
-        frameSpecs: <DesignOrientation, FrameSpec>{
-          ..._dashboard.frameSpecs,
-          _orientation: current.copyWith(mode: value),
-        },
-      ),
-    );
+  void _createPreviewLayout() {
+    if (!_layoutInherited) return;
+    final window = MediaQuery.sizeOf(context);
+    final rawAspect = window.width / math.max(1, window.height);
+    final aspect = switch (_orientation) {
+      DesignOrientation.portrait => rawAspect <= 1 ? rawAspect : 1 / rawAspect,
+      DesignOrientation.landscape => rawAspect >= 1 ? rawAspect : 1 / rawAspect,
+    };
+    _replaceDashboard(_dashboard.withBakedLayout(_orientation, aspect: aspect));
+  }
+
+  void _removePreviewLayout() {
+    if (_orientation == _dashboard.primaryOrientation) return;
+    _replaceDashboard(_dashboard.withoutLayout(_orientation));
+    _selectComponent(null);
   }
 
   void _setPlacement(String id, Placement placement) {
     final component = _component(id);
     if (component != null) {
-      _replaceComponent(component.withPlacement(_orientation, placement));
+      _replaceComponent(component.withPlacement(_layoutOrientation, placement));
     }
   }
 
@@ -254,7 +261,7 @@ class _EditorPageState extends State<EditorPage> {
         module.copyWith(
           regions: <DesignOrientation, Placement>{
             ...module.regions,
-            _orientation: placement,
+            _layoutOrientation: placement,
           },
         ),
       ),
@@ -262,10 +269,10 @@ class _EditorPageState extends State<EditorPage> {
   }
 
   void _setVisibility(ComponentInstance component, bool visible) {
-    final existing = component.placements[_orientation];
+    final existing = component.placements[_layoutOrientation];
     _replaceComponent(
       component.withPlacement(
-        _orientation,
+        _layoutOrientation,
         visible ? (existing ?? const Placement()) : null,
       ),
     );
@@ -277,7 +284,7 @@ class _EditorPageState extends State<EditorPage> {
       typeId: type.id,
       params: type.defaults,
       placements: <DesignOrientation, Placement>{
-        _orientation: const Placement(),
+        _layoutOrientation: const Placement(),
       },
     );
     _replaceDashboard(_dashboard.withComponent(component));
@@ -295,7 +302,7 @@ class _EditorPageState extends State<EditorPage> {
       id: id,
       name: 'VFD module $index',
       regions: <DesignOrientation, Placement>{
-        _orientation: const Placement(size: Size(1, 0.5)),
+        _layoutOrientation: const Placement(size: Size(1, 0.5)),
       },
     );
     _replaceDashboard(_dashboard.withModule(module));
@@ -326,8 +333,9 @@ class _EditorPageState extends State<EditorPage> {
   void _replaceDashboard(Dashboard next) {
     setState(() {
       _dashboard = next;
-      if (!next.supports(_orientation)) {
-        _orientation = next.supportedOrientations.first;
+      if (next.layoutForViewport(_orientation) != _orientation) {
+        _selectedId = null;
+        _selectedModuleId = null;
       }
     });
     widget.onChanged(next);
@@ -354,6 +362,8 @@ class _EditorServicePanel extends StatefulWidget {
   const _EditorServicePanel({
     required this.dashboard,
     required this.orientation,
+    required this.previewOrientation,
+    required this.layoutInherited,
     required this.frameAspect,
     required this.selectedId,
     required this.selectedModuleId,
@@ -372,13 +382,16 @@ class _EditorServicePanel extends StatefulWidget {
     required this.onComponentChanged,
     required this.onDashboardChanged,
     required this.onFrameAspectChanged,
-    required this.onFrameModeChanged,
+    required this.onCreateLayout,
+    required this.onRemoveLayout,
     required this.onPlacementChanged,
     required this.onModulePlacementChanged,
   });
 
   final Dashboard dashboard;
   final DesignOrientation orientation;
+  final DesignOrientation previewOrientation;
+  final bool layoutInherited;
   final double frameAspect;
   final String? selectedId;
   final String? selectedModuleId;
@@ -398,7 +411,8 @@ class _EditorServicePanel extends StatefulWidget {
   final ValueChanged<ComponentInstance> onComponentChanged;
   final ValueChanged<Dashboard> onDashboardChanged;
   final ValueChanged<double> onFrameAspectChanged;
-  final ValueChanged<FrameAspectMode> onFrameModeChanged;
+  final VoidCallback onCreateLayout;
+  final VoidCallback onRemoveLayout;
   final void Function(String id, Placement placement) onPlacementChanged;
   final void Function(String id, Placement placement) onModulePlacementChanged;
 
@@ -410,6 +424,13 @@ class _EditorServicePanelState extends State<_EditorServicePanel> {
   _EditorSection _section = _EditorSection.rack;
 
   List<_EditorSection> get _sections {
+    if (widget.layoutInherited) {
+      return const <_EditorSection>[
+        _EditorSection.design,
+        _EditorSection.optics,
+        _EditorSection.prism,
+      ];
+    }
     if (widget.selectedId != null) {
       return const <_EditorSection>[
         _EditorSection.rack,
@@ -443,34 +464,41 @@ class _EditorServicePanelState extends State<_EditorServicePanel> {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.all(8),
-    child: Column(
-      children: <Widget>[
-        PrismSelectorBank<_EditorSection>(
-          choices: <PrismSelectorChoice<_EditorSection>>[
-            for (final section in _sections)
-              PrismSelectorChoice<_EditorSection>(
-                value: section,
-                label: section.name,
-                lit: section == _section,
-              ),
+    child: Builder(
+      builder: (context) {
+        final sections = _sections;
+        final active = sections.contains(_section) ? _section : sections.first;
+        _section = active;
+        return Column(
+          children: <Widget>[
+            PrismSelectorBank<_EditorSection>(
+              choices: <PrismSelectorChoice<_EditorSection>>[
+                for (final section in sections)
+                  PrismSelectorChoice<_EditorSection>(
+                    value: section,
+                    label: section.name,
+                    lit: section == active,
+                  ),
+              ],
+              selected: active,
+              palette: widget.palette,
+              prismStyle: widget.dashboard.settings.prismStyle,
+              rows: 1,
+              role: PrismRole.compact,
+              soundEnabled: widget.soundEnabled,
+              hapticsEnabled: widget.hapticsEnabled,
+              semanticLabel: 'Editor service section',
+              onSelected: (section) => setState(() => _section = section),
+            ),
+            const SizedBox(height: 8),
+            Expanded(child: _sectionBody(active)),
           ],
-          selected: _section,
-          palette: widget.palette,
-          prismStyle: widget.dashboard.settings.prismStyle,
-          rows: 1,
-          role: PrismRole.compact,
-          soundEnabled: widget.soundEnabled,
-          hapticsEnabled: widget.hapticsEnabled,
-          semanticLabel: 'Editor service section',
-          onSelected: (section) => setState(() => _section = section),
-        ),
-        const SizedBox(height: 8),
-        Expanded(child: _sectionBody()),
-      ],
+        );
+      },
     ),
   );
 
-  Widget _sectionBody() => switch (_section) {
+  Widget _sectionBody(_EditorSection section) => switch (section) {
     _EditorSection.rack => _RackPanel(host: widget),
     _EditorSection.design => _DesignPanel(host: widget),
     _EditorSection.part => _PartPanel(host: widget),
@@ -802,99 +830,93 @@ class _DesignPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final spec = host.dashboard.frameSpec(host.orientation);
-    final locked = host.dashboard.supportedOrientations.length == 1
-        ? host.dashboard.supportedOrientations.first
-        : null;
+    final preview = host.previewOrientation;
+    final primary = host.dashboard.primaryOrientation;
+    final isPrimary = preview == primary;
+    final authored = host.dashboard.hasAuthoredLayout(preview);
     return PrismPanel(
       palette: host.palette,
-      child: MechanicalPager(
-        pages: <Widget>[
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              VfdLegend('Frame', palette: host.palette, lit: true, size: 12),
-              const SizedBox(height: 10),
-              PrismSelectorBank<FrameAspectMode>(
-                choices: <PrismSelectorChoice<FrameAspectMode>>[
-                  for (final mode in FrameAspectMode.values)
-                    PrismSelectorChoice<FrameAspectMode>(
-                      value: mode,
-                      label: mode.name,
-                      lit: spec.mode == mode,
-                    ),
-                ],
-                selected: spec.mode,
-                palette: host.palette,
-                prismStyle: host.dashboard.settings.prismStyle,
-                rows: 1,
-                columns: 2,
-                soundEnabled: host.soundEnabled,
-                hapticsEnabled: host.hapticsEnabled,
-                semanticLabel: 'Frame aspect mode',
-                onSelected: host.onFrameModeChanged,
-              ),
-              const SizedBox(height: 10),
-              VfdEditableField(
-                label: 'Reference aspect · ${host.orientation.name}',
-                value: spec.referenceAspect.toStringAsFixed(3),
-                palette: host.palette,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                onChanged: (_) {},
-                onSubmitted: (raw) {
-                  final value = double.tryParse(raw);
-                  if (value != null) host.onFrameAspectChanged(value);
-                },
-              ),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
+      padding: const EdgeInsets.all(8),
+      child: LayoutBuilder(
+        builder: (context, constraints) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            VfdLegend(
+              'Primary · ${primary.name}',
+              palette: host.palette,
+              lit: true,
+              size: 11,
+            ),
+            const SizedBox(height: 5),
+            VfdLegend(
+              authored
+                  ? '${preview.name} · authored fixed layout'
+                  : '${preview.name} · contains ${primary.name}',
+              palette: host.palette,
+              size: 9,
+            ),
+            if (!authored && constraints.maxHeight >= 145) ...<Widget>[
+              const SizedBox(height: 5),
               VfdLegend(
-                'Lock orientation · none means both',
+                'Create copies this appearance into an editable layout.',
                 palette: host.palette,
-                lit: true,
-                size: 11,
-              ),
-              const SizedBox(height: 10),
-              PrismSelectorBank<DesignOrientation>(
-                choices: <PrismSelectorChoice<DesignOrientation>>[
-                  for (final orientation in DesignOrientation.values)
-                    PrismSelectorChoice<DesignOrientation>(
-                      value: orientation,
-                      label: orientation.name,
-                      lit: locked == orientation,
-                    ),
-                ],
-                selected: locked,
-                palette: host.palette,
-                prismStyle: host.dashboard.settings.prismStyle,
-                rows: 1,
-                columns: 2,
-                soundEnabled: host.soundEnabled,
-                hapticsEnabled: host.hapticsEnabled,
-                semanticLabel: 'Lock orientation',
-                onSelected: (orientation) {
-                  host.onDashboardChanged(
-                    host.dashboard.copyWith(
-                      supportedOrientations: locked == orientation
-                          ? <DesignOrientation>{...DesignOrientation.values}
-                          : <DesignOrientation>{orientation},
-                    ),
-                  );
-                },
+                size: 9,
               ),
             ],
-          ),
-        ],
-        palette: host.palette,
-        prismStyle: host.dashboard.settings.prismStyle,
-        soundEnabled: host.soundEnabled,
-        hapticsEnabled: host.hapticsEnabled,
-        semanticLabel: 'Design settings',
+            const Spacer(),
+            if (authored)
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: VfdEditableField(
+                      label: 'Fixed aspect · ${preview.name}',
+                      value: host.dashboard
+                          .frameSpec(preview)
+                          .referenceAspect
+                          .toStringAsFixed(3),
+                      palette: host.palette,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      onChanged: (_) {},
+                      onSubmitted: (raw) {
+                        final value = double.tryParse(raw);
+                        if (value != null) host.onFrameAspectChanged(value);
+                      },
+                    ),
+                  ),
+                  if (!isPrimary) ...<Widget>[
+                    const SizedBox(width: 6),
+                    PrismButton(
+                      key: const ValueKey('remove-layout'),
+                      label: 'Reset',
+                      palette: host.palette,
+                      role: PrismRole.compact,
+                      style: host.dashboard.settings.prismStyle,
+                      soundEnabled: host.soundEnabled,
+                      hapticsEnabled: host.hapticsEnabled,
+                      onPressed: host.onRemoveLayout,
+                    ),
+                  ],
+                ],
+              )
+            else
+              Center(
+                child: PrismButton(
+                  key: const ValueKey('create-layout'),
+                  label: 'Create ${preview.name}',
+                  palette: host.palette,
+                  lit: true,
+                  role: PrismRole.compact,
+                  span: PrismSpan.three,
+                  style: host.dashboard.settings.prismStyle,
+                  soundEnabled: host.soundEnabled,
+                  hapticsEnabled: host.hapticsEnabled,
+                  onPressed: host.onCreateLayout,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

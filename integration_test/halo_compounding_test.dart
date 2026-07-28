@@ -48,7 +48,6 @@ void main() {
     return Dashboard(
       id: 'halo',
       name: 'Halo',
-      supportedOrientations: <DesignOrientation>{DesignOrientation.landscape},
       components: <ComponentInstance>[
         if (left)
           ComponentInstance(
@@ -222,7 +221,6 @@ void main() {
   }) => Dashboard(
     id: 'colours',
     name: 'Colours',
-    supportedOrientations: <DesignOrientation>{DesignOrientation.landscape},
     components: <ComponentInstance>[
       if (left)
         ComponentInstance(
@@ -456,7 +454,6 @@ void main() {
     }) => Dashboard(
       id: 'prism',
       name: 'Prism',
-      supportedOrientations: <DesignOrientation>{DesignOrientation.landscape},
       components: <ComponentInstance>[
         if (backdrop)
           ComponentInstance(

@@ -1,11 +1,13 @@
 import 'dart:ui' show Offset, Size;
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
 import 'component_type.dart';
 import 'variant.dart';
 
-/// Layouts are authored per orientation, never reflowed from one another.
+/// A design always has one primary layout and may author one opposite-
+/// orientation override.
 enum DesignOrientation {
   portrait,
   landscape;
@@ -18,61 +20,16 @@ enum DesignOrientation {
   }
 }
 
-double orientViewportAspect(
-  double viewportAspect,
-  DesignOrientation orientation,
-) {
-  if (!viewportAspect.isFinite || viewportAspect <= 0) {
-    return kDefaultFrameAspects[orientation]!;
-  }
-  return switch (orientation) {
-    DesignOrientation.portrait =>
-      viewportAspect <= 1 ? viewportAspect : 1 / viewportAspect,
-    DesignOrientation.landscape =>
-      viewportAspect >= 1 ? viewportAspect : 1 / viewportAspect,
-  };
-}
-
-enum FrameAspectMode {
-  fixed,
-  adaptive;
-
-  static FrameAspectMode? byName(String name) {
-    for (final mode in values) {
-      if (mode.name == name) return mode;
-    }
-    return null;
-  }
-}
-
 @immutable
 class FrameSpec {
-  const FrameSpec({
-    required this.referenceAspect,
-    this.mode = FrameAspectMode.fixed,
-  });
+  const FrameSpec({required this.referenceAspect});
 
   final double referenceAspect;
-  final FrameAspectMode mode;
 
-  double resolve({double? viewportAspect}) {
-    if (mode == FrameAspectMode.adaptive &&
-        viewportAspect != null &&
-        viewportAspect.isFinite &&
-        viewportAspect > 0) {
-      return viewportAspect;
-    }
-    return referenceAspect;
-  }
-
-  FrameSpec copyWith({double? referenceAspect, FrameAspectMode? mode}) =>
-      FrameSpec(
-        referenceAspect: referenceAspect ?? this.referenceAspect,
-        mode: mode ?? this.mode,
-      );
+  FrameSpec copyWith({double? referenceAspect}) =>
+      FrameSpec(referenceAspect: referenceAspect ?? this.referenceAspect);
 
   Map<String, Object?> toJson() => <String, Object?>{
-    'mode': mode.name,
     'referenceAspect': referenceAspect,
   };
 
@@ -85,17 +42,14 @@ class FrameSpec {
       referenceAspect: rawAspect != null && rawAspect.isFinite && rawAspect > 0
           ? rawAspect
           : fallbackAspect,
-      mode:
-          FrameAspectMode.byName(json['mode'] as String? ?? '') ??
-          FrameAspectMode.fixed,
     );
   }
 }
 
 /// Development defaults for payloads written before frame aspects were stored.
 ///
-/// New designs author both values explicitly. Keeping tolerant defaults lets
-/// existing dashboards survive the additive schema change.
+/// New designs explicitly author their primary and any optional alternate.
+/// Tolerant defaults keep malformed/imported payloads usable.
 const Map<DesignOrientation, double> kDefaultFrameAspects =
     <DesignOrientation, double>{
       DesignOrientation.portrait: 1 / 2.6,
@@ -103,21 +57,30 @@ const Map<DesignOrientation, double> kDefaultFrameAspects =
     };
 
 Map<DesignOrientation, FrameSpec> normaliseFrameSpecs(
-  Set<DesignOrientation> supported, {
+  DesignOrientation primary, {
   Map<DesignOrientation, FrameSpec>? specs,
   Map<DesignOrientation, double>? legacyAspects,
-}) => Map<DesignOrientation, FrameSpec>.unmodifiable(<
-  DesignOrientation,
-  FrameSpec
->{
-  for (final orientation in supported)
-    orientation:
-        specs?[orientation] ??
-        FrameSpec(
-          referenceAspect:
-              legacyAspects?[orientation] ?? kDefaultFrameAspects[orientation]!,
-        ),
-});
+}) {
+  final resolved = <DesignOrientation, FrameSpec>{
+    for (final entry in (specs ?? const {}).entries)
+      if (entry.value.referenceAspect.isFinite &&
+          entry.value.referenceAspect > 0)
+        entry.key: entry.value,
+  };
+  for (final entry in (legacyAspects ?? const {}).entries) {
+    if (resolved.containsKey(entry.key) ||
+        !entry.value.isFinite ||
+        entry.value <= 0) {
+      continue;
+    }
+    resolved[entry.key] = FrameSpec(referenceAspect: entry.value);
+  }
+  resolved.putIfAbsent(
+    primary,
+    () => FrameSpec(referenceAspect: kDefaultFrameAspects[primary]!),
+  );
+  return Map<DesignOrientation, FrameSpec>.unmodifiable(resolved);
+}
 
 Map<String, Object?> frameSpecsToJson(
   Map<DesignOrientation, FrameSpec> specs,
@@ -138,23 +101,6 @@ Map<DesignOrientation, FrameSpec> parseFrameSpecs(Object? raw) {
   }
   return values;
 }
-
-Map<DesignOrientation, double> normaliseFrameAspects(
-  Set<DesignOrientation> supported,
-  Map<DesignOrientation, double>? raw,
-) => Map<DesignOrientation, double>.unmodifiable(<DesignOrientation, double>{
-  for (final orientation in supported)
-    orientation: switch (raw?[orientation]) {
-      final value? when value.isFinite && value > 0 => value,
-      _ => kDefaultFrameAspects[orientation]!,
-    },
-});
-
-Map<String, Object?> frameAspectsToJson(
-  Map<DesignOrientation, double> aspects,
-) => <String, Object?>{
-  for (final entry in aspects.entries) entry.key.name: entry.value,
-};
 
 Map<DesignOrientation, double> parseFrameAspects(Object? raw) {
   final values = <DesignOrientation, double>{};
@@ -224,9 +170,27 @@ class AxisSpan {
   );
 }
 
-/// Anchor plus offset, never absolute coordinates. This is what absorbs the
-/// aspect spread from 18:9 through 4:3 within one authored orientation: a
-/// right-anchored component stays welded to the right edge as the frame widens,
+/// Bakes a contained source-layout placement into a new fixed-aspect layout.
+///
+/// The resulting component occupies the same visual position it had while the
+/// whole source frame was contain-fitted into the target frame. Span axes are
+/// intentionally resolved to fixed extents: the new layout is now independently
+/// authored.
+Placement bakeContainedPlacement({
+  required Placement placement,
+  required Size resolvedSize,
+  required double sourceAspect,
+  required double targetAspect,
+}) {
+  final scale = math.min(1.0, targetAspect / sourceAspect);
+  return Placement(
+    offset: placement.resolve(sourceAspect) * scale,
+    size: Size(resolvedSize.width * scale, resolvedSize.height * scale),
+  );
+}
+
+/// Anchor plus offset, never absolute coordinates. A right-anchored component
+/// stays welded to the authored frame edge when its fixed aspect is edited,
 /// instead of drifting toward the middle.
 @immutable
 class Placement {

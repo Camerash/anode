@@ -8,15 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'fixtures.dart';
 
-Dashboard dashboardWith(List<ComponentInstance> components) => Dashboard(
-  id: 'dash.1',
-  name: 'Test',
-  supportedOrientations: <DesignOrientation>{
-    DesignOrientation.landscape,
-    DesignOrientation.portrait,
-  },
-  components: components,
-);
+Dashboard dashboardWith(List<ComponentInstance> components) =>
+    Dashboard(id: 'dash.1', name: 'Test', components: components);
 
 void main() {
   test('the union covers every component in the dashboard', () {
@@ -47,22 +40,28 @@ void main() {
     expect(dashboardWith(<ComponentInstance>[legend]).capabilities(), isEmpty);
   });
 
-  test(
-    'scoping to an orientation keeps a sensor off when its gauge is absent',
-    () {
-      // The altimeter is authored into landscape only.
-      final d = dashboardWith(<ComponentInstance>[digits(), altimeter()]);
+  test('viewport capability scope follows resolved authored layout', () {
+    // The altimeter is authored into landscape only.
+    final primaryOnly = dashboardWith(<ComponentInstance>[
+      digits(),
+      altimeter(),
+    ]);
+    final withPortrait = primaryOnly.copyWith(
+      frameSpecs: const <DesignOrientation, FrameSpec>{
+        DesignOrientation.landscape: FrameSpec(referenceAspect: 2.6),
+        DesignOrientation.portrait: FrameSpec(referenceAspect: 0.5),
+      },
+    );
 
-      expect(
-        d.capabilities(orientation: DesignOrientation.landscape),
-        <Capability>{Capability.gps, Capability.barometer},
-      );
-      expect(
-        d.capabilities(orientation: DesignOrientation.portrait),
-        <Capability>{Capability.gps},
-      );
-    },
-  );
+    expect(
+      primaryOnly.capabilities(orientation: DesignOrientation.portrait),
+      <Capability>{Capability.gps, Capability.barometer},
+    );
+    expect(
+      withPortrait.capabilities(orientation: DesignOrientation.portrait),
+      <Capability>{Capability.gps},
+    );
+  });
 
   test('a component placed in no orientation is absent and needs nothing', () {
     final orphan = ComponentInstance(

@@ -10,15 +10,17 @@ import 'vfd_module.dart';
 abstract interface class Design {
   String get id;
   String get name;
-  Set<DesignOrientation> get supportedOrientations;
+  DesignOrientation get primaryOrientation;
+  Set<DesignOrientation> get authoredOrientations;
   List<ComponentInstance> get components;
   List<VfdModule> get modules;
   Map<DesignOrientation, FrameSpec> get frameSpecs;
   DashboardSettings get renderSettings;
 
-  bool supports(DesignOrientation orientation);
+  bool hasAuthoredLayout(DesignOrientation orientation);
+  DesignOrientation layoutForViewport(DesignOrientation orientation);
   FrameSpec frameSpec(DesignOrientation orientation);
-  double frameAspect(DesignOrientation orientation, {double? viewportAspect});
+  double frameAspect(DesignOrientation orientation);
   List<ComponentInstance> componentsIn(DesignOrientation orientation);
   VfdModule moduleFor(ComponentInstance component);
 }

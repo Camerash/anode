@@ -4,98 +4,124 @@ import 'package:anode/model/component_instance.dart';
 import 'package:anode/model/dashboard.dart';
 import 'package:anode/model/design_preset.dart';
 import 'package:anode/model/placement.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fixtures.dart';
 
 void main() {
-  test('viewport aspect is normalized to authored orientation', () {
-    expect(
-      orientViewportAspect(16 / 9, DesignOrientation.portrait),
-      closeTo(9 / 16, 1e-9),
-    );
-    expect(
-      orientViewportAspect(9 / 16, DesignOrientation.landscape),
-      closeTo(16 / 9, 1e-9),
-    );
-  });
-
-  test('preset and fork preserve authored aspects per orientation', () {
+  test('opposite viewport falls back wholesale to primary layout', () {
     final source = DesignPreset(
-      id: 'aspects',
-      name: 'Aspects',
+      id: 'primary',
+      name: 'Primary',
       version: 1,
-      supportedOrientations: DesignOrientation.values.toSet(),
-      frameAspects: const <DesignOrientation, double>{
-        DesignOrientation.landscape: 2.4,
-        DesignOrientation.portrait: 0.6,
+      frameSpecs: const <DesignOrientation, FrameSpec>{
+        DesignOrientation.landscape: FrameSpec(referenceAspect: 2.4),
       },
       components: <ComponentInstance>[digits()],
     );
 
-    final dashboard = Dashboard.forkFrom(source, id: 'fork');
-
-    expect(dashboard.frameAspect(DesignOrientation.landscape), 2.4);
-    expect(dashboard.frameAspect(DesignOrientation.portrait), 0.6);
-  });
-
-  test('fixed frame specs survive json and resolve to authored aspect', () {
-    final encoded = jsonDecode(jsonEncode(preset().toJson()));
-    final roundTrip = DesignPreset.fromJson(
-      (encoded as Map).cast<String, Object?>(),
-    );
-    expect(roundTrip.frameAspect(DesignOrientation.landscape), 2.6);
+    expect(source.primaryOrientation, DesignOrientation.landscape);
+    expect(source.authoredOrientations, <DesignOrientation>{
+      DesignOrientation.landscape,
+    });
     expect(
-      roundTrip.frameAspect(DesignOrientation.portrait),
-      closeTo(1 / 2.6, 0.000001),
+      source.layoutForViewport(DesignOrientation.portrait),
+      DesignOrientation.landscape,
     );
+    expect(source.frameAspect(DesignOrientation.portrait), 2.4);
     expect(
-      roundTrip.frameAspect(DesignOrientation.landscape, viewportAspect: 1.5),
-      2.6,
-    );
-    expect(
-      roundTrip.frameSpec(DesignOrientation.landscape).mode,
-      FrameAspectMode.fixed,
+      source.componentsIn(DesignOrientation.portrait).single.id,
+      source.components.single.id,
     );
   });
 
-  test('adaptive frame resolves current viewport and preserves reference', () {
-    final source = DesignPreset(
-      id: 'adaptive',
-      name: 'Adaptive',
-      version: 1,
-      supportedOrientations: const <DesignOrientation>{
-        DesignOrientation.landscape,
-      },
-      frameSpecs: const <DesignOrientation, FrameSpec>{
-        DesignOrientation.landscape: FrameSpec(
-          referenceAspect: 2.6,
-          mode: FrameAspectMode.adaptive,
+  test(
+    'explicit alternate layout and primary identity survive json and fork',
+    () {
+      final source = DesignPreset(
+        id: 'aspects',
+        name: 'Aspects',
+        version: 1,
+        primaryOrientation: DesignOrientation.portrait,
+        frameSpecs: const <DesignOrientation, FrameSpec>{
+          DesignOrientation.landscape: FrameSpec(referenceAspect: 2.4),
+          DesignOrientation.portrait: FrameSpec(referenceAspect: 0.6),
+        },
+        components: <ComponentInstance>[digits()],
+      );
+      final encoded = (jsonDecode(jsonEncode(source.toJson())) as Map)
+          .cast<String, Object?>();
+      final roundTrip = DesignPreset.fromJson(encoded);
+      final dashboard = Dashboard.forkFrom(roundTrip, id: 'fork');
+
+      expect(roundTrip.primaryOrientation, DesignOrientation.portrait);
+      expect(dashboard.primaryOrientation, DesignOrientation.portrait);
+      expect(dashboard.frameAspect(DesignOrientation.landscape), 2.4);
+      expect(dashboard.frameAspect(DesignOrientation.portrait), 0.6);
+    },
+  );
+
+  test('creating alternate bakes contained primary appearance', () {
+    final component = ComponentInstance(
+      id: 'placed',
+      typeId: 'unknown',
+      placements: const <DesignOrientation, Placement>{
+        DesignOrientation.landscape: Placement(
+          offset: Offset(0.4, 0.2),
+          size: Size(0.8, 0.4),
         ),
       },
-      components: <ComponentInstance>[digits()],
     );
-    final back = DesignPreset.fromJson(
-      (jsonDecode(jsonEncode(source.toJson())) as Map).cast<String, Object?>(),
+    final source = Dashboard(
+      id: 'source',
+      name: 'Source',
+      frameSpecs: const <DesignOrientation, FrameSpec>{
+        DesignOrientation.landscape: FrameSpec(referenceAspect: 2),
+      },
+      components: <ComponentInstance>[component],
     );
+    final baked = source.withBakedLayout(
+      DesignOrientation.portrait,
+      aspect: 0.5,
+    );
+    final placement =
+        baked.components.single.placements[DesignOrientation.portrait]!;
 
-    expect(
-      back.frameAspect(DesignOrientation.landscape, viewportAspect: 4 / 3),
-      closeTo(4 / 3, 1e-9),
-    );
-    expect(back.frameSpec(DesignOrientation.landscape).referenceAspect, 2.6);
+    expect(baked.hasAuthoredLayout(DesignOrientation.portrait), isTrue);
+    expect(baked.frameAspect(DesignOrientation.portrait), 0.5);
+    expect(placement.offset, const Offset(0.1, 0.05));
+    expect(placement.size, const Size(0.2, 0.1));
   });
 
-  test('legacy frame aspects decode as fixed frame specs', () {
+  test('resetting alternate removes its placements and restores fallback', () {
+    final source = Dashboard.forkFrom(preset(), id: 'source');
+    final reset = source.withoutLayout(DesignOrientation.portrait);
+
+    expect(reset.hasAuthoredLayout(DesignOrientation.portrait), isFalse);
+    expect(
+      reset.layoutForViewport(DesignOrientation.portrait),
+      DesignOrientation.landscape,
+    );
+    expect(
+      reset.components.any(
+        (component) =>
+            component.placements.containsKey(DesignOrientation.portrait),
+      ),
+      isFalse,
+    );
+  });
+
+  test('legacy frame aspects decode as explicit fixed layouts', () {
     final legacy = preset().toJson()
+      ..remove('primaryOrientation')
       ..remove('frameSpecs')
+      ..['supportedOrientations'] = <String>['landscape', 'portrait']
       ..['frameAspects'] = <String, Object?>{'landscape': 2.4, 'portrait': 0.6};
     final decoded = DesignPreset.fromJson(legacy);
+
+    expect(decoded.primaryOrientation, DesignOrientation.landscape);
     expect(decoded.frameAspect(DesignOrientation.landscape), 2.4);
     expect(decoded.frameAspect(DesignOrientation.portrait), 0.6);
-    expect(
-      decoded.frameSpec(DesignOrientation.landscape).mode,
-      FrameAspectMode.fixed,
-    );
   });
 }

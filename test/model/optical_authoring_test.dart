@@ -221,7 +221,6 @@ void main() {
     final dashboard = Dashboard(
       id: 'modules',
       name: 'Modules',
-      supportedOrientations: <DesignOrientation>{DesignOrientation.landscape},
       modules: <VfdModule>[VfdModule(id: 'secondary', name: 'Secondary')],
       components: <ComponentInstance>[
         ComponentInstance(

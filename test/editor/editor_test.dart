@@ -12,7 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('canvas fits authored aspect for each orientation', (
+  testWidgets('preview falls back to primary until alternate is authored', (
     tester,
   ) async {
     await _setViewport(tester, const Size(1200, 900));
@@ -29,7 +29,7 @@ void main() {
     expect(_canvasAspect(tester), closeTo(2.6, 0.001));
     await tester.tap(find.byKey(const ValueKey('orientation-portrait')));
     await tester.pump();
-    expect(_canvasAspect(tester), closeTo(1 / 2.6, 0.001));
+    expect(_canvasAspect(tester), closeTo(2.6, 0.001));
   });
 
   testWidgets('drawer pushes canvas and selection does not open it', (
@@ -77,15 +77,19 @@ void main() {
       ),
     );
 
-    expect(find.text('PORTRAIT · 0.385:1'), findsOneWidget);
-    final before = tester.getSize(find.byKey(const ValueKey('editor-canvas')));
+    expect(
+      find.textContaining('PORTRAIT PREVIEW · INHERITED LANDSCAPE'),
+      findsOneWidget,
+    );
+    final frame = find.byKey(const ValueKey('editor-canvas'));
+    final before = tester.getCenter(frame);
     await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
-    final after = tester.getSize(find.byKey(const ValueKey('editor-canvas')));
+    final after = tester.getCenter(frame);
 
-    expect(after.height, lessThan(before.height));
-    expect(after.width / after.height, closeTo(1 / 2.6, 0.002));
+    expect(after.dy, lessThan(before.dy));
+    expect(_canvasAspect(tester), closeTo(2.6, 0.002));
   });
 
   testWidgets('drag and edge resize update displayed orientation only', (
@@ -310,21 +314,13 @@ void main() {
     expect(moved.offset.dx, closeTo(-0.9, 0.002));
   });
 
-  testWidgets('adaptive frame follows available editor viewport aspect', (
+  testWidgets('portrait preview contains inherited landscape layout', (
     tester,
   ) async {
-    await _setViewport(tester, const Size(900, 500));
-    final source = Dashboard.forkFrom(developmentPreset(), id: 'adaptive');
-    final dashboard = source.copyWith(
-      supportedOrientations: const <DesignOrientation>{
-        DesignOrientation.landscape,
-      },
-      frameSpecs: const <DesignOrientation, FrameSpec>{
-        DesignOrientation.landscape: FrameSpec(
-          referenceAspect: 2.6,
-          mode: FrameAspectMode.adaptive,
-        ),
-      },
+    await _setViewport(tester, const Size(393, 852));
+    final dashboard = Dashboard.forkFrom(
+      developmentPreset(),
+      id: 'primary-only',
     );
 
     await tester.pumpWidget(
@@ -334,8 +330,59 @@ void main() {
     );
 
     final aspect = _canvasAspect(tester);
-    expect(aspect, closeTo(900 / 452, 0.02));
-    expect(aspect, isNot(closeTo(2.6, 0.01)));
+    expect(aspect, closeTo(2.6, 0.002));
+    expect(
+      find.textContaining('PORTRAIT PREVIEW · INHERITED LANDSCAPE'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('creating and resetting portrait alternate is explicit', (
+    tester,
+  ) async {
+    const viewport = Size(393, 852);
+    await _setViewport(tester, viewport);
+    var dashboard = Dashboard.forkFrom(developmentPreset(), id: 'primary-only');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorPage(
+          dashboard: dashboard,
+          onChanged: (value) => dashboard = value,
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+    await tester.tap(find.byKey(const ValueKey('create-layout')));
+    await tester.pump();
+
+    final expectedAspect = viewport.width / viewport.height;
+    final sourcePlacement = developmentPreset()
+        .components
+        .first
+        .placements[DesignOrientation.landscape]!;
+    final bakedPlacement =
+        dashboard.components.first.placements[DesignOrientation.portrait]!;
+    final expectedScale = expectedAspect / 2.6;
+    expect(dashboard.hasAuthoredLayout(DesignOrientation.portrait), isTrue);
+    expect(
+      dashboard.frameAspect(DesignOrientation.portrait),
+      closeTo(expectedAspect, 0.001),
+    );
+    expect(bakedPlacement.offset, sourcePlacement.resolve(2.6) * expectedScale);
+    expect(_canvasAspect(tester), closeTo(expectedAspect, 0.001));
+
+    await tester.tap(find.byKey(const ValueKey('remove-layout')));
+    await tester.pump();
+
+    expect(dashboard.hasAuthoredLayout(DesignOrientation.portrait), isFalse);
+    expect(
+      dashboard.layoutForViewport(DesignOrientation.portrait),
+      DesignOrientation.landscape,
+    );
+    expect(_canvasAspect(tester), closeTo(2.6, 0.001));
   });
 
   testWidgets('add selector is generated from component registry', (

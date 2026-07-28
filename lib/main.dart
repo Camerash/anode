@@ -169,9 +169,7 @@ class _ClusterPageState extends State<ClusterPage>
     final currentOrientation = windowSize.width >= windowSize.height
         ? DesignOrientation.landscape
         : DesignOrientation.portrait;
-    if (widget.state.activeDesign.supports(currentOrientation)) {
-      _controller.orientation = currentOrientation;
-    }
+    _controller.orientation = currentOrientation;
 
     return ColoredBox(
       color: const Color(0xFF000000),

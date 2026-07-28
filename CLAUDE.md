@@ -144,11 +144,11 @@ continue past the glass. Any vignette is a gentle falloff, never an edge.
 
 Content insets to safe area; the background does not. System UI is hidden.
 
-Each orientation owns a `FrameSpec`. Fixed is the default: its authored
-reference aspect is **contain-fitted inside the safe rect**, picking the tighter
-axis and centring the frame. Adaptive is explicit opt-in: the frame resolves to
-the current window aspect within its selected portrait or landscape
-orientation. Neither mode crops or clamps component placement. The safe rect
+Every design owns a primary fixed `FrameSpec` and may own one explicit
+opposite-orientation alternate. The selected authored reference aspect is
+**contain-fitted inside the safe rect**, picking the tighter axis and centring
+the frame. A missing alternate uses the primary unchanged; content never
+rotates. Contain fit never crops or clamps component placement. The safe rect
 governs placement only, so halo, sheen, and grain keep evaluating across the
 full fragment bounds and spill past both the frame and screen edge.
 
@@ -306,7 +306,7 @@ optical grouping, not a second component tree:
 - Module management remains hidden until a second module is added.
 - Deleting a module reassigns its components to `main`; it never deletes them.
 
-Additional modules declare an authored region per supported orientation and own
+Additional modules declare a region per explicitly authored layout and own
 their filament variant, glass grain, and sparse optical overrides. Components
 still use frame-relative placements and reference their module by stable id.
 This allows separate display envelopes to have different cathode layouts without
@@ -356,20 +356,31 @@ is solved.
 
 ### Orientation
 
-Portrait and landscape remain separate AUTHORED layouts, never reflows of one
-another. A nullable design-level orientation lock chooses portrait-only or
-landscape-only; neither lock active means both are supported. This is design
-metadata, not an OS/device orientation request. The app itself stays resizable
-and supports all iPad orientations and Split View.
+Every design has one fixed-aspect primary authored layout. Landscape is the
+default because physical automotive faces are normally landscape, though the
+model retains explicit primary identity for intentionally portrait designs.
+`frameSpecs` entries mean authored layouts; they are not a list of device
+orientations the app supports.
 
-Fixed-aspect designs are the default because automotive reference faces have
-physical proportions. Their authored aspect is never inferred from the device;
-runtime and editor contain-fit it. Adaptive designs are opt-in and resolve one
-orientation's frame against the current window aspect. Anchor-plus-offset
-positions remain stable against edges as aspect changes. Each placement axis
-may also use explicit start/end span insets when an element must stretch with an
-adaptive frame. Fixed sizing remains valid in either frame mode; span sizing is
-not forced onto fixed designs.
+Runtime chooses an explicitly authored layout matching the current viewport
+orientation. When none exists, it renders the primary layout unchanged and
+contain-fits it in the viewport. It never rotates content, reflows elements, or
+synthesizes a portrait arrangement. A landscape primary therefore remains a
+horizontal landscape face centred inside a portrait window.
+
+The editor previews the current window orientation first. A fallback preview is
+read-only. `CREATE PORTRAIT` or `CREATE LANDSCAPE` explicitly adds an
+independent alternate at the current window aspect and bakes the contained
+primary placements into it, producing no runtime visual jump. The alternate can
+then diverge freely or be reset to primary fallback. Export/import preserves
+primary identity, every authored frame aspect, and every authored placement.
+
+There is no orientation lock and no adaptive frame mode. The app itself remains
+fully resizable and supports iPad orientations and Split View; contain fitting
+absorbs window changes without mutating design data. Adaptive responsive
+authoring is deferred until a concrete same-orientation instrument needs it.
+Placement axes may still store explicit start/end span insets, but they resolve
+against the authored fixed frame only.
 
 ### Authored and device settings
 
@@ -377,7 +388,8 @@ not forced onto fixed designs.
   and sparse component optical overrides.
 - Per-module: authored region, filament variant, glass grain, and sparse module
   optical overrides.
-- Per-dashboard: orientation, baseline `OpticalProfile`, and `PrismStyle`.
+- Per-dashboard: primary/alternate layouts, baseline `OpticalProfile`, and
+  `PrismStyle`.
 - App-wide: sound, haptics, accessibility, demo mode, and renderer quality only.
 
 ### Build order
@@ -423,8 +435,7 @@ design state.
 
 Fixed frames always scale uniformly and letterbox. Editor service chrome may
 reduce available preview space, but it must recompute the same contain fit; it
-never changes authored coordinates or frame aspect. Adaptive frames alone
-resolve a new aspect from current editor/window bounds.
+never changes authored coordinates or frame aspect.
 
 ### Config UI is in the VFD idiom
 
@@ -563,16 +574,16 @@ depth already rules out accidental entry.
 
 Editing needs persistent chrome that tuning does not, so it gets a dedicated
 screen: a contain-fit authored canvas plus a component list and inspector. On
-entry, current window orientation is selected when supported; otherwise the
-only supported orientation is selected. The top switch chooses which independent
-authored layout is edited.
+entry, current window orientation is previewed. The top switch chooses portrait
+or landscape viewport. If no matching alternate exists, it shows the contained
+primary read-only and offers explicit creation.
 
-The editor canvas is the one place a visible frame edge is correct. Fixed mode
-holds its reference aspect regardless of window shape and scales to fit.
-Adaptive mode uses current available-window aspect. Matte outside the double
-boundary dims rendered component portions without clipping their hit regions;
-off-frame elements remain selectable, draggable, and resizable. `BRING IN`
-recentres a fully lost item without changing size.
+The editor canvas is the one place a visible frame edge is correct. Every
+authored frame holds its reference aspect regardless of window shape and scales
+to fit. Matte outside the double boundary dims rendered component portions
+without clipping their hit regions; off-frame elements remain selectable,
+draggable, and resizable. `BRING IN` recentres a fully lost item without
+changing size.
 
 The editor uses one live, shared render of the whole design plus non-painting
 selection/drag/resize overlays. It does not embed component shaders or create
@@ -605,12 +616,13 @@ unclamped to the frame.
 The editor exists to expose these. Keep unresolved findings visible rather than
 special-casing controls around them:
 
-- **Resolved during Stage 4 follow-up:** `FrameSpec` stores per-orientation
-  reference aspect plus fixed/adaptive mode. Fixed is default; adaptive resolves
-  current window aspect.
+- **Resolved during Stage 4 follow-up:** one primary fixed layout always exists;
+  an optional opposite-orientation layout is explicit. Missing alternates
+  render the primary through contain fit with no content rotation. Creating an
+  alternate bakes that contained appearance before independent editing.
 - **Resolved during Stage 4 follow-up:** placement axes can independently use
-  fixed size or start/end span insets. This supports adaptive width/height
-  without introducing another component hierarchy.
+  fixed size or start/end span insets without introducing another component
+  hierarchy. Span insets currently resolve against fixed authored frames.
 - **Resolved during Stage 4 follow-up:** imported unknown component types remain
   serialized instead of being silently dropped. Renderer/editor availability is
   separate from lossless design transport.

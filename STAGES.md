@@ -174,16 +174,17 @@ data model. Commit `4d511ed` is the reviewed developer-tool boundary. The
 optical-authoring extension completed before Stage 5 or shipped preset
 authoring.
 
-- [x] Editor route with a visible authored-frame canvas. Fixed frames hold their
-      authored aspect and contain-fit; adaptive frames opt into current-window
-      aspect.
+- [x] Editor route with a visible authored-frame canvas. Every authored frame
+      holds its fixed aspect and contain-fits.
 - [x] Add, remove, reorder components from the `ComponentTypes` registry.
 - [x] Drag to reposition; writes `Placement.offset` for the displayed
       orientation ONLY.
 - [x] Resize handles writing `Placement.size` (width and height independent).
 - [x] Params rendered generically from `ParamSpec`. A param needing a bespoke
       control is a finding about the model, not a reason to special-case it.
-- [x] Orientation switcher, so both authored layouts are editable on one device.
+- [x] Viewport switcher previews both orientations on one device. A missing
+      alternate contains the primary layout read-only; explicit creation bakes
+      that appearance before editing.
 - [x] Clone a template into a named dashboard through explicit confirmation.
 - [x] **Deliverable: a written list of everything the model could not express.**
       That list is the actual output of this stage.
@@ -206,8 +207,9 @@ could not be built in Stage 1:
   selection/drag/resize overlays; no per-component raster surfaces.
 - `Design` read interface lets presets and dashboards activate without silently
   converting presets into dashboards.
-- `FrameSpec` stores reference aspect plus fixed/adaptive mode per orientation.
-  Fixed is default and contain-fits; adaptive is explicit.
+- `FrameSpec` stores one fixed reference aspect for each explicitly authored
+  layout. Primary identity is explicit; a missing opposite-orientation layout
+  falls back wholesale to the primary.
 - Templates stay immutable. Clone confirms and optionally names a dashboard,
   activates it, then opens its editor. Edit never clones implicitly.
 - Dashboards, active selection, and global settings persist through
@@ -217,8 +219,10 @@ could not be built in Stage 1:
 
 ### Stage 4 data-model findings
 
-1. **Frame behavior was missing — resolved.** `FrameSpec` now expresses fixed
-   reference aspect or adaptive current-window aspect per orientation.
+1. **Frame behavior was missing — resolved.** Every design has one primary
+   fixed frame and may have one explicit opposite-orientation alternate.
+   Missing alternates contain the primary unchanged; no content rotation or
+   implicit reflow occurs.
 2. **Per-orientation params are missing — unresolved.** Three digits in
    landscape and two in portrait still requires two component ids with
    mutually exclusive placements.
@@ -435,14 +439,18 @@ Mechanical refinement model findings:
 
 #### Stage 4 viewport, cloning, and recovery follow-up — DONE
 
-- [x] Fixed aspect remains default; adaptive aspect is explicit per orientation.
-      Runtime and editor contain-fit fixed frames.
-- [x] Nullable orientation lock: portrait-only, landscape-only, or neither for
-      both. Editor initially selects current window orientation when supported.
-      No OS orientation lock; iPad remains resizable and Split View-capable.
+- [x] Fixed aspect is universal. Runtime and editor contain-fit authored frames;
+      no viewport resize mutates persisted layout data.
+- [x] Replace orientation lock/support flags with explicit primary-layout
+      identity plus an optional authored alternate. Landscape is the default
+      primary. Editor initially previews current window orientation.
+- [x] When no matching alternate exists, contain the primary unchanged. Never
+      rotate content or synthesize a cross-orientation reflow.
+- [x] Add explicit alternate creation/reset. Creation uses current window aspect
+      and bakes the contained primary appearance before independent editing.
+      Fallback previews remain read-only.
 - [x] Add independent fixed/span placement axes. Span persists start/end insets
-      and resolves against adaptive frame extent; fixed sizing remains legal in
-      either frame mode.
+      and resolves against authored fixed-frame extent.
 - [x] Preserve unknown component types during import/round-trip.
 - [x] Render and hit-test component overlays beyond frame bounds; dim only the
       portion outside the authored boundary. Add `BRING IN` recovery.
@@ -461,22 +469,30 @@ Mechanical refinement model findings:
 
 Follow-up model findings:
 
-1. **Window aspect policy — resolved.** Fixed/adaptive is design data, not
-   inferred behavior. `FrameSpec.referenceAspect` remains exportable.
-2. **Adaptive element sizing — resolved.** AxisSpan is lightweight placement
-   data; no extra module/layer hierarchy is needed.
-3. **Cross-version import loss — resolved.** Unknown component instances now
+1. **Cross-orientation policy — resolved.** Primary plus optional alternate
+   replaces mixed orientation-lock/adaptive semantics. `FrameSpec` entries are
+   explicit authored layouts, and `primaryOrientation` survives export/import.
+2. **Responsive frame behavior — deliberately deferred.** Fixed physical faces
+   are the only current frame mode. Resizable windows use contain fit. A future
+   same-orientation responsive instrument must justify adaptive authoring with a
+   concrete contract before the mode returns.
+3. **Alternate initialization — resolved.** Component and module placements are
+   baked from primary contain geometry, including resolving span axes to fixed
+   extents. The new layout can diverge without affecting primary.
+4. **Axis span data remains lightweight.** It needs no extra module/layer
+   hierarchy and currently resolves against fixed authored frames.
+5. **Cross-version import loss — resolved.** Unknown component instances now
    survive serialization. They remain unavailable to render until a matching
    type implementation exists.
-4. **Per-orientation params and optics remain unresolved.** Placement and frame
+6. **Per-orientation params and optics remain unresolved.** Placement and frame
    behavior vary per orientation; component params, variant, and sparse optical
    overrides do not.
 
 Mechanical refinement verification:
 
 - `flutter analyze`: clean.
-- `flutter test`: 112 passing, including architecture, detent/fascia,
-  resize-transform, responsive, and new golden coverage.
+- `flutter test`: 113 passing, including primary fallback, alternate
+  bake/reset, capability resolution, responsive editor, and updated goldens.
 - Existing Prism golden remains unchanged except shared VFD typography now uses
   the bundled Barlow face.
 - `integration_test/halo_compounding_test.dart`: four tests passing on iPhone
@@ -484,7 +500,9 @@ Mechanical refinement verification:
   unchanged.
 - Fresh debug launch verified the `WidgetsApp` hard-cut shell on device after
   explicit termination. Native portrait and landscape screenshots were
-  inspected; the latter retains the documented 90-degree screenshot rotation.
+  inspected. Portrait now shows the unchanged horizontal 2.6:1 primary centred
+  by contain fit; landscape retains the authored face. The latter keeps the
+  documented 90-degree screenshot rotation.
 
 Extension verification:
 

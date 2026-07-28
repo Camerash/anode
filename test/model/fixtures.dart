@@ -58,9 +58,9 @@ DesignPreset preset({String id = 'preset.classic', int version = 1}) =>
       id: id,
       name: 'Classic',
       version: version,
-      supportedOrientations: <DesignOrientation>{
-        DesignOrientation.landscape,
-        DesignOrientation.portrait,
+      frameSpecs: const <DesignOrientation, FrameSpec>{
+        DesignOrientation.landscape: FrameSpec(referenceAspect: 2.6),
+        DesignOrientation.portrait: FrameSpec(referenceAspect: 1 / 2.6),
       },
       components: <ComponentInstance>[digits(), bar()],
       defaults: DashboardSettings(

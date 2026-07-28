@@ -13,7 +13,8 @@ void main() {
     final d = Dashboard.forkFrom(p, id: 'dash.1');
 
     expect(d.components.map((c) => c.id), p.components.map((c) => c.id));
-    expect(d.supportedOrientations, p.supportedOrientations);
+    expect(d.primaryOrientation, p.primaryOrientation);
+    expect(d.authoredOrientations, p.authoredOrientations);
     expect(d.settings.phosphorName, 'Amber');
   });
 
