@@ -5,41 +5,51 @@ import 'package:anode/model/placement.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  // Representative authored fixed-frame aspects.
-  const aspects = <String, double>{
-    'authored 2.6:1': 2.6,
-    'phone landscape 18:9': 2.0,
-    'phone landscape 16:9': 16 / 9,
-    'iPad 4:3': 4 / 3,
+  // Representative authored frame extents. Height is no longer pinned to one
+  // unit: an alternate baked from a landscape primary is several units tall.
+  const frames = <String, Size>{
+    'authored 2.6:1': Size(2.6, 1),
+    'phone landscape 18:9': Size(2.0, 1),
+    'phone landscape 16:9': Size(16 / 9, 1),
+    'iPad 4:3': Size(4 / 3, 1),
+    'baked portrait alternate': Size(2.6, 5.637),
   };
 
   group('anchor points', () {
-    test('centre is the origin at every aspect', () {
-      for (final a in aspects.values) {
-        expect(Anchor.center.pointIn(a), Offset.zero);
+    test('centre is the origin at every extent', () {
+      for (final frame in frames.values) {
+        expect(Anchor.center.pointIn(frame), Offset.zero);
       }
     });
 
-    test('y is up: top is positive, bottom negative, always half a unit', () {
-      for (final a in aspects.values) {
-        expect(Anchor.topCenter.pointIn(a).dy, 0.5);
-        expect(Anchor.bottomCenter.pointIn(a).dy, -0.5);
+    test('y is up: top is positive, bottom negative, half the frame', () {
+      for (final frame in frames.values) {
+        expect(Anchor.topCenter.pointIn(frame).dy, frame.height / 2);
+        expect(Anchor.bottomCenter.pointIn(frame).dy, -frame.height / 2);
       }
     });
 
-    test('x edges track the aspect', () {
-      expect(Anchor.centerRight.pointIn(2.6).dx, closeTo(1.3, 1e-9));
-      expect(Anchor.centerLeft.pointIn(2.6).dx, closeTo(-1.3, 1e-9));
-      expect(Anchor.centerRight.pointIn(4 / 3).dx, closeTo(2 / 3, 1e-9));
+    test('edges track both frame axes', () {
+      expect(Anchor.centerRight.pointIn(const Size(2.6, 1)).dx, closeTo(1.3, 1e-9));
+      expect(Anchor.centerLeft.pointIn(const Size(2.6, 1)).dx, closeTo(-1.3, 1e-9));
+      expect(
+        Anchor.centerRight.pointIn(const Size(4 / 3, 1)).dx,
+        closeTo(2 / 3, 1e-9),
+      );
+      // A frame taller than one unit moves the vertical anchors with it.
+      expect(
+        Anchor.bottomCenter.pointIn(const Size(2.6, 5.637)).dy,
+        closeTo(-2.8185, 1e-9),
+      );
     });
   });
 
   group('resolution', () {
     test('a right-anchored component stays welded to the right edge', () {
       const p = Placement(anchor: Anchor.centerRight, offset: Offset(-0.2, 0));
-      for (final entry in aspects.entries) {
-        final aspect = entry.value;
-        final distanceFromRightEdge = aspect / 2 - p.resolve(aspect).dx;
+      for (final entry in frames.entries) {
+        final frame = entry.value;
+        final distanceFromRightEdge = frame.width / 2 - p.resolve(frame).dx;
         expect(
           distanceFromRightEdge,
           closeTo(0.2, 1e-9),
@@ -48,15 +58,18 @@ void main() {
       }
     });
 
-    test('a centre-anchored component does not move with aspect', () {
+    test('a centre-anchored component does not move with the frame', () {
       const p = Placement(offset: Offset(0.1, 0.11));
-      final positions = aspects.values.map((a) => p.resolve(a)).toSet();
+      final positions = frames.values.map(p.resolve).toSet();
       expect(positions, hasLength(1));
     });
 
     test('offsets are added to the anchor, not multiplied by it', () {
       const p = Placement(anchor: Anchor.bottomLeft, offset: Offset(0.3, 0.05));
-      expect(p.resolve(2.6), const Offset(-1.3 + 0.3, -0.5 + 0.05));
+      expect(
+        p.resolve(const Size(2.6, 1)),
+        const Offset(-1.3 + 0.3, -0.5 + 0.05),
+      );
     });
   });
 
@@ -103,9 +116,15 @@ void main() {
         horizontalSpan: AxisSpan(startInset: 0.2, endInset: 0.3),
       );
 
-      expect(placement.resolveSizeForAspect(2.6, null), const Size(2.1, 0.2));
-      expect(placement.resolveSizeForAspect(1.6, null), const Size(1.1, 0.2));
-      expect(placement.resolve(2.6).dx, closeTo(-0.05, 1e-9));
+      expect(
+        placement.resolveSizeIn(const Size(2.6, 1), null),
+        const Size(2.1, 0.2),
+      );
+      expect(
+        placement.resolveSizeIn(const Size(1.6, 1), null),
+        const Size(1.1, 0.2),
+      );
+      expect(placement.resolve(const Size(2.6, 1)).dx, closeTo(-0.05, 1e-9));
     });
 
     test('vertical span tracks frame height while preserving insets', () {
@@ -114,8 +133,17 @@ void main() {
         verticalSpan: AxisSpan(startInset: 0.1, endInset: 0.25),
       );
 
-      expect(placement.resolveSizeForAspect(2.6, null), const Size(0.4, 0.65));
-      expect(placement.resolve(2.6).dy, closeTo(0.075, 1e-9));
+      expect(
+        placement.resolveSizeIn(const Size(2.6, 1), null),
+        const Size(0.4, 0.65),
+      );
+      expect(placement.resolve(const Size(2.6, 1)).dy, closeTo(0.075, 1e-9));
+
+      // Frame height is no longer implicitly 1, so the span has to follow it.
+      expect(
+        placement.resolveSizeIn(const Size(2.6, 4), null),
+        const Size(0.4, 3.65),
+      );
     });
 
     test('span axes survive json independently', () {

@@ -20,41 +20,100 @@ enum DesignOrientation {
   }
 }
 
+/// The authored extent of one physical tube face, in design units.
+///
+/// A design unit is frame-independent — it is a physical unit of the tube face,
+/// roughly the height of the module in the reference photographs. It is NOT
+/// "the height of the frame". Every optical constant in `vfd.frag` (halo
+/// falloff, control-grid pitch, filament diameter, phosphor coating grain,
+/// segment edge softness) is expressed in these units, so if the meaning of a
+/// unit varied with the shape of the frame, changing a frame's aspect would
+/// silently rescale the whole optical stack. It did, once.
 @immutable
 class FrameSpec {
-  const FrameSpec({required this.referenceAspect});
+  const FrameSpec({required this.width, required this.height});
 
-  final double referenceAspect;
+  /// A frame one unit tall, which is what every layout authored before frames
+  /// carried an explicit extent implicitly was.
+  const FrameSpec.aspect(double aspect) : width = aspect, height = 1;
 
-  FrameSpec copyWith({double? referenceAspect}) =>
-      FrameSpec(referenceAspect: referenceAspect ?? this.referenceAspect);
+  final double width;
+  final double height;
 
+  double get referenceAspect => width / height;
+  Size get extent => Size(width, height);
+
+  bool get isValid =>
+      width.isFinite && width > 0 && height.isFinite && height > 0;
+
+  FrameSpec copyWith({double? width, double? height}) =>
+      FrameSpec(width: width ?? this.width, height: height ?? this.height);
+
+  /// `referenceAspect` is written as well as the extent. It is redundant for
+  /// this build and lets an older one degrade to an aspect-only frame instead
+  /// of falling back to a default it never authored.
   Map<String, Object?> toJson() => <String, Object?>{
+    'width': width,
+    'height': height,
     'referenceAspect': referenceAspect,
   };
 
   factory FrameSpec.fromJson(
     Map<String, Object?> json, {
-    required double fallbackAspect,
+    required FrameSpec fallback,
   }) {
-    final rawAspect = (json['referenceAspect'] as num?)?.toDouble();
-    return FrameSpec(
-      referenceAspect: rawAspect != null && rawAspect.isFinite && rawAspect > 0
-          ? rawAspect
-          : fallbackAspect,
-    );
+    final width = (json['width'] as num?)?.toDouble();
+    final height = (json['height'] as num?)?.toDouble();
+    if (width != null && height != null) {
+      final spec = FrameSpec(width: width, height: height);
+      if (spec.isValid) return spec;
+    }
+    final aspect = (json['referenceAspect'] as num?)?.toDouble();
+    if (aspect != null && aspect.isFinite && aspect > 0) {
+      return FrameSpec.aspect(aspect);
+    }
+    return fallback;
   }
 }
 
-/// Development defaults for payloads written before frame aspects were stored.
+/// Development defaults for payloads written before frame extents were stored.
 ///
 /// New designs explicitly author their primary and any optional alternate.
-/// Tolerant defaults keep malformed/imported payloads usable.
-const Map<DesignOrientation, double> kDefaultFrameAspects =
-    <DesignOrientation, double>{
-      DesignOrientation.portrait: 1 / 2.6,
-      DesignOrientation.landscape: 2.6,
+/// Tolerant defaults keep malformed/imported payloads usable, so their numbers
+/// must not drift: changing one would rescale every legacy payload that fell
+/// back to it.
+const Map<DesignOrientation, FrameSpec> kDefaultFrameSpecs =
+    <DesignOrientation, FrameSpec>{
+      DesignOrientation.portrait: FrameSpec.aspect(1 / 2.6),
+      DesignOrientation.landscape: FrameSpec.aspect(2.6),
     };
+
+/// The extent an explicitly created alternate layout takes, such that the
+/// design renders at exactly the fit scale it already had.
+///
+/// [deviceSafe] is the device's own safe rect. Its axes are swapped when
+/// [target] disagrees with the device's current orientation, because the
+/// viewport selector is independent of how the phone happens to be held.
+///
+/// Both `CREATE` and the read-only preview of an unauthored orientation call
+/// this, which is what makes "no runtime visual jump" structural rather than
+/// something a test has to keep honest.
+Size viewportFrameExtent(
+  DesignOrientation target,
+  Size deviceSafe,
+  FrameSpec primary,
+) {
+  final viewport = (deviceSafe.height >= deviceSafe.width) ==
+          (target == DesignOrientation.portrait)
+      ? deviceSafe
+      : Size(deviceSafe.height, deviceSafe.width);
+  final scale = math.min(
+    viewport.width / primary.width,
+    viewport.height / primary.height,
+  );
+  if (!scale.isFinite || scale <= 0) return primary.extent;
+  return Size(viewport.width / scale, viewport.height / scale);
+}
 
 Map<DesignOrientation, FrameSpec> normaliseFrameSpecs(
   DesignOrientation primary, {
@@ -63,9 +122,7 @@ Map<DesignOrientation, FrameSpec> normaliseFrameSpecs(
 }) {
   final resolved = <DesignOrientation, FrameSpec>{
     for (final entry in (specs ?? const {}).entries)
-      if (entry.value.referenceAspect.isFinite &&
-          entry.value.referenceAspect > 0)
-        entry.key: entry.value,
+      if (entry.value.isValid) entry.key: entry.value,
   };
   for (final entry in (legacyAspects ?? const {}).entries) {
     if (resolved.containsKey(entry.key) ||
@@ -73,12 +130,9 @@ Map<DesignOrientation, FrameSpec> normaliseFrameSpecs(
         entry.value <= 0) {
       continue;
     }
-    resolved[entry.key] = FrameSpec(referenceAspect: entry.value);
+    resolved[entry.key] = FrameSpec.aspect(entry.value);
   }
-  resolved.putIfAbsent(
-    primary,
-    () => FrameSpec(referenceAspect: kDefaultFrameAspects[primary]!),
-  );
+  resolved.putIfAbsent(primary, () => kDefaultFrameSpecs[primary]!);
   return Map<DesignOrientation, FrameSpec>.unmodifiable(resolved);
 }
 
@@ -96,7 +150,7 @@ Map<DesignOrientation, FrameSpec> parseFrameSpecs(Object? raw) {
     if (orientation == null || entry.value is! Map) continue;
     values[orientation] = FrameSpec.fromJson(
       (entry.value as Map).cast<String, Object?>(),
-      fallbackAspect: kDefaultFrameAspects[orientation]!,
+      fallback: kDefaultFrameSpecs[orientation]!,
     );
   }
   return values;
@@ -115,8 +169,9 @@ Map<DesignOrientation, double> parseFrameAspects(Object? raw) {
 }
 
 /// Design space is the shader's space: y-up, origin at the centre of the frame,
-/// one unit tall. A frame of aspect `a` therefore spans x in [-a/2, a/2] and y
-/// in [-0.5, 0.5].
+/// measured in the frame-independent design units described on [FrameSpec]. A
+/// frame of extent `(w, h)` therefore spans x in [-w/2, w/2] and y in
+/// [-h/2, h/2].
 enum Anchor {
   topLeft,
   topCenter,
@@ -135,18 +190,21 @@ enum Anchor {
     return null;
   }
 
-  /// The anchor's position in design units for a frame of [aspect].
-  Offset pointIn(double aspect) {
-    final half = aspect / 2;
+  /// The anchor's position in design units for a frame of extent [frame].
+  Offset pointIn(Size frame) {
+    final halfWidth = frame.width / 2;
+    final halfHeight = frame.height / 2;
     final dx = switch (this) {
-      Anchor.topLeft || Anchor.centerLeft || Anchor.bottomLeft => -half,
+      Anchor.topLeft || Anchor.centerLeft || Anchor.bottomLeft => -halfWidth,
       Anchor.topCenter || Anchor.center || Anchor.bottomCenter => 0.0,
-      Anchor.topRight || Anchor.centerRight || Anchor.bottomRight => half,
+      Anchor.topRight || Anchor.centerRight || Anchor.bottomRight => halfWidth,
     };
     final dy = switch (this) {
-      Anchor.topLeft || Anchor.topCenter || Anchor.topRight => 0.5,
+      Anchor.topLeft || Anchor.topCenter || Anchor.topRight => halfHeight,
       Anchor.centerLeft || Anchor.center || Anchor.centerRight => 0.0,
-      Anchor.bottomLeft || Anchor.bottomCenter || Anchor.bottomRight => -0.5,
+      Anchor.bottomLeft ||
+      Anchor.bottomCenter ||
+      Anchor.bottomRight => -halfHeight,
     };
     return Offset(dx, dy);
   }
@@ -170,22 +228,28 @@ class AxisSpan {
   );
 }
 
-/// Bakes a contained source-layout placement into a new fixed-aspect layout.
+/// Bakes a source-layout placement into a newly created alternate layout.
 ///
-/// The resulting component occupies the same visual position it had while the
-/// whole source frame was contain-fitted into the target frame. Span axes are
-/// intentionally resolved to fixed extents: the new layout is now independently
-/// authored.
+/// Geometry is copied verbatim. The target frame is sized by
+/// [viewportFrameExtent] so that it renders at the fit scale the design already
+/// had, which is what makes creating an alternate produce no visual jump — in
+/// the geometry OR in the optical layer, since a design unit means the same
+/// thing in both frames.
+///
+/// Span axes are deliberately frozen to fixed extents. A `verticalSpan` copied
+/// verbatim would resolve against the taller new envelope and stretch to fill
+/// it, which is exactly the jump this is here to avoid.
 Placement bakeContainedPlacement({
   required Placement placement,
   required Size resolvedSize,
-  required double sourceAspect,
-  required double targetAspect,
+  required Size sourceFrame,
+  required Size targetFrame,
 }) {
-  final scale = math.min(1.0, targetAspect / sourceAspect);
+  final centre = placement.resolve(sourceFrame);
   return Placement(
-    offset: placement.resolve(sourceAspect) * scale,
-    size: Size(resolvedSize.width * scale, resolvedSize.height * scale),
+    anchor: placement.anchor,
+    offset: centre - placement.anchor.pointIn(targetFrame),
+    size: resolvedSize,
   );
 }
 
@@ -213,20 +277,23 @@ class Placement {
   final AxisSpan? horizontalSpan;
   final AxisSpan? verticalSpan;
 
-  Offset resolve(double aspect) {
-    final fixed = anchor.pointIn(aspect) + offset;
+  Offset resolve(Size frame) {
+    final fixed = anchor.pointIn(frame) + offset;
     final horizontal = horizontalSpan;
     final vertical = verticalSpan;
+    final halfWidth = frame.width / 2;
+    final halfHeight = frame.height / 2;
     final dx = horizontal == null
         ? fixed.dx
-        : (-aspect / 2 +
+        : (-halfWidth +
                   horizontal.startInset +
-                  aspect / 2 -
+                  halfWidth -
                   horizontal.endInset) /
               2;
     final dy = vertical == null
         ? fixed.dy
-        : (0.5 - vertical.startInset - 0.5 + vertical.endInset) / 2;
+        : (halfHeight - vertical.startInset - halfHeight + vertical.endInset) /
+              2;
     return Offset(dx, dy);
   }
 
@@ -237,8 +304,8 @@ class Placement {
           : type.variant(variant ?? type.legacyVariant)?.recommendedSize ??
                 type.defaultSize);
 
-  Size resolveSizeForAspect(
-    double aspect,
+  Size resolveSizeIn(
+    Size frame,
     ComponentTypeSpec? type, {
     VariantReference? variant,
   }) {
@@ -246,14 +313,14 @@ class Placement {
     return Size(
       horizontalSpan == null
           ? fixed.width
-          : (aspect - horizontalSpan!.startInset - horizontalSpan!.endInset)
+          : (frame.width -
+                    horizontalSpan!.startInset -
+                    horizontalSpan!.endInset)
                 .clamp(0.03, double.infinity),
       verticalSpan == null
           ? fixed.height
-          : (1 - verticalSpan!.startInset - verticalSpan!.endInset).clamp(
-              0.03,
-              double.infinity,
-            ),
+          : (frame.height - verticalSpan!.startInset - verticalSpan!.endInset)
+                .clamp(0.03, double.infinity),
     );
   }
 

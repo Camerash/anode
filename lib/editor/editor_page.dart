@@ -54,6 +54,7 @@ class _EditorPageState extends State<EditorPage> {
   String? _selectedId;
   String? _selectedModuleId;
   bool _drawerOpen = false;
+  bool _fullScreen = false;
 
   VfdPalette get _palette =>
       VfdPalette.of(_dashboard.settings.opticalProfile.phosphor);
@@ -73,22 +74,43 @@ class _EditorPageState extends State<EditorPage> {
     _orientation = current;
   }
 
+  /// The device's own safe rect. Read here, above this route's `SafeArea`,
+  /// which would otherwise have consumed the padding. `CREATE` and the
+  /// read-only preview both size their envelope from it, so neither depends on
+  /// how much room the editor chrome happens to leave.
+  Size get _deviceSafeSize {
+    final size = MediaQuery.sizeOf(context);
+    final padding = MediaQuery.paddingOf(context);
+    return Size(
+      math.max(1, size.width - padding.horizontal),
+      math.max(1, size.height - padding.vertical),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: const Color(0xFF050807),
-    child: SafeArea(
-      child: Column(
-        children: <Widget>[
-          SizedBox(height: 48, child: _topRail(context)),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) => _workspace(constraints),
+  Widget build(BuildContext context) {
+    if (_fullScreen) {
+      return ColoredBox(
+        color: const Color(0xFF050807),
+        child: _canvas(frameInset: MediaQuery.paddingOf(context)),
+      );
+    }
+    return ColoredBox(
+      color: const Color(0xFF050807),
+      child: SafeArea(
+        child: Column(
+          children: <Widget>[
+            SizedBox(height: 48, child: _topRail(context)),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) => _workspace(constraints),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _topRail(BuildContext context) => PrismPanel(
     palette: _palette,
@@ -136,40 +158,39 @@ class _EditorPageState extends State<EditorPage> {
     ),
   );
 
-  Widget _workspace(BoxConstraints constraints) {
-    final portrait = _orientation == DesignOrientation.portrait;
-    final maxExtent = portrait
-        ? math.max(160.0, constraints.maxHeight - 120)
-        : math.max(240.0, constraints.maxWidth - 60);
-    final drawerExtent = portrait
-        ? math.min(
-            maxExtent,
-            (constraints.maxHeight * 0.42).clamp(220, 420).toDouble(),
-          )
-        : math.min(
-            maxExtent,
-            (constraints.maxWidth * 0.38).clamp(280, 420).toDouble(),
-          );
-    final canvas = Padding(
-      padding: const EdgeInsets.all(4),
-      child: EditorCanvas(
+  Widget _canvas({EdgeInsets frameInset = const EdgeInsets.all(24)}) =>
+      EditorCanvas(
         dashboard: _dashboard,
         orientation: _layoutOrientation,
         previewOrientation: _orientation,
         editable: !_layoutInherited,
+        deviceSafeSize: _deviceSafeSize,
         selectedId: _selectedId,
         selectedModuleId: _selectedModuleId,
         onSelect: _selectComponent,
         onPlacementChanged: _setPlacement,
         onModulePlacementChanged: _setModulePlacement,
         renderAssets: widget.renderAssets,
-      ),
+        frameInset: frameInset,
+        fullScreen: _fullScreen,
+        onToggleFullScreen: () =>
+            setState(() => _fullScreen = !_fullScreen),
+      );
+
+  Widget _workspace(BoxConstraints constraints) {
+    final layout = _WorkspaceLayout.resolve(
+      portrait: _orientation == DesignOrientation.portrait,
+      constraints: constraints,
+    );
+    final canvas = Padding(
+      padding: const EdgeInsets.all(4),
+      child: _canvas(),
     );
     return MechanicalPushDrawer(
       key: const ValueKey('editor-workspace'),
       open: _drawerOpen,
-      edge: portrait ? MechanicalDrawerEdge.bottom : MechanicalDrawerEdge.right,
-      extent: drawerExtent,
+      edge: layout.edge,
+      extent: layout.drawerExtent,
       palette: _palette,
       soundEnabled: widget.soundEnabled,
       hapticsEnabled: widget.hapticsEnabled,
@@ -180,7 +201,7 @@ class _EditorPageState extends State<EditorPage> {
         orientation: _layoutOrientation,
         previewOrientation: _orientation,
         layoutInherited: _layoutInherited,
-        frameAspect: _dashboard.frameAspect(_layoutOrientation),
+        frameExtent: _dashboard.frameExtent(_layoutOrientation),
         selectedId: _selectedId,
         selectedModuleId: _selectedModuleId,
         palette: _palette,
@@ -197,7 +218,7 @@ class _EditorPageState extends State<EditorPage> {
         onVisibilityChanged: _setVisibility,
         onComponentChanged: _replaceComponent,
         onDashboardChanged: _replaceDashboard,
-        onFrameAspectChanged: _setFrameAspect,
+        onFrameExtentChanged: _setFrameExtent,
         onCreateLayout: _createPreviewLayout,
         onRemoveLayout: _removePreviewLayout,
         onPlacementChanged: _setPlacement,
@@ -216,14 +237,15 @@ class _EditorPageState extends State<EditorPage> {
     _selectedModuleId = id;
   });
 
-  void _setFrameAspect(double value) {
-    if (_layoutInherited || !value.isFinite || value <= 0) return;
-    final current = _dashboard.frameSpec(_layoutOrientation);
+  void _setFrameExtent(Size value) {
+    if (_layoutInherited) return;
+    final next = FrameSpec(width: value.width, height: value.height);
+    if (!next.isValid) return;
     _replaceDashboard(
       _dashboard.copyWith(
         frameSpecs: <DesignOrientation, FrameSpec>{
           ..._dashboard.frameSpecs,
-          _layoutOrientation: current.copyWith(referenceAspect: value),
+          _layoutOrientation: next,
         },
       ),
     );
@@ -231,13 +253,18 @@ class _EditorPageState extends State<EditorPage> {
 
   void _createPreviewLayout() {
     if (!_layoutInherited) return;
-    final window = MediaQuery.sizeOf(context);
-    final rawAspect = window.width / math.max(1, window.height);
-    final aspect = switch (_orientation) {
-      DesignOrientation.portrait => rawAspect <= 1 ? rawAspect : 1 / rawAspect,
-      DesignOrientation.landscape => rawAspect >= 1 ? rawAspect : 1 / rawAspect,
-    };
-    _replaceDashboard(_dashboard.withBakedLayout(_orientation, aspect: aspect));
+    _replaceDashboard(
+      _dashboard.withBakedLayout(
+        _orientation,
+        // Same function the read-only preview draws with, so what was on screen
+        // is what becomes authored.
+        extent: viewportFrameExtent(
+          _orientation,
+          _deviceSafeSize,
+          _dashboard.frameSpec(_layoutOrientation),
+        ),
+      ),
+    );
   }
 
   void _removePreviewLayout() {
@@ -358,13 +385,49 @@ class _EditorPageState extends State<EditorPage> {
   }
 }
 
+/// Where the service bay enters from and how much room it takes.
+///
+/// Portrait and landscape keep their own numbers — a bay that pushes up wants a
+/// different reserve from one that pushes in from the side — but every other
+/// part of the editor is shape-agnostic, so this is the only branch.
+class _WorkspaceLayout {
+  const _WorkspaceLayout({required this.edge, required this.drawerExtent});
+
+  final MechanicalDrawerEdge edge;
+  final double drawerExtent;
+
+  static _WorkspaceLayout resolve({
+    required bool portrait,
+    required BoxConstraints constraints,
+  }) {
+    if (portrait) {
+      final maxExtent = math.max(160.0, constraints.maxHeight - 120);
+      return _WorkspaceLayout(
+        edge: MechanicalDrawerEdge.bottom,
+        drawerExtent: math.min(
+          maxExtent,
+          (constraints.maxHeight * 0.42).clamp(220, 420).toDouble(),
+        ),
+      );
+    }
+    final maxExtent = math.max(240.0, constraints.maxWidth - 60);
+    return _WorkspaceLayout(
+      edge: MechanicalDrawerEdge.right,
+      drawerExtent: math.min(
+        maxExtent,
+        (constraints.maxWidth * 0.38).clamp(280, 420).toDouble(),
+      ),
+    );
+  }
+}
+
 class _EditorServicePanel extends StatefulWidget {
   const _EditorServicePanel({
     required this.dashboard,
     required this.orientation,
     required this.previewOrientation,
     required this.layoutInherited,
-    required this.frameAspect,
+    required this.frameExtent,
     required this.selectedId,
     required this.selectedModuleId,
     required this.palette,
@@ -381,7 +444,7 @@ class _EditorServicePanel extends StatefulWidget {
     required this.onVisibilityChanged,
     required this.onComponentChanged,
     required this.onDashboardChanged,
-    required this.onFrameAspectChanged,
+    required this.onFrameExtentChanged,
     required this.onCreateLayout,
     required this.onRemoveLayout,
     required this.onPlacementChanged,
@@ -392,7 +455,7 @@ class _EditorServicePanel extends StatefulWidget {
   final DesignOrientation orientation;
   final DesignOrientation previewOrientation;
   final bool layoutInherited;
-  final double frameAspect;
+  final Size frameExtent;
   final String? selectedId;
   final String? selectedModuleId;
   final VfdPalette palette;
@@ -410,7 +473,7 @@ class _EditorServicePanel extends StatefulWidget {
   onVisibilityChanged;
   final ValueChanged<ComponentInstance> onComponentChanged;
   final ValueChanged<Dashboard> onDashboardChanged;
-  final ValueChanged<double> onFrameAspectChanged;
+  final ValueChanged<Size> onFrameExtentChanged;
   final VoidCallback onCreateLayout;
   final VoidCallback onRemoveLayout;
   final void Function(String id, Placement placement) onPlacementChanged;
@@ -834,6 +897,7 @@ class _DesignPanel extends StatelessWidget {
     final primary = host.dashboard.primaryOrientation;
     final isPrimary = preview == primary;
     final authored = host.dashboard.hasAuthoredLayout(preview);
+    final spec = host.dashboard.frameSpec(preview);
     return PrismPanel(
       palette: host.palette,
       padding: const EdgeInsets.all(8),
@@ -869,11 +933,9 @@ class _DesignPanel extends StatelessWidget {
                 children: <Widget>[
                   Expanded(
                     child: VfdEditableField(
-                      label: 'Fixed aspect · ${preview.name}',
-                      value: host.dashboard
-                          .frameSpec(preview)
-                          .referenceAspect
-                          .toStringAsFixed(3),
+                      label:
+                          'Frame W · ${spec.referenceAspect.toStringAsFixed(3)}:1',
+                      value: spec.width.toStringAsFixed(3),
                       palette: host.palette,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
@@ -881,7 +943,29 @@ class _DesignPanel extends StatelessWidget {
                       onChanged: (_) {},
                       onSubmitted: (raw) {
                         final value = double.tryParse(raw);
-                        if (value != null) host.onFrameAspectChanged(value);
+                        if (value != null) {
+                          host.onFrameExtentChanged(
+                            Size(value, spec.height),
+                          );
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: VfdEditableField(
+                      label: 'Frame H · ${preview.name}',
+                      value: spec.height.toStringAsFixed(3),
+                      palette: host.palette,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      onChanged: (_) {},
+                      onSubmitted: (raw) {
+                        final value = double.tryParse(raw);
+                        if (value != null) {
+                          host.onFrameExtentChanged(Size(spec.width, value));
+                        }
                       },
                     ),
                   ),
@@ -1191,20 +1275,20 @@ class _PlacementPanel extends StatelessWidget {
     final type = component == null
         ? null
         : ComponentTypes.byId(component.typeId);
-    final aspect = host.frameAspect;
-    final size = placement.resolveSizeForAspect(
-      aspect,
+    final frame = host.frameExtent;
+    final size = placement.resolveSizeIn(
+      frame,
       type,
       variant: component?.effectiveVariant,
     );
-    final center = placement.resolve(aspect);
+    final center = placement.resolve(frame);
     return PrismPanel(
       palette: host.palette,
       padding: const EdgeInsets.all(9),
       child: MechanicalPager(
         pages: <Widget>[
-          _anchorPage(placement, aspect, component, module),
-          _spanPage(placement, aspect, size, component, module),
+          _anchorPage(placement, frame, component, module),
+          _spanPage(placement, frame, size, component, module),
           _recoveryPage(placement, center, component, module),
           _axisPage('X', center.dx, -_nudge, _nudge, (delta) {
             _write(component, module, nudgePlacement(placement, dx: delta));
@@ -1219,7 +1303,7 @@ class _PlacementPanel extends StatelessWidget {
               resizePlacementFromEdges(
                 placement: placement,
                 resolvedSize: size,
-                frameAspect: aspect,
+                frame: frame,
                 widthDelta: delta,
               ),
             );
@@ -1231,7 +1315,7 @@ class _PlacementPanel extends StatelessWidget {
               resizePlacementFromEdges(
                 placement: placement,
                 resolvedSize: size,
-                frameAspect: aspect,
+                frame: frame,
                 heightDelta: delta,
               ),
             );
@@ -1248,7 +1332,7 @@ class _PlacementPanel extends StatelessWidget {
 
   Widget _anchorPage(
     Placement placement,
-    double aspect,
+    Size frame,
     ComponentInstance? component,
     VfdModule? module,
   ) => Column(
@@ -1273,13 +1357,13 @@ class _PlacementPanel extends StatelessWidget {
         hapticsEnabled: host.hapticsEnabled,
         semanticLabel: 'Anchor',
         onSelected: (anchor) {
-          final center = placement.resolve(aspect);
+          final center = placement.resolve(frame);
           _write(
             component,
             module,
             placement.copyWith(
               anchor: anchor,
-              offset: center - anchor.pointIn(aspect),
+              offset: center - anchor.pointIn(frame),
             ),
           );
         },
@@ -1289,7 +1373,7 @@ class _PlacementPanel extends StatelessWidget {
 
   Widget _spanPage(
     Placement placement,
-    double aspect,
+    Size frame,
     Size size,
     ComponentInstance? component,
     VfdModule? module,
@@ -1330,9 +1414,9 @@ class _PlacementPanel extends StatelessWidget {
         hapticsEnabled: host.hapticsEnabled,
         semanticLabel: 'Axis sizing mode',
         onSelected: (value) {
-          final center = placement.resolve(aspect);
+          final center = placement.resolve(frame);
           var next = placement.copyWith(
-            offset: center - placement.anchor.pointIn(aspect),
+            offset: center - placement.anchor.pointIn(frame),
             size: size,
           );
           switch (value) {
@@ -1341,8 +1425,8 @@ class _PlacementPanel extends StatelessWidget {
             case 'x-span':
               next = next.withHorizontalSpan(
                 AxisSpan(
-                  startInset: aspect / 2 + center.dx - size.width / 2,
-                  endInset: aspect / 2 - center.dx - size.width / 2,
+                  startInset: frame.width / 2 + center.dx - size.width / 2,
+                  endInset: frame.width / 2 - center.dx - size.width / 2,
                 ),
               );
             case 'y-fixed':
@@ -1350,8 +1434,8 @@ class _PlacementPanel extends StatelessWidget {
             case 'y-span':
               next = next.withVerticalSpan(
                 AxisSpan(
-                  startInset: 0.5 - center.dy - size.height / 2,
-                  endInset: 0.5 + center.dy - size.height / 2,
+                  startInset: frame.height / 2 - center.dy - size.height / 2,
+                  endInset: frame.height / 2 + center.dy - size.height / 2,
                 ),
               );
           }

@@ -11,14 +11,14 @@ const double minimumAuthoredSize = 0.03;
 Placement resizePlacementFromEdges({
   required Placement placement,
   required Size resolvedSize,
-  required double frameAspect,
+  required Size frame,
   double widthDelta = 0,
   double heightDelta = 0,
   double minimumSize = minimumAuthoredSize,
 }) {
   final horizontal = placement.horizontalSpan;
   final vertical = placement.verticalSpan;
-  final center = placement.resolve(frameAspect);
+  final center = placement.resolve(frame);
   var nextCenter = center;
   var nextWidth = resolvedSize.width;
   var nextHeight = resolvedSize.height;
@@ -33,7 +33,7 @@ Placement resizePlacementFromEdges({
       startInset: horizontal.startInset,
       endInset: math.min(
         horizontal.endInset - widthDelta,
-        frameAspect - horizontal.startInset - minimumSize,
+        frame.width - horizontal.startInset - minimumSize,
       ),
     );
   }
@@ -46,14 +46,14 @@ Placement resizePlacementFromEdges({
       startInset: vertical.startInset,
       endInset: math.min(
         vertical.endInset - heightDelta,
-        1 - vertical.startInset - minimumSize,
+        frame.height - vertical.startInset - minimumSize,
       ),
     );
   }
 
   return placement
       .copyWith(
-        offset: nextCenter - placement.anchor.pointIn(frameAspect),
+        offset: nextCenter - placement.anchor.pointIn(frame),
         size: Size(nextWidth, nextHeight),
       )
       .withHorizontalSpan(nextHorizontal)
@@ -85,17 +85,17 @@ Placement nudgePlacement(Placement placement, {double dx = 0, double dy = 0}) {
 
 Placement setResolvedPlacementAxis({
   required Placement placement,
-  required double frameAspect,
+  required Size frame,
   double? centerX,
   double? centerY,
   double? width,
   double? height,
   required Size resolvedSize,
 }) {
-  final center = placement.resolve(frameAspect);
+  final center = placement.resolve(frame);
   final nextCenter = Offset(centerX ?? center.dx, centerY ?? center.dy);
   return placement.copyWith(
-    offset: nextCenter - placement.anchor.pointIn(frameAspect),
+    offset: nextCenter - placement.anchor.pointIn(frame),
     size: Size(width ?? resolvedSize.width, height ?? resolvedSize.height),
   );
 }

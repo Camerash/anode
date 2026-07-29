@@ -11,7 +11,10 @@ layout(location = 4)  uniform vec4  uLayers;
 layout(location = 5)  uniform float uGrain;
 layout(location = 6)  uniform vec2  uSafeMin;
 layout(location = 7)  uniform vec2  uSafeMax;
-layout(location = 8)  uniform float uAspect;
+// The authored frame extent in design units. A design unit is frame-independent
+// — every optical constant below is expressed in them, so the unit must not
+// change meaning when the frame's shape does.
+layout(location = 8)  uniform vec2  uFrame;
 layout(location = 9)  uniform float uCount;
 layout(location = 10) uniform vec2  uDataSize;
 
@@ -34,11 +37,16 @@ const float TEXELS_PER_DIGIT = 3.0;
 // The data texture is range-clamped to [0, 1] even though it holds floats, so
 // everything outside that range is stored normalised. Mirrored in
 // component_data.dart.
-const float POSITION_RANGE = 4.0;
-const float SIZE_SCALE = 8.0;
+const float POSITION_RANGE = 16.0;
+const float SIZE_SCALE = 32.0;
 const float TYPE_SCALE = 8.0;
 const float COUNT_SCALE = 64.0;
 const float EFFECT_SCALE = 2.0;
+// The reference tube height the filament layout was measured against. New
+// constant, not a rescaled one: the main module used to be hardcoded one unit
+// tall on the Dart side, so this preserves that geometry now that its size is
+// the authored frame extent.
+const float MAIN_TUBE_HEIGHT = 1.0;
 const float PRISM_GLYPH_COUNT = 43.0;
 const vec2 PRISM_ATLAS_GRID = vec2(8.0, 6.0);
 
@@ -343,7 +351,7 @@ void main() {
   // mask and no clamp, so halo, sheen and grain still spill past it.
   vec2 safeSize = uSafeMax - uSafeMin;
   vec2 safeCenter = 0.5 * (uSafeMin + uSafeMax);
-  float fitScale = min(safeSize.x / uAspect, safeSize.y);
+  float fitScale = min(safeSize.x / uFrame.x, safeSize.y / uFrame.y);
   vec2 uv = (flipped - safeCenter) / fitScale;
 
   vec2 q = uv + vec2(uTilt * 0.012, 0.0);
@@ -423,20 +431,27 @@ void main() {
     vec2 mq = q - moduleCenter;
     float inModule = step(abs(mq.x), moduleSize.x * 0.5)
                    * step(abs(mq.y), moduleSize.y * 0.5);
-    float mainModule = step(abs(moduleSize.x - uAspect), 0.001)
-                     * step(abs(moduleSize.y - 1.0), 0.001);
+    // Packed explicitly. The main module's size now equals the frame extent, so
+    // comparing geometry would also match an authored sub-module a user sized
+    // to the whole frame.
+    float mainModule = step(0.5, interaction.b);
     grainStrength = max(
       grainStrength,
       moduleB.y * EFFECT_SCALE * mix(inModule, 1.0, mainModule)
     );
 
+    // Cathode spacing is a property of the physical tube, not of the envelope
+    // drawn around it. The main module spans whatever frame it is given, so it
+    // references the tube height directly rather than its own extent; an
+    // authored sub-module still lays its wires out relative to itself.
+    float filRef = mix(moduleSize.y, MAIN_TUBE_HEIGHT, mainModule);
     float fil = 0.0;
     for (int k = 0; k < 3; k++) {
       float fy = moduleCenter.y
-               + (0.11 + (float(k) - 1.0) * 0.215) * moduleSize.y;
+               + (0.11 + (float(k) - 1.0) * 0.215) * filRef;
       fil = max(fil, 1.0 - smoothstep(0.0, 0.0024, abs(q.y - fy)));
     }
-    float filamentHalfWidth = 0.62 * moduleSize.x / max(uAspect, 0.001);
+    float filamentHalfWidth = 0.62 * moduleSize.x / max(uFrame.x, 0.001);
     fil *= step(abs(mq.x), filamentHalfWidth)
          * inModule
          * moduleB.z * EFFECT_SCALE;

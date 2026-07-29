@@ -1,3 +1,5 @@
+import 'dart:ui' show Size;
+
 import 'package:flutter/foundation.dart';
 
 import 'component_instance.dart';
@@ -73,6 +75,10 @@ class DesignPreset implements Design {
   @override
   double frameAspect(DesignOrientation orientation) =>
       frameSpec(orientation).referenceAspect;
+
+  @override
+  Size frameExtent(DesignOrientation orientation) =>
+      frameSpec(orientation).extent;
 
   @override
   List<ComponentInstance> componentsIn(DesignOrientation orientation) =>

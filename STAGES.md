@@ -113,6 +113,20 @@ slightly above 3, so `float(k) >= count` drew a fourth digit — visible as a
 phantom digit box sitting on top of the unit legend. The shader compares
 against a rounded count instead.
 
+`positionRange` is 16 and `sizeScale` is 32. These are encoding ranges, not
+tuned values, and they carry headroom deliberately: the main module's size is
+now the authored frame extent, and a landscape primary contained into a narrow
+tall window derives an envelope 8.32 units tall at 320×1024 — which the previous
+`sizeScale` of 8 clamped silently. `rgbaFloat32` resolves roughly 6e-8 inside
+[0, 1], so even at these ranges a decoded value is good to about 2e-6 design
+units, or 6e-4 px at the halo test's 300 px per unit.
+
+The main module is identified by an explicit packed flag in `texel 8.b`, not by
+comparing its size against the frame. Its size now *equals* the frame extent, so
+a geometric test would also fire for an authored sub-module a user happened to
+size to the whole frame — silently making its grain global and its filaments use
+the tube reference.
+
 Layout, mirrored between `component_data.dart` and `vfd.frag`:
 
     texel 0:        type, cx, cy
@@ -123,7 +137,7 @@ Layout, mirrored between `component_data.dart` and `vfd.frag`:
     texel 5:        grid, unlit phosphor, decay
     texel 6:        module centre x/y, module width
     texel 7:        module height, glass grain, filament strength
-    texel 8:        Prism pressed, filament variant code, spare
+    texel 8:        Prism pressed, filament variant code, main-module flag
     texel 9:        Prism bevel, face opacity, inactive luminosity
     texels 10..21:  digit segment payload, or 24 Prism glyph indices
 
@@ -159,11 +173,15 @@ end and renumber both sides together.
 | 11 | `uGrain` |
 | 12, 13 | `uSafeMin` |
 | 14, 15 | `uSafeMax` |
-| 16 | `uAspect` |
-| 17 | `uCount` |
-| 18, 19 | `uDataSize` |
+| 16, 17 | `uFrame` — authored frame extent in design units |
+| 18 | `uCount` |
+| 19, 20 | `uDataSize` |
 
-Sampler 0 is `uData`.
+Sampler 0 is `uData`, sampler 1 is `uPrismGlyphs`.
+
+`VfdPainter.paint` asserts that `setFloat(21, …)` throws. If it ever succeeds,
+`vfd.frag` declares a uniform nothing writes — which renders plausibly and
+wrongly rather than erroring, exactly like the three texture traps above.
 
 ---
 
@@ -448,14 +466,18 @@ Mechanical refinement model findings:
       rotate content or synthesize a cross-orientation reflow.
 - [x] Add explicit alternate creation/reset. Creation uses current window aspect
       and bakes the contained primary appearance before independent editing.
-      Fallback previews remain read-only.
+      Fallback previews remain read-only. *(Superseded by the frame-extent
+      follow-up below: creation now derives a device-safe-rect envelope at the
+      current fit scale and copies placements verbatim.)*
 - [x] Add independent fixed/span placement axes. Span persists start/end insets
       and resolves against authored fixed-frame extent.
 - [x] Preserve unknown component types during import/round-trip.
 - [x] Render and hit-test component overlays beyond frame bounds; dim only the
       portion outside the authored boundary. Add `BRING IN` recovery.
 - [x] Separate canvas `EDIT` and `NAV` modes. Nav owns 1×–4× pan/zoom; `FIT`
-      restores edit mode and identity without writing placement.
+      restores edit mode and identity without writing placement. *(Superseded by
+      the frame-extent follow-up below: modes removed in favour of one
+      hit-tested gesture.)*
 - [x] Fix first resize interaction by snapshotting resolved size, placement,
       frame aspect, and scale at gesture start.
 - [x] Push service bay from bottom in portrait and right in landscape, using the
@@ -476,9 +498,10 @@ Follow-up model findings:
    are the only current frame mode. Resizable windows use contain fit. A future
    same-orientation responsive instrument must justify adaptive authoring with a
    concrete contract before the mode returns.
-3. **Alternate initialization — resolved.** Component and module placements are
-   baked from primary contain geometry, including resolving span axes to fixed
-   extents. The new layout can diverge without affecting primary.
+3. **Alternate initialization — resolved, then superseded.** Placements were
+   baked from primary contain geometry. The frame-extent follow-up below
+   replaced the rescale with a verbatim copy into a larger envelope; span axes
+   still resolve to fixed extents.
 4. **Axis span data remains lightweight.** It needs no extra module/layer
    hierarchy and currently resolves against fixed authored frames.
 5. **Cross-version import loss — resolved.** Unknown component instances now
@@ -517,6 +540,104 @@ Extension verification:
   invalidate its 300 px/design-unit measurement.
 - Fresh debug launch inspected after explicit terminate; shared render remains
   intact and the app was terminated cleanly afterward.
+
+#### Stage 4 frame-extent and editor-interaction follow-up — DONE
+
+Creating a portrait alternate from a landscape primary blew every optical effect
+up about 4.6×. Nothing stretched — `fitScale` is and was isotropic. The defect
+was that one design unit meant "the height of the frame", so a `FrameSpec`
+carrying only an aspect silently set the physical scale of the tube.
+`bakeContainedPlacement` shrank geometry to compensate, which preserved the
+digits and left every design-unit optical constant — halo lobes, mesh pitch,
+edge softness, filament diameter, coating grain, tilt shift — magnified on
+screen. It was never only a bake bug: any design authored at an aspect far from
+2.6 had wrong optics.
+
+- [x] `FrameSpec` stores `width` and `height` in design units;
+      `referenceAspect` survives as a derived getter. A design unit is now
+      frame-independent. `FrameSpec.aspect(a)` keeps one-unit-tall frames
+      expressible, and JSON writes the extent plus the derived aspect so an
+      older build degrades rather than falling back to a default.
+- [x] `Anchor.pointIn`, `Placement.resolve` and `resolveSizeIn` (renamed from
+      `resolveSizeForAspect`) take a frame `Size`. `verticalSpan` resolves
+      against frame height instead of a hardcoded `1`, as does the minimum-size
+      clamp in `placement_transform.dart`.
+- [x] `viewportFrameExtent` derives an alternate's envelope from the device safe
+      rect at the current fit scale, swapping axes when the target orientation
+      disagrees with the device. Both `CREATE` and the read-only preview call
+      it, so zero-jump is structural rather than test-enforced.
+- [x] `bakeContainedPlacement` copies geometry verbatim and preserves the
+      anchor. Span axes still freeze to fixed extents — a `verticalSpan` copied
+      as-is would stretch to fill the taller envelope.
+- [x] `uAspect` → `vec2 uFrame`, renumbered in place; flat float indices 17–19
+      shifted to 18–20. `VfdPainter.paint` asserts a write past the end throws.
+- [x] Main module identified by a packed flag in `texel 8.b`, and filament Y
+      spacing references a new `MAIN_TUBE_HEIGHT` constant for it. Without that
+      the fix would have reintroduced its own 5.6× defect one layer down, since
+      the main module's size is now the frame extent rather than a hardcoded
+      one unit. `filamentHalfWidth` divides by `uFrame.x` — a substitution, not
+      a removal; the divisor is only constant for the main module.
+- [x] `positionRange` 4 → 16 and `sizeScale` 8 → 32, since an envelope derived
+      from a narrow tall window exceeds the old range.
+- [x] Unauthored-orientation preview draws the device envelope with the
+      inherited layout contained and scrimmed inside it, labelled
+      `INHERITED · READ ONLY`. The scrim is painted into the existing matte
+      painter, not an `Opacity` layer over the shared render pass.
+- [x] `EDIT`/`NAV` modes and the nested `InteractiveViewer` deleted. One root
+      `Listener` resolves each gesture at pointer-down against screen-space
+      rects. Selection chrome and handles lifted into screen space, so a handle
+      is a constant 44px at any zoom and straddles the border it resizes.
+- [x] Full-screen editor mode as a state flag; canvas controls moved
+      bottom-right so they no longer collide with the bottom-left bay latch;
+      portrait/landscape drawer branches folded into one `_WorkspaceLayout`
+      with both sets of numbers unchanged.
+
+Frame-extent model findings:
+
+1. **Optical scale was coupled to frame shape — resolved.** A frame carries an
+   extent; a design unit is frame-independent. Alternates are created by growing
+   the envelope, not by shrinking the contents.
+2. **Filament span is frame-derived — unresolved.** `0.62 * moduleSize.x /
+   uFrame.x` makes a sub-module's wire span a fraction of the frame rather than
+   a property of the tube. Physically wrong, but the constant is
+   photograph-tuned and folding the frame width into it would produce a rounded
+   derivative of a tuned value. The fix is an authored module property.
+3. **Span axes cannot be baked verbatim — deliberate.** A span is the one thing
+   whose meaning changes with the envelope, so it is resolved once and the new
+   layout owns the result.
+4. **`VfdAnnunciator` is still unwired.** It was considered for the read-only
+   badge and rejected: it demands acknowledgement, which a passive state must
+   not. The mandate for fork/route feedback remains unmet.
+5. **No new persisted-model gap.** Camera transform, full-screen state, and
+   selection remain presentation state and stay out of dashboard JSON.
+
+Frame-extent verification:
+
+- `flutter analyze`: clean.
+- `flutter test`: 130 passing. New: zero-jump across five device sizes,
+  optical-scale invariance across devices and both primary orientations,
+  `FrameSpec` extent round-trip, the main-module flag, the raised encoder
+  ranges, the vertical-span clamp against a tall frame, and a gesture matrix
+  covering tap-to-select, drag-on-unselected-pans, substrate pan, `FIT`,
+  two-pointer promotion freezing placement, handle constancy at 4× zoom, and
+  full-screen parity.
+- Two editor goldens regenerated for the moved canvas controls. Every other
+  golden — effects, pager, Library, Settings, Prism — unchanged, which is the
+  check that nothing leaked.
+- `integration_test/halo_compounding_test.dart`: four tests passing on iPhone
+  17 Pro simulator, iOS 26.3, Impeller. It derives pixel positions from
+  `designUnitPx = 300` and asserts brightness at them, so it is itself the
+  landscape parity check — a scale change could not pass it.
+- `integration_test/frame_extent_optics_test.dart`: new. Renders one component
+  through a landscape primary and through a portrait alternate baked from it,
+  both at 300 px per design unit, and compares the luminance profile across a
+  lit edge. Max divergence under 12/255, and the halo shoulder width — a pure
+  design-unit quantity, so its width in pixels *is* the optical scale — matches
+  within 3 px. Guarded against passing vacuously on a bake that silently did
+  nothing.
+- Screenshot diffing the cluster route before and after is **not** a usable
+  parity check: the simulated speed source animates, so two launches show
+  different digits and different bar fill. The halo suite is the parity check.
 
 ---
 

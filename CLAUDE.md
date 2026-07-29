@@ -145,12 +145,26 @@ continue past the glass. Any vignette is a gentle falloff, never an edge.
 Content insets to safe area; the background does not. System UI is hidden.
 
 Every design owns a primary fixed `FrameSpec` and may own one explicit
-opposite-orientation alternate. The selected authored reference aspect is
+opposite-orientation alternate. A `FrameSpec` stores an **extent** — width and
+height in design units — not a bare aspect. The authored extent is
 **contain-fitted inside the safe rect**, picking the tighter axis and centring
 the frame. A missing alternate uses the primary unchanged; content never
 rotates. Contain fit never crops or clamps component placement. The safe rect
 governs placement only, so halo, sheen, and grain keep evaluating across the
 full fragment bounds and spill past both the frame and screen edge.
+
+**A design unit is frame-independent.** It is a physical unit of the tube face,
+roughly the height of the module in the reference photographs — it is not "the
+height of the frame". This matters because every optical constant in `vfd.frag`
+is expressed in design units: halo lobe falloff, control-grid pitch, filament
+diameter and spacing, phosphor coating grain, segment edge softness, tilt shift.
+If the meaning of a unit varied with the shape of the frame, changing a frame's
+aspect would silently rescale the entire optical stack. It did: a frame once
+carried only an aspect and was implicitly one unit tall, so creating a portrait
+alternate from a landscape primary raised px-per-design-unit about 4.6× and
+bloomed every effect while the geometry, shrunk to compensate, held still. The
+absence of this paragraph is what allowed that. Do not reintroduce a frame
+whose height is assumed.
 
 Halo compounding is already correct — `glow` accumulates additively. Brightness
 is governed by the tonemap, which is deliberately compressive so overlapping
@@ -168,6 +182,11 @@ These cost real time to rediscover:
 - **`setFloat(i, v)` indexes flat floats**, not uniforms. A `vec2` consumes two
   indices. The index map in `vfd.frag` and `VfdPainter.paint` must stay in sync —
   if you add a uniform, add it at the end or renumber both sides together.
+  Renumbering in place is fine and has been done once, when the scalar `uAspect`
+  became the `vec2` `uFrame`; appending instead would have left a dead float
+  behind forever. `VfdPainter.paint` asserts that writing one float past the end
+  throws, so a uniform added on the shader side without a matching `setFloat`
+  fails loudly instead of rendering plausibly and wrongly.
 - **`FlutterFragCoord()` has y pointing down.** Flip it before doing any maths
   that assumes a standard GL frame.
 - **Keep `highp`.** The SDF loses accuracy at mediump and the halo bands visibly.
@@ -369,11 +388,31 @@ synthesizes a portrait arrangement. A landscape primary therefore remains a
 horizontal landscape face centred inside a portrait window.
 
 The editor previews the current window orientation first. A fallback preview is
-read-only. `CREATE PORTRAIT` or `CREATE LANDSCAPE` explicitly adds an
-independent alternate at the current window aspect and bakes the contained
-primary placements into it, producing no runtime visual jump. The alternate can
-then diverge freely or be reset to primary fallback. Export/import preserves
-primary identity, every authored frame aspect, and every authored placement.
+read-only, and it draws the **device envelope** the runtime would fill, with the
+inherited primary contained and dimmed inside it. That is what the runtime
+actually shows, so `CREATE` is visibly a promotion of exactly what is on screen.
+
+`CREATE PORTRAIT` or `CREATE LANDSCAPE` explicitly adds an independent
+alternate. Its extent comes from the **device safe rect measured at the current
+fit scale**: given a primary of extent `(pw, ph)` and a device rect `(W, H)`
+oriented to the target, `s = min(W/pw, H/ph)` and the new extent is `(W/s, H/s)`.
+Placements are then copied **verbatim** — nothing is rescaled. This is what makes
+"no runtime visual jump" structural rather than something a test has to police:
+the geometry does not move, and because a design unit still means the same
+thing, neither does the optical layer. Both the read-only preview and the bake
+call one shared function, so they cannot disagree.
+
+The device rect is measured above the editor's own `SafeArea`. A cramped editor,
+an open service bay, or a full-screen session must never bake a different
+envelope.
+
+Span axes are the one exception to verbatim copying: they resolve to fixed
+extents on bake. A `verticalSpan` copied as-is would resolve against the taller
+new envelope and stretch to fill it, which is the jump this exists to avoid.
+
+The alternate can then diverge freely or be reset to primary fallback.
+Export/import preserves primary identity, every authored frame extent, and every
+authored placement.
 
 There is no orientation lock and no adaptive frame mode. The app itself remains
 fully resizable and supports iPad orientations and Split View; contain fitting
@@ -598,13 +637,42 @@ pushes from the right. Opening it reduces available preview bounds, then
 re-contain-fits the same authored frame. It never changes authored coordinates,
 fixed aspect, or element size. The closed bay leaves a 44px triangular latch.
 
-Canvas camera has explicit `EDIT` and `NAV` modes. Edit gives one-pointer
-drag/resize exclusively to elements. Nav gives pan and pinch zoom exclusively
-to the camera, with 1×–4× limits and `FIT` restoring identity. Camera transforms
-never write placement.
+There is no camera mode switch. One pointer gesture is resolved at pointer-down
+by explicit hit-testing against known screen-space rects, topmost first, corner
+before edges:
+
+- Tap a component to select it and reveal its handles.
+- Drag a **selected** component to move it; drag its handles to resize.
+- Drag an unselected component, or empty substrate, to pan the camera.
+- Two or more pointers always drive the camera, including a promotion part-way
+  through an element drag. A promoted gesture never falls back to moving the
+  element, and the placement freezes at the value it had when the second pointer
+  landed.
+
+Camera scale is clamped 1×–4×; `FIT` restores identity. Camera transforms never
+write placement.
+
+The canvas drives the camera itself from a single `Listener` rather than nesting
+an `InteractiveViewer`. Its scale recogniser is an arena member that wins over
+child pan recognisers once a second pointer lands and can steal a single-pointer
+drag after slop, and "drag an unselected component to pan" is not expressible
+through per-component recognisers at all — the child must reject before the
+parent has seen any movement. Explicit hit-testing is deterministic and testable
+headlessly. Do not reintroduce nested gesture recognisers here.
+
+Selection chrome and resize handles live in screen space, above the camera
+transform, so a handle stays a constant 44px at any zoom and the hit test never
+has to undo the transform. The overlay paints and carries semantics; it does not
+consume pointer events.
+
+`FULL` hides the rail and the service bay and gives the canvas the whole route,
+so the render is at exactly runtime scale. Selection, drag, resize and camera all
+keep working. It is a state flag, not a route, so selection and the render
+controller survive entering and leaving it.
 
 Right, bottom, and bottom-right resize handles retain small visual grips but
-have 44x44 touch regions. Edge resizing applies one pointer delta, not the old
+have 44x44 touch regions, straddling the border they resize rather than sitting
+inboard of it. Edge resizing applies one pointer delta, not the old
 symmetric two-delta transform. The grabbed right/bottom edge moves; the
 opposite edge remains fixed by shifting the resolved centre by half the applied
 size delta and recomputing anchor-relative offset. Minimum size is `0.03`, with
@@ -659,10 +727,29 @@ special-casing controls around them:
   The visual subset is uppercase ASCII UI text, 24 glyphs maximum; unsupported
   glyphs render `?` and longer labels render 21 glyphs plus `...`, while the full
   source string remains persisted.
+- **Resolved during the frame-extent refinement:** a frame carries an extent, not
+  an aspect, so a design unit is frame-independent and optical scale no longer
+  moves when a frame's shape does. Alternates are created by growing the
+  envelope, not by shrinking the contents.
+- **New finding, unresolved:** filament span is frame-derived, not authored.
+  `filamentHalfWidth` is `0.62 * moduleSize.x / uFrame.x`, so a sub-module's wire
+  span is a fraction of the frame rather than a property of the module. That is
+  wrong physically — cathode length belongs to the tube — but the constant is
+  photograph-tuned and folding the frame width into it would produce a rounded
+  derivative of a tuned value. Fix it by making filament span an authored module
+  property, not by rewriting the expression.
+- **Deliberate trade-off:** span axes freeze to fixed extents when an alternate
+  is baked. A span is the one thing that cannot be copied verbatim without
+  changing what it resolves to, so it is resolved once and the new layout owns
+  the result.
 - `outsideTemp`, `phoneBattery`, and `altitude` are expressible and editable as
   component data, but the current shader intentionally skips them. This is a
   renderer coverage gap, not a reason to hardcode or remove them from the
   registry.
+- **Unwired, and not a model gap:** `VfdAnnunciator` exists and has no call
+  sites, while this file mandates it for fork and route feedback. It is the wrong
+  vehicle for a read-only badge — it demands explicit acknowledgement — so the
+  read-only preview dims instead. The mandate is still unmet elsewhere.
 
 ## Performance and battery
 

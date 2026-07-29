@@ -29,7 +29,10 @@ void main() {
     expect(_canvasAspect(tester), closeTo(2.6, 0.001));
     await tester.tap(find.byKey(const ValueKey('orientation-portrait')));
     await tester.pump();
-    expect(_canvasAspect(tester), closeTo(2.6, 0.001));
+    // The fallback preview draws the device envelope the runtime would fill,
+    // not the inherited landscape frame, so the boundary takes the portrait
+    // viewport shape of a 1200x900 window turned on its side.
+    expect(_canvasAspect(tester), closeTo(900 / 1200, 0.001));
   });
 
   testWidgets('drawer pushes canvas and selection does not open it', (
@@ -66,7 +69,7 @@ void main() {
     );
   });
 
-  testWidgets('portrait service bay pushes upward with same frame aspect', (
+  testWidgets('portrait service bay pushes upward without reshaping frame', (
     tester,
   ) async {
     await _setViewport(tester, const Size(393, 852));
@@ -77,10 +80,7 @@ void main() {
       ),
     );
 
-    expect(
-      find.textContaining('PORTRAIT PREVIEW · INHERITED LANDSCAPE'),
-      findsOneWidget,
-    );
+    expect(find.text('INHERITED · READ ONLY'), findsOneWidget);
     final frame = find.byKey(const ValueKey('editor-canvas'));
     final before = tester.getCenter(frame);
     await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
@@ -89,7 +89,7 @@ void main() {
     final after = tester.getCenter(frame);
 
     expect(after.dy, lessThan(before.dy));
-    expect(_canvasAspect(tester), closeTo(2.6, 0.002));
+    expect(_canvasAspect(tester), closeTo(393 / 852, 0.002));
   });
 
   testWidgets('drag and edge resize update displayed orientation only', (
@@ -111,6 +111,7 @@ void main() {
                 return EditorCanvas(
                   dashboard: dashboard,
                   orientation: DesignOrientation.landscape,
+                  deviceSafeSize: const Size(900, 500),
                   selectedId: 'speed',
                   onSelect: (_) {},
                   onPlacementChanged: (id, placement) {
@@ -164,7 +165,8 @@ void main() {
       ComponentTypes.byId(dashboard.components.first.typeId),
       variant: dashboard.components.first.effectiveVariant,
     );
-    final leftBefore = landscape.resolve(2.6).dx - resolvedBefore.width / 2;
+    final leftBefore =
+        landscape.resolve(const Size(2.6, 1)).dx - resolvedBefore.width / 2;
     await tester.drag(
       find.byKey(const ValueKey('resize-width')),
       const Offset(30, 0),
@@ -174,7 +176,7 @@ void main() {
         dashboard.components.first.placements[DesignOrientation.landscape]!;
     expect(landscape.size!.width, closeTo(resolvedBefore.width + 0.1, 0.002));
     expect(
-      landscape.resolve(2.6).dx - landscape.size!.width / 2,
+      landscape.resolve(const Size(2.6, 1)).dx - landscape.size!.width / 2,
       closeTo(leftBefore, 0.002),
     );
     expect(
@@ -202,6 +204,7 @@ void main() {
                 return EditorCanvas(
                   dashboard: dashboard,
                   orientation: DesignOrientation.landscape,
+                  deviceSafeSize: const Size(900, 500),
                   selectedId: 'speed',
                   onSelect: (_) {},
                   onPlacementChanged: (id, placement) {
@@ -273,6 +276,7 @@ void main() {
                 return EditorCanvas(
                   dashboard: dashboard,
                   orientation: DesignOrientation.landscape,
+                  deviceSafeSize: const Size(900, 500),
                   selectedId: component.id,
                   onSelect: (_) {},
                   onPlacementChanged: (id, placement) {
@@ -329,12 +333,11 @@ void main() {
       ),
     );
 
-    final aspect = _canvasAspect(tester);
-    expect(aspect, closeTo(2.6, 0.002));
-    expect(
-      find.textContaining('PORTRAIT PREVIEW · INHERITED LANDSCAPE'),
-      findsOneWidget,
-    );
+    // The preview boundary is the device envelope, dimmed and read-only. It is
+    // the same envelope CREATE bakes, so pressing CREATE changes nothing on
+    // screen.
+    expect(_canvasAspect(tester), closeTo(393 / 852, 0.002));
+    expect(find.text('INHERITED · READ ONLY'), findsOneWidget);
   });
 
   testWidgets('creating and resetting portrait alternate is explicit', (
@@ -365,13 +368,20 @@ void main() {
         .placements[DesignOrientation.landscape]!;
     final bakedPlacement =
         dashboard.components.first.placements[DesignOrientation.portrait]!;
-    final expectedScale = expectedAspect / 2.6;
+    final bakedExtent = dashboard.frameExtent(DesignOrientation.portrait);
     expect(dashboard.hasAuthoredLayout(DesignOrientation.portrait), isTrue);
     expect(
       dashboard.frameAspect(DesignOrientation.portrait),
       closeTo(expectedAspect, 0.001),
     );
-    expect(bakedPlacement.offset, sourcePlacement.resolve(2.6) * expectedScale);
+    // The envelope grows; the geometry inside it is untouched. Nothing is
+    // rescaled, so a design unit still means the same thing and the optical
+    // stack does not move either.
+    expect(bakedExtent.width, closeTo(2.6, 1e-9));
+    expect(
+      bakedPlacement.resolve(bakedExtent),
+      _offsetCloseTo(sourcePlacement.resolve(const Size(2.6, 1))),
+    );
     expect(_canvasAspect(tester), closeTo(expectedAspect, 0.001));
 
     await tester.tap(find.byKey(const ValueKey('remove-layout')));
@@ -382,7 +392,144 @@ void main() {
       dashboard.layoutForViewport(DesignOrientation.portrait),
       DesignOrientation.landscape,
     );
-    expect(_canvasAspect(tester), closeTo(2.6, 0.001));
+    // Back to the read-only device envelope, which is what it was before.
+    expect(_canvasAspect(tester), closeTo(393 / 852, 0.001));
+  });
+
+
+  group('canvas gestures', () {
+    testWidgets('tap selects; an unselected component is not moved by a drag', (
+      tester,
+    ) async {
+      final harness = await _pumpCanvas(tester, selectedId: null);
+
+      await tester.tap(find.byKey(const ValueKey('canvas-speed')));
+      await tester.pump();
+      expect(harness.selected, 'speed');
+      expect(harness.placementOf('speed'), same(harness.initialSpeedPlacement));
+
+      // Still unselected as far as the canvas is concerned (the harness does
+      // not feed selection back), so this drag must pan rather than nudge.
+      final before = tester.getRect(
+        find.byKey(const ValueKey('editor-canvas')),
+      );
+      await tester.drag(
+        find.byKey(const ValueKey('canvas-speed')),
+        const Offset(40, 0),
+      );
+      await tester.pump();
+      expect(harness.placementOf('speed'), same(harness.initialSpeedPlacement));
+      expect(
+        tester.getRect(find.byKey(const ValueKey('editor-canvas'))).left,
+        closeTo(before.left + 40, 0.001),
+      );
+    });
+
+    testWidgets('a drag on empty substrate pans the camera', (tester) async {
+      await _pumpCanvas(tester, selectedId: null);
+      final frame = find.byKey(const ValueKey('editor-canvas'));
+      final before = tester.getRect(frame);
+
+      await tester.dragFrom(const Offset(20, 20), const Offset(35, 25));
+      await tester.pump();
+
+      final after = tester.getRect(frame);
+      expect(after.left, closeTo(before.left + 35, 0.001));
+      expect(after.top, closeTo(before.top + 25, 0.001));
+    });
+
+    testWidgets('FIT restores camera identity without writing placement', (
+      tester,
+    ) async {
+      final harness = await _pumpCanvas(tester, selectedId: null);
+      final frame = find.byKey(const ValueKey('editor-canvas'));
+      final before = tester.getRect(frame);
+
+      await tester.dragFrom(const Offset(20, 20), const Offset(40, 30));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('canvas-fit')));
+      await tester.pump();
+
+      expect(tester.getRect(frame).left, closeTo(before.left, 0.001));
+      expect(harness.placementOf('speed'), same(harness.initialSpeedPlacement));
+    });
+
+    testWidgets('a second pointer promotes an element drag to the camera', (
+      tester,
+    ) async {
+      final harness = await _pumpCanvas(tester, selectedId: 'speed');
+      final start = tester.getCenter(find.byKey(const ValueKey('canvas-speed')));
+
+      final first = await tester.startGesture(start);
+      await first.moveBy(const Offset(20, 0));
+      await tester.pump();
+      final promoted = harness.placementOf('speed');
+      expect(promoted, isNot(same(harness.initialSpeedPlacement)));
+
+      final second = await tester.startGesture(start + const Offset(90, 0));
+      await first.moveBy(const Offset(40, 0));
+      await tester.pump();
+      await second.moveBy(const Offset(40, 0));
+      await tester.pump();
+      // Frozen where it was when the second finger landed.
+      expect(harness.placementOf('speed'), same(promoted));
+
+      await first.up();
+      await second.up();
+      await tester.pump();
+      expect(harness.placementOf('speed'), same(promoted));
+    });
+
+    testWidgets('handles stay 44px and on the border at any camera scale', (
+      tester,
+    ) async {
+      await _pumpCanvas(tester, selectedId: 'speed');
+      final handle = find.byKey(const ValueKey('resize-both'));
+      final box = find.byKey(const ValueKey('canvas-speed'));
+      expect(tester.getSize(handle), const Size(44, 44));
+      expect(
+        tester.getCenter(handle),
+        _offsetCloseTo(tester.getRect(box).bottomRight, 0.001),
+      );
+
+      final centre = tester.getCenter(box);
+      final first = await tester.startGesture(centre - const Offset(60, 0));
+      final second = await tester.startGesture(centre + const Offset(60, 0));
+      await first.moveBy(const Offset(-60, 0));
+      await second.moveBy(const Offset(60, 0));
+      await tester.pump();
+
+      expect(tester.getSize(handle), const Size(44, 44));
+      expect(
+        tester.getCenter(handle),
+        _offsetCloseTo(tester.getRect(box).bottomRight, 0.001),
+      );
+      await first.up();
+      await second.up();
+    });
+  });
+
+  testWidgets('full screen renders the frame at the runtime fit', (
+    tester,
+  ) async {
+    const viewport = Size(393, 852);
+    await _setViewport(tester, viewport);
+    final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorPage(dashboard: dashboard, onChanged: (_) {}),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('canvas-full')));
+    await tester.pump();
+
+    // No rail, no bay: the boundary is the whole route, so the render inside it
+    // is at exactly the scale the cluster route would use.
+    expect(find.byKey(const ValueKey('editor-workspace')), findsNothing);
+    final frame = tester.getRect(find.byKey(const ValueKey('editor-canvas')));
+    expect(frame.width, closeTo(viewport.width, 0.001));
+    expect(frame.height, closeTo(viewport.height, 0.001));
   });
 
   testWidgets('add selector is generated from component registry', (
@@ -422,6 +569,7 @@ void main() {
         home: EditorCanvas(
           dashboard: dashboard,
           orientation: DesignOrientation.landscape,
+          deviceSafeSize: const Size(900, 500),
           selectedId: null,
           onSelect: (_) {},
           onPlacementChanged: (_, _) {},
@@ -463,12 +611,67 @@ void main() {
   });
 }
 
+class _CanvasHarness {
+  _CanvasHarness(this.dashboard);
+  Dashboard dashboard;
+  String? selected;
+  late final Placement initialSpeedPlacement =
+      dashboard.components.firstWhere((c) => c.id == 'speed').placements[
+          DesignOrientation.landscape]!;
+
+  Placement placementOf(String id) => dashboard.components
+      .firstWhere((component) => component.id == id)
+      .placements[DesignOrientation.landscape]!;
+}
+
+/// A bare canvas with no chrome, so gesture assertions are not confounded by
+/// the rail or the service bay.
+Future<_CanvasHarness> _pumpCanvas(
+  WidgetTester tester, {
+  required String? selectedId,
+}) async {
+  await _setViewport(tester, const Size(900, 500));
+  final harness = _CanvasHarness(
+    Dashboard.forkFrom(developmentPreset(), id: 'editor'),
+  );
+  harness.initialSpeedPlacement;
+  late StateSetter rebuild;
+  await tester.pumpWidget(
+    MaterialApp(
+      home: StatefulBuilder(
+        builder: (context, setState) {
+          rebuild = setState;
+          return EditorCanvas(
+            dashboard: harness.dashboard,
+            orientation: DesignOrientation.landscape,
+            deviceSafeSize: const Size(900, 500),
+            selectedId: selectedId,
+            onSelect: (id) => harness.selected = id,
+            onPlacementChanged: (id, placement) => rebuild(() {
+              harness.dashboard = harness.dashboard.withComponent(
+                harness.dashboard.components
+                    .firstWhere((component) => component.id == id)
+                    .withPlacement(DesignOrientation.landscape, placement),
+              );
+            }),
+          );
+        },
+      ),
+    ),
+  );
+  return harness;
+}
+
 Future<void> _setViewport(WidgetTester tester, Size size) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 }
+
+Matcher _offsetCloseTo(Offset expected, [double delta = 1e-9]) => isA<Offset>()
+    .having((value) => value.dx, 'dx', closeTo(expected.dx, delta))
+    .having((value) => value.dy, 'dy', closeTo(expected.dy, delta));
 
 double _canvasAspect(WidgetTester tester) {
   final size = tester.getSize(find.byKey(const ValueKey('editor-canvas')));

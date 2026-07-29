@@ -48,8 +48,8 @@ void main() {
     ]);
     final withPortrait = primaryOnly.copyWith(
       frameSpecs: const <DesignOrientation, FrameSpec>{
-        DesignOrientation.landscape: FrameSpec(referenceAspect: 2.6),
-        DesignOrientation.portrait: FrameSpec(referenceAspect: 0.5),
+        DesignOrientation.landscape: FrameSpec.aspect(2.6),
+        DesignOrientation.portrait: FrameSpec.aspect(0.5),
       },
     );
 

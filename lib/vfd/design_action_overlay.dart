@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import '../actions/action_registry.dart';
@@ -37,14 +39,17 @@ class DesignActionOverlay extends StatelessWidget {
         size.width - safeInsets.right,
         size.height - safeInsets.bottom,
       );
-      final aspect = design.frameAspect(orientation);
-      final fitScale = (safeRect.width / aspect).clamp(0.0, safeRect.height);
+      final frame = design.frameExtent(orientation);
+      final fitScale = math.min(
+        safeRect.width / frame.width,
+        safeRect.height / frame.height,
+      );
       final frameCenter = safeRect.center;
       return Stack(
         children: <Widget>[
           for (final component in design.componentsIn(orientation))
             if (component.actionBinding != null)
-              _hitRegion(component, aspect, fitScale, frameCenter),
+              _hitRegion(component, frame, fitScale, frameCenter),
         ],
       );
     },
@@ -52,13 +57,16 @@ class DesignActionOverlay extends StatelessWidget {
 
   Widget _hitRegion(
     ComponentInstance component,
-    double aspect,
+    Size frame,
     double scale,
     Offset frameCenter,
   ) {
     final placement = component.placements[orientation]!;
-    final center = placement.resolve(aspect);
-    final extent = placement.resolveSize(
+    final center = placement.resolve(frame);
+    // Span axes resolve against the frame, so the hit region has to as well or
+    // a span-authored component is grabbable somewhere it is not drawn.
+    final extent = placement.resolveSizeIn(
+      frame,
       ComponentTypes.byId(component.typeId),
       variant: component.effectiveVariant,
     );

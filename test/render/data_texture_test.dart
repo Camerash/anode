@@ -231,8 +231,47 @@ void main() {
   );
 
   test('a position beyond the representable range clamps to the edge', () {
-    expect(ComponentData.encodePosition(500), 1.0);
-    expect(ComponentData.encodePosition(-500), 0.0);
-    expect(ComponentData.encodeSize(500), 1.0);
+    expect(ComponentData.encodePosition(5000), 1.0);
+    expect(ComponentData.encodePosition(-5000), 0.0);
+    expect(ComponentData.encodeSize(5000), 1.0);
+  });
+
+  test('the range covers an envelope derived from a narrow tall window', () {
+    // A landscape primary contained into 320x1024 derives an 8.32-unit-tall
+    // envelope. The previous sizeScale of 8 clamped it silently.
+    expect(ComponentData.encodeSize(8.32), lessThan(1.0));
+    expect(
+      ComponentData.encodeSize(8.32) * ComponentData.sizeScale,
+      closeTo(8.32, 1e-6),
+    );
+  });
+
+  test('the main module is flagged, not inferred from its geometry', () {
+    // Main-module size equals the frame extent, so a sub-module a user happens
+    // to size to the whole frame must not be mistaken for the tube itself.
+    final floats = ComponentData.pack(<ComponentFrame>[
+      ComponentFrame(
+        type: ShaderType.digits,
+        centerX: 0,
+        centerY: 0,
+        width: 1,
+        height: 0.5,
+        moduleWidth: 2.6,
+        moduleHeight: 1,
+      ),
+      ComponentFrame(
+        type: ShaderType.digits,
+        centerX: 0,
+        centerY: 0,
+        width: 1,
+        height: 0.5,
+        moduleWidth: 2.6,
+        moduleHeight: 1,
+        isMainModule: false,
+      ),
+    ]);
+
+    expect(floats[34], 1.0);
+    expect(floats[ComponentData.floatsPerComponent + 34], 0.0);
   });
 }

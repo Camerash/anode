@@ -1,3 +1,5 @@
+import 'dart:ui' show Size;
+
 import 'component_instance.dart';
 import 'placement.dart';
 import 'settings.dart';
@@ -21,6 +23,10 @@ abstract interface class Design {
   DesignOrientation layoutForViewport(DesignOrientation orientation);
   FrameSpec frameSpec(DesignOrientation orientation);
   double frameAspect(DesignOrientation orientation);
+
+  /// The authored extent in design units. Prefer this over [frameAspect] for
+  /// anything geometric — aspect alone no longer determines scale.
+  Size frameExtent(DesignOrientation orientation);
   List<ComponentInstance> componentsIn(DesignOrientation orientation);
   VfdModule moduleFor(ComponentInstance component);
 }

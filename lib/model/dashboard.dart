@@ -1,3 +1,5 @@
+import 'dart:ui' show Size;
+
 import 'package:flutter/foundation.dart';
 
 import 'component_instance.dart';
@@ -134,6 +136,10 @@ class Dashboard implements Design {
       frameSpec(orientation).referenceAspect;
 
   @override
+  Size frameExtent(DesignOrientation orientation) =>
+      frameSpec(orientation).extent;
+
+  @override
   List<ComponentInstance> componentsIn(DesignOrientation orientation) =>
       components
           .where((c) => c.appearsIn(layoutForViewport(orientation)))
@@ -224,15 +230,18 @@ class Dashboard implements Design {
 
   /// Creates an independently editable alternate layout whose initial visual
   /// appearance matches the contained primary layout.
+  ///
+  /// [extent] comes from [viewportFrameExtent], so the new envelope renders at
+  /// the fit scale the primary already had and placements can be copied
+  /// verbatim.
   Dashboard withBakedLayout(
     DesignOrientation orientation, {
-    required double aspect,
+    required Size extent,
   }) {
-    if (hasAuthoredLayout(orientation) || !aspect.isFinite || aspect <= 0) {
-      return this;
-    }
+    final target = FrameSpec(width: extent.width, height: extent.height);
+    if (hasAuthoredLayout(orientation) || !target.isValid) return this;
     final sourceOrientation = primaryOrientation;
-    final sourceAspect = frameAspect(sourceOrientation);
+    final sourceFrame = frameExtent(sourceOrientation);
     final bakedComponents = <ComponentInstance>[
       for (final component in components)
         if (component.appearsIn(sourceOrientation))
@@ -241,13 +250,13 @@ class Dashboard implements Design {
             bakeContainedPlacement(
               placement: component.placements[sourceOrientation]!,
               resolvedSize: component.placements[sourceOrientation]!
-                  .resolveSizeForAspect(
-                    sourceAspect,
+                  .resolveSizeIn(
+                    sourceFrame,
                     ComponentTypes.byId(component.typeId),
                     variant: component.effectiveVariant,
                   ),
-              sourceAspect: sourceAspect,
-              targetAspect: aspect,
+              sourceFrame: sourceFrame,
+              targetFrame: extent,
             ),
           )
         else
@@ -261,9 +270,9 @@ class Dashboard implements Design {
               ...module.regions,
               orientation: bakeContainedPlacement(
                 placement: region,
-                resolvedSize: region.resolveSizeForAspect(sourceAspect, null),
-                sourceAspect: sourceAspect,
-                targetAspect: aspect,
+                resolvedSize: region.resolveSizeIn(sourceFrame, null),
+                sourceFrame: sourceFrame,
+                targetFrame: extent,
               ),
             },
           )
@@ -273,7 +282,7 @@ class Dashboard implements Design {
     return copyWith(
       frameSpecs: <DesignOrientation, FrameSpec>{
         ...frameSpecs,
-        orientation: FrameSpec(referenceAspect: aspect),
+        orientation: target,
       },
       components: bakedComponents,
       modules: bakedModules,

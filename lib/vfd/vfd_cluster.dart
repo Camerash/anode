@@ -98,6 +98,9 @@ class VfdController extends ChangeNotifier {
     _banks.clear();
   }
 
+  /// The authored frame extent in design units. Geometry resolves against
+  /// this; [aspect] survives for readouts only.
+  Size get frameExtent => _design.frameExtent(_orientation);
   double get aspect => _design.frameAspect(_orientation);
 
   late final Ticker _ticker;
@@ -180,9 +183,10 @@ class VfdController extends ChangeNotifier {
       final placement = c.placements[orientation];
       if (type == null || placement == null) continue;
 
-      final center = placement.resolve(aspect);
-      final size = placement.resolveSizeForAspect(
-        aspect,
+      final frame = frameExtent;
+      final center = placement.resolve(frame);
+      final size = placement.resolveSizeIn(
+        frame,
         type,
         variant: c.effectiveVariant,
       );
@@ -327,6 +331,7 @@ class VfdController extends ChangeNotifier {
       moduleCenterY: module.center.dy,
       moduleWidth: module.size.width,
       moduleHeight: module.size.height,
+      isMainModule: module.isMain,
       glassGrain: moduleProfile.effect(EffectIds.glassGrain).strength,
       filament: moduleProfile.effect(EffectIds.filamentWires).strength,
       filamentVariantCode: (filamentVariant?.rendererCode ?? 0).toDouble(),
@@ -341,15 +346,19 @@ class VfdController extends ChangeNotifier {
     );
   }
 
-  ({Offset center, Size size}) _moduleGeometry(ComponentInstance component) {
+  ({Offset center, Size size, bool isMain}) _moduleGeometry(
+    ComponentInstance component,
+  ) {
     final module = _design.moduleFor(component);
     final placement = module.regionIn(orientation);
     if (module.id == kMainVfdModuleId || placement == null) {
-      return (center: Offset.zero, size: Size(aspect, 1));
+      return (center: Offset.zero, size: frameExtent, isMain: true);
     }
+    final frame = frameExtent;
     return (
-      center: placement.resolve(aspect),
-      size: placement.resolveSizeForAspect(aspect, null),
+      center: placement.resolve(frame),
+      size: placement.resolveSizeIn(frame, null),
+      isMain: false,
     );
   }
 
@@ -369,6 +378,10 @@ class VfdController extends ChangeNotifier {
     super.dispose();
   }
 }
+
+/// Flat floats consumed by `vfd.frag`, counting a `vec2` as two. See the index
+/// map in `STAGES.md`.
+const int _floatUniformCount = 21;
 
 class VfdPainter extends CustomPainter {
   VfdPainter({
@@ -393,6 +406,7 @@ class VfdPainter extends CustomPainter {
 
     final p = controller.phosphor;
     final profile = controller.opticalProfile;
+    final frame = controller.frameExtent;
 
     shader
       ..setFloat(0, size.width)
@@ -412,12 +426,26 @@ class VfdPainter extends CustomPainter {
       ..setFloat(13, size.height - safeRect.bottom)
       ..setFloat(14, safeRect.right)
       ..setFloat(15, size.height - safeRect.top)
-      ..setFloat(16, controller.aspect)
-      ..setFloat(17, controller.componentCount.toDouble())
-      ..setFloat(18, ComponentData.texelsPerComponent.toDouble())
-      ..setFloat(19, ComponentData.maxComponents.toDouble())
+      ..setFloat(16, frame.width)
+      ..setFloat(17, frame.height)
+      ..setFloat(18, controller.componentCount.toDouble())
+      ..setFloat(19, ComponentData.texelsPerComponent.toDouble())
+      ..setFloat(20, ComponentData.maxComponents.toDouble())
       ..setImageSampler(0, data)
       ..setImageSampler(1, prismGlyphAtlas);
+
+    // The flat float indices above and the uniform declarations in `vfd.frag`
+    // are one map kept in two files. Writing one float past the end must fail:
+    // if it succeeds, the shader declares a uniform nothing here sets, which
+    // renders plausibly and wrongly rather than erroring.
+    assert(() {
+      try {
+        shader.setFloat(_floatUniformCount, 0);
+        return false;
+      } on RangeError {
+        return true;
+      }
+    }(), 'vfd.frag declares more float uniforms than VfdPainter sets');
 
     canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
   }

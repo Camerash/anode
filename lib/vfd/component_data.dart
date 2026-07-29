@@ -39,6 +39,7 @@ class ComponentFrame {
     this.moduleHeight = 1,
     this.glassGrain = 1,
     this.filament = 1,
+    this.isMainModule = true,
     this.prismLit = 0,
     this.prismPressed = 0,
     this.filamentVariantCode = 0,
@@ -77,6 +78,14 @@ class ComponentFrame {
   final double moduleHeight;
   final double glassGrain;
   final double filament;
+
+  /// Whether this component's module is the implicit `main` tube covering the
+  /// authored frame. Packed explicitly rather than inferred from the module
+  /// matching the frame extent: main-module size now *equals* that extent, so a
+  /// geometric test would also fire for an authored sub-module a user happened
+  /// to size to the full frame, silently making its grain global and its
+  /// filaments use the tube reference.
+  final bool isMainModule;
   final double prismLit;
   final double prismPressed;
   final double filamentVariantCode;
@@ -114,8 +123,17 @@ abstract final class ComponentData {
   ///
   /// Values already in [0, 1] — segment brightness, fill fractions — are stored
   /// raw so they keep every bit of precision. Mirrored in `vfd.frag`.
-  static const double positionRange = 4.0;
-  static const double sizeScale = 8.0;
+  ///
+  /// These are encoding ranges, not photograph-tuned values, so they carry
+  /// headroom deliberately. A design unit is frame-independent, and the main
+  /// module's size is now the authored frame extent, so a landscape primary
+  /// contained into a narrow tall window derives an envelope several units
+  /// tall — 8.32 units at 320x1024, which the previous `sizeScale` of 8 would
+  /// have silently clamped. `rgbaFloat32` resolves roughly 6e-8 inside [0, 1],
+  /// so even at these ranges a decoded value is good to about 2e-6 design
+  /// units, or 6e-4 px at the halo test's 300 px per unit.
+  static const double positionRange = 16.0;
+  static const double sizeScale = 32.0;
   static const double typeScale = 8.0;
   static const double countScale = 64.0;
   static const double effectScale = 2.0;
@@ -141,7 +159,7 @@ abstract final class ComponentData {
   /// texel 5: grid, unlit phosphor, decay
   /// texel 6: module cx, cy, width
   /// texel 7: module height, glass grain, filament
-  /// texel 8: prism pressed, filament variant code, spare
+  /// texel 8: prism pressed, filament variant code, main-module flag
   /// texel 9: prism bevel, face opacity, inactive luminosity
   /// texel 10..21: digit segment payload, or up to 24 Prism glyph indices
   static const int headerTexels = 10;
@@ -211,6 +229,7 @@ abstract final class ComponentData {
 
       out[base + 32] = _store(f.prismPressed);
       out[base + 33] = encodeCount(f.filamentVariantCode);
+      out[base + 34] = f.isMainModule ? 1.0 : 0.0;
 
       out[base + 36] = _store(f.prismBevelDepth);
       out[base + 37] = _store(f.prismFaceOpacity);

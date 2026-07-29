@@ -16,7 +16,7 @@ void main() {
       name: 'Primary',
       version: 1,
       frameSpecs: const <DesignOrientation, FrameSpec>{
-        DesignOrientation.landscape: FrameSpec(referenceAspect: 2.4),
+        DesignOrientation.landscape: FrameSpec.aspect(2.4),
       },
       components: <ComponentInstance>[digits()],
     );
@@ -45,8 +45,8 @@ void main() {
         version: 1,
         primaryOrientation: DesignOrientation.portrait,
         frameSpecs: const <DesignOrientation, FrameSpec>{
-          DesignOrientation.landscape: FrameSpec(referenceAspect: 2.4),
-          DesignOrientation.portrait: FrameSpec(referenceAspect: 0.6),
+          DesignOrientation.landscape: FrameSpec.aspect(2.4),
+          DesignOrientation.portrait: FrameSpec.aspect(0.6),
         },
         components: <ComponentInstance>[digits()],
       );
@@ -77,21 +77,23 @@ void main() {
       id: 'source',
       name: 'Source',
       frameSpecs: const <DesignOrientation, FrameSpec>{
-        DesignOrientation.landscape: FrameSpec(referenceAspect: 2),
+        DesignOrientation.landscape: FrameSpec.aspect(2),
       },
       components: <ComponentInstance>[component],
     );
     final baked = source.withBakedLayout(
       DesignOrientation.portrait,
-      aspect: 0.5,
+      extent: const Size(2, 4),
     );
     final placement =
         baked.components.single.placements[DesignOrientation.portrait]!;
 
     expect(baked.hasAuthoredLayout(DesignOrientation.portrait), isTrue);
-    expect(baked.frameAspect(DesignOrientation.portrait), 0.5);
-    expect(placement.offset, const Offset(0.1, 0.05));
-    expect(placement.size, const Size(0.2, 0.1));
+    expect(baked.frameExtent(DesignOrientation.portrait), const Size(2, 4));
+    // Verbatim. The envelope grows; the geometry inside it does not move or
+    // shrink, which is what keeps the optical layer at the same scale too.
+    expect(placement.offset, const Offset(0.4, 0.2));
+    expect(placement.size, const Size(0.8, 0.4));
   });
 
   test('resetting alternate removes its placements and restores fallback', () {

@@ -19,7 +19,7 @@ DesignPreset developmentPreset() {
     name: 'Classic',
     version: 1,
     frameSpecs: const <DesignOrientation, FrameSpec>{
-      DesignOrientation.landscape: FrameSpec(referenceAspect: 2.6),
+      DesignOrientation.landscape: FrameSpec(width: 2.6, height: 1),
     },
     components: <ComponentInstance>[
       ComponentInstance(
