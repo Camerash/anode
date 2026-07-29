@@ -94,14 +94,24 @@ class _MechanicalPushDrawerState extends State<MechanicalPushDrawer>
           if (widget.edge == MechanicalDrawerEdge.right)
             Row(
               children: <Widget>[
-                Expanded(child: widget.content),
+                Expanded(
+                  child: KeyedSubtree(
+                    key: const ValueKey('mechanical-drawer-content'),
+                    child: widget.content,
+                  ),
+                ),
                 _horizontalDrawer(reserved),
               ],
             )
           else
             Column(
               children: <Widget>[
-                Expanded(child: widget.content),
+                Expanded(
+                  child: KeyedSubtree(
+                    key: const ValueKey('mechanical-drawer-content'),
+                    child: widget.content,
+                  ),
+                ),
                 _verticalDrawer(reserved),
               ],
             ),

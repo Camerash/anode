@@ -10,17 +10,22 @@ class EffectSpec {
     required this.id,
     required this.label,
     String? controlLabel,
+    String? pictogramId,
     required this.description,
     required this.scopes,
     this.defaultStrength = 1,
     this.maxStrength = 2,
     this.step = 0.01,
     this.precision = 2,
-  }) : controlLabel = controlLabel ?? label;
+  }) : controlLabel = controlLabel ?? label,
+       pictogramId = pictogramId ?? id;
 
   final String id;
   final String label;
   final String controlLabel;
+
+  /// Presentation-only key for the hand-authored period line pictogram.
+  final String pictogramId;
   final String description;
   final Set<EffectScope> scopes;
   final double defaultStrength;
@@ -150,6 +155,7 @@ abstract final class EffectSpecs {
         id: id,
         label: id,
         controlLabel: id,
+        pictogramId: 'unknown',
         description: 'Unavailable effect from another Anode version.',
         scopes: const <EffectScope>{
           EffectScope.dashboard,

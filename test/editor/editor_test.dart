@@ -1,8 +1,8 @@
 import 'dart:math' as math;
+import 'dart:ui' show SemanticsAction, Tristate;
 
 import 'package:anode/editor/editor_canvas.dart';
 import 'package:anode/editor/editor_page.dart';
-import 'package:anode/model/component_type.dart';
 import 'package:anode/model/dashboard.dart';
 import 'package:anode/model/dev_design.dart';
 import 'package:anode/model/placement.dart';
@@ -153,20 +153,16 @@ void main() {
     var landscape =
         dashboard.components.first.placements[DesignOrientation.landscape]!;
     expect(
-      landscape.offset.dx,
-      closeTo(landscapeBefore.offset.dx + 0.1, 0.002),
+      landscape.center.dx,
+      closeTo(landscapeBefore.center.dx + 0.1, 0.002),
     );
     expect(
-      landscape.offset.dy,
-      closeTo(landscapeBefore.offset.dy + 0.05, 0.002),
+      landscape.center.dy,
+      closeTo(landscapeBefore.center.dy + 0.05, 0.002),
     );
 
-    final resolvedBefore = landscape.resolveSize(
-      ComponentTypes.byId(dashboard.components.first.typeId),
-      variant: dashboard.components.first.effectiveVariant,
-    );
-    final leftBefore =
-        landscape.resolve(const Size(2.6, 1)).dx - resolvedBefore.width / 2;
+    final resolvedBefore = landscape.size;
+    final leftBefore = landscape.center.dx - resolvedBefore.width / 2;
     await tester.drag(
       find.byKey(const ValueKey('resize-width')),
       const Offset(30, 0),
@@ -174,9 +170,9 @@ void main() {
     await tester.pump();
     landscape =
         dashboard.components.first.placements[DesignOrientation.landscape]!;
-    expect(landscape.size!.width, closeTo(resolvedBefore.width + 0.1, 0.002));
+    expect(landscape.size.width, closeTo(resolvedBefore.width + 0.1, 0.002));
     expect(
-      landscape.resolve(const Size(2.6, 1)).dx - landscape.size!.width / 2,
+      landscape.center.dx - landscape.size.width / 2,
       closeTo(leftBefore, 0.002),
     );
     expect(
@@ -230,10 +226,7 @@ void main() {
 
     final component = dashboard.components.first;
     final placement = component.placements[DesignOrientation.landscape]!;
-    final initial = placement.resolveSize(
-      ComponentTypes.byId(component.typeId),
-      variant: component.effectiveVariant,
-    );
+    final initial = placement.size;
     final handle = find.byKey(const ValueKey('resize-width'));
     final gesture = await tester.startGesture(tester.getCenter(handle));
     await gesture.moveBy(const Offset(10, 0));
@@ -246,7 +239,7 @@ void main() {
 
     final resized =
         dashboard.components.first.placements[DesignOrientation.landscape]!;
-    expect(resized.size!.width, closeTo(initial.width + 0.1, 0.002));
+    expect(resized.size.width, closeTo(initial.width + 0.1, 0.002));
   });
 
   testWidgets('component remains draggable through dimmed off-frame area', (
@@ -259,7 +252,7 @@ void main() {
     dashboard = dashboard.withComponent(
       component.withPlacement(
         DesignOrientation.landscape,
-        initial.copyWith(offset: const Offset(-1, 0)),
+        initial.copyWith(center: const Offset(-1, 0)),
       ),
     );
     late StateSetter rebuild;
@@ -315,7 +308,7 @@ void main() {
     await tester.pump();
     final moved =
         dashboard.components.first.placements[DesignOrientation.landscape]!;
-    expect(moved.offset.dx, closeTo(-0.9, 0.002));
+    expect(moved.center.dx, closeTo(-0.9, 0.002));
   });
 
   testWidgets('portrait preview contains inherited landscape layout', (
@@ -378,10 +371,7 @@ void main() {
     // rescaled, so a design unit still means the same thing and the optical
     // stack does not move either.
     expect(bakedExtent.width, closeTo(2.6, 1e-9));
-    expect(
-      bakedPlacement.resolve(bakedExtent),
-      _offsetCloseTo(sourcePlacement.resolve(const Size(2.6, 1))),
-    );
+    expect(bakedPlacement.center, _offsetCloseTo(sourcePlacement.center));
     expect(_canvasAspect(tester), closeTo(expectedAspect, 0.001));
 
     await tester.tap(find.byKey(const ValueKey('remove-layout')));
@@ -395,7 +385,6 @@ void main() {
     // Back to the read-only device envelope, which is what it was before.
     expect(_canvasAspect(tester), closeTo(393 / 852, 0.001));
   });
-
 
   group('canvas gestures', () {
     testWidgets('tap selects; an unselected component is not moved by a drag', (
@@ -458,7 +447,9 @@ void main() {
       tester,
     ) async {
       final harness = await _pumpCanvas(tester, selectedId: 'speed');
-      final start = tester.getCenter(find.byKey(const ValueKey('canvas-speed')));
+      final start = tester.getCenter(
+        find.byKey(const ValueKey('canvas-speed')),
+      );
 
       final first = await tester.startGesture(start);
       await first.moveBy(const Offset(20, 0));
@@ -581,6 +572,142 @@ void main() {
     expect(find.byType(CustomPaint), findsWidgets);
   });
 
+  testWidgets('SNAP defaults active and toggle mutates no placement', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(900, 500));
+    final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    final before = dashboard.toJson().toString();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorPage(dashboard: dashboard, onChanged: (_) {}),
+      ),
+    );
+
+    final snap = find.byKey(const ValueKey('canvas-snap'));
+    expect(
+      tester.getSemantics(snap).flagsCollection.isToggled,
+      Tristate.isTrue,
+    );
+    await tester.tap(snap);
+    await tester.pump();
+    expect(
+      tester.getSemantics(snap).flagsCollection.isToggled,
+      Tristate.isFalse,
+    );
+    expect(dashboard.toJson().toString(), before);
+
+    await tester.tap(find.byKey(const ValueKey('orientation-portrait')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('canvas-full')));
+    await tester.pump();
+    expect(
+      tester.getSemantics(snap).flagsCollection.isToggled,
+      Tristate.isFalse,
+    );
+  });
+
+  testWidgets('PLACE keeps D-pad and both size axes on one surface', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(900, 500));
+    var dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorPage(
+          dashboard: dashboard,
+          onChanged: (value) => dashboard = value,
+        ),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('canvas-speed')),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+    final sectionSemantics = tester.getSemantics(
+      find.bySemanticsLabel('Editor service section'),
+    );
+    sectionSemantics.owner!.performAction(
+      sectionSemantics.id,
+      SemanticsAction.increase,
+    );
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.tap(find.text('PLACE'));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('placement-dpad')), findsOneWidget);
+    expect(find.byKey(const ValueKey('placement-W-minus')), findsOneWidget);
+    expect(find.byKey(const ValueKey('placement-W-plus')), findsOneWidget);
+    expect(find.byKey(const ValueKey('placement-H-minus')), findsOneWidget);
+    expect(find.byKey(const ValueKey('placement-H-plus')), findsOneWidget);
+    expect(find.byKey(const ValueKey('placement-bring-in')), findsOneWidget);
+
+    final before =
+        dashboard.components.first.placements[DesignOrientation.landscape]!;
+    await tester.tap(find.byKey(const ValueKey('placement-x+')));
+    await tester.pump();
+    final after =
+        dashboard.components.first.placements[DesignOrientation.landscape]!;
+    expect(after.center.dx, closeTo(before.center.dx + 0.005, 1e-12));
+    expect(after.center.dy, before.center.dy);
+  });
+
+  testWidgets('drawer edge follows window shape, never preview orientation', (
+    tester,
+  ) async {
+    Future<Size> openFor(Size viewport, DesignOrientation preview) async {
+      await _setViewport(tester, viewport);
+      final dashboard = Dashboard.forkFrom(
+        developmentPreset(),
+        id: 'editor-${viewport.width}',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: EditorPage(
+            key: ValueKey(viewport),
+            dashboard: dashboard,
+            onChanged: (_) {},
+          ),
+        ),
+      );
+      await tester.tap(find.byKey(ValueKey('orientation-${preview.name}')));
+      await tester.pump();
+      final content = find.byKey(const ValueKey('mechanical-drawer-content'));
+      final before = tester.getSize(content);
+      await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 180));
+      final after = tester.getSize(content);
+      return Size(before.width - after.width, before.height - after.height);
+    }
+
+    final portrait = await openFor(
+      const Size(393, 852),
+      DesignOrientation.landscape,
+    );
+    expect(portrait.height, greaterThan(0));
+    expect(portrait.width, closeTo(0, 0.001));
+
+    final landscape = await openFor(
+      const Size(874, 402),
+      DesignOrientation.portrait,
+    );
+    expect(landscape.width, greaterThan(0));
+    expect(landscape.height, closeTo(0, 0.001));
+
+    final square = await openFor(
+      const Size(600, 600),
+      DesignOrientation.portrait,
+    );
+    expect(square.width, greaterThan(0));
+    expect(square.height, closeTo(0, 0.001));
+  });
+
   testWidgets('editor has no overflow at required responsive sizes', (
     tester,
   ) async {
@@ -615,9 +742,9 @@ class _CanvasHarness {
   _CanvasHarness(this.dashboard);
   Dashboard dashboard;
   String? selected;
-  late final Placement initialSpeedPlacement =
-      dashboard.components.firstWhere((c) => c.id == 'speed').placements[
-          DesignOrientation.landscape]!;
+  late final Placement initialSpeedPlacement = dashboard.components
+      .firstWhere((c) => c.id == 'speed')
+      .placements[DesignOrientation.landscape]!;
 
   Placement placementOf(String id) => dashboard.components
       .firstWhere((component) => component.id == id)

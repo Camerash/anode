@@ -3,9 +3,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
-import 'component_type.dart';
-import 'variant.dart';
-
 /// A design always has one primary layout and may author one opposite-
 /// orientation override.
 enum DesignOrientation {
@@ -103,7 +100,8 @@ Size viewportFrameExtent(
   Size deviceSafe,
   FrameSpec primary,
 ) {
-  final viewport = (deviceSafe.height >= deviceSafe.width) ==
+  final viewport =
+      (deviceSafe.height >= deviceSafe.width) ==
           (target == DesignOrientation.portrait)
       ? deviceSafe
       : Size(deviceSafe.height, deviceSafe.width);
@@ -169,215 +167,48 @@ Map<DesignOrientation, double> parseFrameAspects(Object? raw) {
 }
 
 /// Design space is the shader's space: y-up, origin at the centre of the frame,
-/// measured in the frame-independent design units described on [FrameSpec]. A
-/// frame of extent `(w, h)` therefore spans x in [-w/2, w/2] and y in
-/// [-h/2, h/2].
-enum Anchor {
-  topLeft,
-  topCenter,
-  topRight,
-  centerLeft,
-  center,
-  centerRight,
-  bottomLeft,
-  bottomCenter,
-  bottomRight;
-
-  static Anchor? byName(String name) {
-    for (final a in Anchor.values) {
-      if (a.name == name) return a;
-    }
-    return null;
-  }
-
-  /// The anchor's position in design units for a frame of extent [frame].
-  Offset pointIn(Size frame) {
-    final halfWidth = frame.width / 2;
-    final halfHeight = frame.height / 2;
-    final dx = switch (this) {
-      Anchor.topLeft || Anchor.centerLeft || Anchor.bottomLeft => -halfWidth,
-      Anchor.topCenter || Anchor.center || Anchor.bottomCenter => 0.0,
-      Anchor.topRight || Anchor.centerRight || Anchor.bottomRight => halfWidth,
-    };
-    final dy = switch (this) {
-      Anchor.topLeft || Anchor.topCenter || Anchor.topRight => halfHeight,
-      Anchor.centerLeft || Anchor.center || Anchor.centerRight => 0.0,
-      Anchor.bottomLeft ||
-      Anchor.bottomCenter ||
-      Anchor.bottomRight => -halfHeight,
-    };
-    return Offset(dx, dy);
-  }
-}
-
-@immutable
-class AxisSpan {
-  const AxisSpan({this.startInset = 0, this.endInset = 0});
-
-  final double startInset;
-  final double endInset;
-
-  Map<String, Object?> toJson() => <String, Object?>{
-    'start': startInset,
-    'end': endInset,
-  };
-
-  factory AxisSpan.fromJson(Map<String, Object?> json) => AxisSpan(
-    startInset: (json['start'] as num?)?.toDouble() ?? 0,
-    endInset: (json['end'] as num?)?.toDouble() ?? 0,
-  );
-}
-
-/// Bakes a source-layout placement into a newly created alternate layout.
+/// measured in frame-independent design units.
 ///
-/// Geometry is copied verbatim. The target frame is sized by
-/// [viewportFrameExtent] so that it renders at the fit scale the design already
-/// had, which is what makes creating an alternate produce no visual jump — in
-/// the geometry OR in the optical layer, since a design unit means the same
-/// thing in both frames.
-///
-/// Span axes are deliberately frozen to fixed extents. A `verticalSpan` copied
-/// verbatim would resolve against the taller new envelope and stretch to fill
-/// it, which is exactly the jump this is here to avoid.
-Placement bakeContainedPlacement({
-  required Placement placement,
-  required Size resolvedSize,
-  required Size sourceFrame,
-  required Size targetFrame,
-}) {
-  final centre = placement.resolve(sourceFrame);
-  return Placement(
-    anchor: placement.anchor,
-    offset: centre - placement.anchor.pointIn(targetFrame),
-    size: resolvedSize,
-  );
-}
-
-/// Anchor plus offset, never absolute coordinates. A right-anchored component
-/// stays welded to the authored frame edge when its fixed aspect is edited,
-/// instead of drifting toward the middle.
+/// Frames are fixed authored extents and runtime mismatch is handled only by
+/// contain-fit. Centre and size are therefore the complete placement contract:
+/// editor chrome and renderer consume these exact values.
 @immutable
 class Placement {
-  const Placement({
-    this.anchor = Anchor.center,
-    this.offset = Offset.zero,
-    this.size,
-    this.horizontalSpan,
-    this.verticalSpan,
-  });
+  const Placement({required this.center, required this.size});
 
-  final Anchor anchor;
-  final Offset offset;
+  final Offset center;
+  final Size size;
 
-  /// Extent in design units, width and height independent. Null means take the
-  /// type's default. Instrument faces are authored, not laid out, so a design
-  /// routinely needs a wide short bar or a tall narrow digit block that no
-  /// uniform scale of the default could produce.
-  final Size? size;
-  final AxisSpan? horizontalSpan;
-  final AxisSpan? verticalSpan;
-
-  Offset resolve(Size frame) {
-    final fixed = anchor.pointIn(frame) + offset;
-    final horizontal = horizontalSpan;
-    final vertical = verticalSpan;
-    final halfWidth = frame.width / 2;
-    final halfHeight = frame.height / 2;
-    final dx = horizontal == null
-        ? fixed.dx
-        : (-halfWidth +
-                  horizontal.startInset +
-                  halfWidth -
-                  horizontal.endInset) /
-              2;
-    final dy = vertical == null
-        ? fixed.dy
-        : (halfHeight - vertical.startInset - halfHeight + vertical.endInset) /
-              2;
-    return Offset(dx, dy);
-  }
-
-  Size resolveSize(ComponentTypeSpec? type, {VariantReference? variant}) =>
-      size ??
-      (type == null
-          ? const Size(1, 1)
-          : type.variant(variant ?? type.legacyVariant)?.recommendedSize ??
-                type.defaultSize);
-
-  Size resolveSizeIn(
-    Size frame,
-    ComponentTypeSpec? type, {
-    VariantReference? variant,
-  }) {
-    final fixed = resolveSize(type, variant: variant);
-    return Size(
-      horizontalSpan == null
-          ? fixed.width
-          : (frame.width -
-                    horizontalSpan!.startInset -
-                    horizontalSpan!.endInset)
-                .clamp(0.03, double.infinity),
-      verticalSpan == null
-          ? fixed.height
-          : (frame.height - verticalSpan!.startInset - verticalSpan!.endInset)
-                .clamp(0.03, double.infinity),
-    );
-  }
-
-  Placement copyWith({Anchor? anchor, Offset? offset, Size? size}) => Placement(
-    anchor: anchor ?? this.anchor,
-    offset: offset ?? this.offset,
-    size: size ?? this.size,
-    horizontalSpan: horizontalSpan,
-    verticalSpan: verticalSpan,
-  );
-
-  Placement withHorizontalSpan(AxisSpan? value) => Placement(
-    anchor: anchor,
-    offset: offset,
-    size: size,
-    horizontalSpan: value,
-    verticalSpan: verticalSpan,
-  );
-
-  Placement withVerticalSpan(AxisSpan? value) => Placement(
-    anchor: anchor,
-    offset: offset,
-    size: size,
-    horizontalSpan: horizontalSpan,
-    verticalSpan: value,
-  );
+  Placement copyWith({Offset? center, Size? size}) =>
+      Placement(center: center ?? this.center, size: size ?? this.size);
 
   Map<String, Object?> toJson() => <String, Object?>{
-    'anchor': anchor.name,
-    'dx': offset.dx,
-    'dy': offset.dy,
-    if (size != null) 'w': size!.width,
-    if (size != null) 'h': size!.height,
-    if (horizontalSpan != null) 'horizontalSpan': horizontalSpan!.toJson(),
-    if (verticalSpan != null) 'verticalSpan': verticalSpan!.toJson(),
+    'x': center.dx,
+    'y': center.dy,
+    'w': size.width,
+    'h': size.height,
   };
 
-  factory Placement.fromJson(Map<String, Object?> json) {
-    final w = (json['w'] as num?)?.toDouble();
-    final h = (json['h'] as num?)?.toDouble();
+  factory Placement.fromJson(
+    Map<String, Object?> json, {
+    Size fallbackSize = const Size(1, 1),
+  }) {
+    double coordinate(Object? raw) {
+      final value = raw is num ? raw.toDouble() : 0.0;
+      return value.isFinite ? value : 0;
+    }
+
+    double dimension(Object? raw, double fallback) {
+      final value = raw is num ? raw.toDouble() : fallback;
+      return value.isFinite && value > 0 ? value : fallback;
+    }
+
     return Placement(
-      anchor: Anchor.byName(json['anchor'] as String? ?? '') ?? Anchor.center,
-      offset: Offset(
-        (json['dx'] as num?)?.toDouble() ?? 0,
-        (json['dy'] as num?)?.toDouble() ?? 0,
+      center: Offset(coordinate(json['x']), coordinate(json['y'])),
+      size: Size(
+        dimension(json['w'], fallbackSize.width),
+        dimension(json['h'], fallbackSize.height),
       ),
-      size: (w == null || h == null) ? null : Size(w, h),
-      horizontalSpan: json['horizontalSpan'] is Map
-          ? AxisSpan.fromJson(
-              (json['horizontalSpan'] as Map).cast<String, Object?>(),
-            )
-          : null,
-      verticalSpan: json['verticalSpan'] is Map
-          ? AxisSpan.fromJson(
-              (json['verticalSpan'] as Map).cast<String, Object?>(),
-            )
-          : null,
     );
   }
 }

@@ -1,7 +1,8 @@
-import 'dart:ui' show Tristate;
+import 'dart:ui' show SemanticsAction, Tristate;
 
+import 'package:anode/editor/effect_pictogram.dart';
 import 'package:anode/editor/effect_panel.dart';
-import 'package:anode/mechanical/mechanical_flip_tray.dart';
+import 'package:anode/mechanical/mechanical_lever.dart';
 import 'package:anode/model/optical_profile.dart';
 import 'package:anode/vfd/prism_glyphs.dart';
 import 'package:anode/vfd/prism_widgets.dart';
@@ -361,9 +362,103 @@ void main() {
     );
     expect(find.text('0.72'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('effect-power-bloom')));
+    await tester.drag(
+      find.descendant(
+        of: find.byKey(const ValueKey('effect-lever-bloom')),
+        matching: find.byKey(const ValueKey('mechanical-lever-thumb')),
+      ),
+      const Offset(40, 0),
+    );
     await tester.pump();
-    expect(changes, 1);
+    expect(changes, greaterThan(0));
+  });
+
+  testWidgets('effect overview uses icon faces without cap names or values', (
+    tester,
+  ) async {
+    final profile = OpticalProfile(
+      effects: <String, EffectSetting>{
+        EffectIds.bloom: const EffectSetting(
+          strength: 0.72,
+          resumeStrength: 0.72,
+        ),
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 700,
+          height: 500,
+          child: EffectPanel(
+            title: 'Design effects',
+            dashboardProfile: profile,
+            baseProfile: profile,
+            scope: EffectScope.dashboard,
+            prismStyle: const PrismStyle(),
+            soundEnabled: false,
+            hapticsEnabled: false,
+            onProfileChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(EffectPictogram), findsWidgets);
+    expect(find.text('BLOOM'), findsNothing);
+    expect(find.text('0.72'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('effect-bloom')));
+    await tester.pump();
+    expect(find.text('BLOOM'), findsOneWidget);
+    expect(find.text('0.72'), findsOneWidget);
+    expect(find.byKey(const ValueKey('effect-emission')), findsNothing);
+  });
+
+  testWidgets('unknown stored effect remains selectable with disabled detail', (
+    tester,
+  ) async {
+    final profile = OpticalProfile(
+      effects: <String, EffectSetting>{
+        'futureScatter': const EffectSetting(
+          strength: 1.23,
+          resumeStrength: 1.23,
+        ),
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 700,
+          height: 500,
+          child: EffectPanel(
+            title: 'Design effects',
+            dashboardProfile: profile,
+            baseProfile: profile,
+            scope: EffectScope.dashboard,
+            prismStyle: const PrismStyle(),
+            soundEnabled: false,
+            hapticsEnabled: false,
+            onProfileChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    final channels = tester.getSemantics(
+      find.bySemanticsLabel('Design effects channels'),
+    );
+    channels.owner!.performAction(channels.id, SemanticsAction.increase);
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('effect-futureScatter')));
+    await tester.pump();
+
+    final lever = find.byKey(const ValueKey('effect-lever-futureScatter'));
+    expect(lever, findsOneWidget);
+    expect(find.text('1.23'), findsOneWidget);
+    expect(
+      tester.getSemantics(lever).flagsCollection.isEnabled,
+      Tristate.isFalse,
+    );
   });
 
   testWidgets('local effect starts inherited and seeds override on demand', (
@@ -408,51 +503,41 @@ void main() {
     expect(changed?.effects[EffectIds.bloom]?.strength, 1.27);
   });
 
-  testWidgets('channel swap keeps tray open and repeat selection closes it', (
-    tester,
-  ) async {
-    final profile = OpticalProfile();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: SizedBox(
-          width: 700,
-          height: 500,
-          child: EffectPanel(
-            title: 'Design effects',
-            dashboardProfile: profile,
-            baseProfile: profile,
-            scope: EffectScope.dashboard,
-            prismStyle: const PrismStyle(),
-            soundEnabled: false,
-            hapticsEnabled: false,
-            onProfileChanged: (_) {},
+  testWidgets(
+    'active detail hides bank and selected icon returns to overview',
+    (tester) async {
+      final profile = OpticalProfile();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 700,
+            height: 500,
+            child: EffectPanel(
+              title: 'Design effects',
+              dashboardProfile: profile,
+              baseProfile: profile,
+              scope: EffectScope.dashboard,
+              prismStyle: const PrismStyle(),
+              soundEnabled: false,
+              hapticsEnabled: false,
+              onProfileChanged: (_) {},
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.byKey(const ValueKey('effect-bloom')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 150));
-    await tester.tap(find.byKey(const ValueKey('effect-emission')));
-    await tester.pump();
-    expect(
-      tester.widget<MechanicalFlipTray>(find.byType(MechanicalFlipTray)).open,
-      isTrue,
-    );
-    expect(
-      find.text('ELECTRON ENERGY CONVERTED INTO VISIBLE PHOSPHOR LIGHT.'),
-      findsOneWidget,
-    );
+      await tester.tap(find.byKey(const ValueKey('effect-bloom')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('effect-emission')), findsNothing);
+      expect(find.byType(MechanicalLever), findsOneWidget);
+      expect(find.byKey(const ValueKey('pager-detent-rail')), findsNothing);
 
-    await tester.tap(find.byKey(const ValueKey('effect-emission')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 150));
-    expect(
-      tester.widget<MechanicalFlipTray>(find.byType(MechanicalFlipTray)).open,
-      isFalse,
-    );
-  });
+      await tester.tap(find.byKey(const ValueKey('active-effect-bloom')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('effect-emission')), findsOneWidget);
+      expect(find.byType(MechanicalLever), findsNothing);
+    },
+  );
 
   testWidgets('phosphor channel changes profile live', (tester) async {
     final profile = OpticalProfile();

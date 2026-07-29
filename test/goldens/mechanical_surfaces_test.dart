@@ -1,9 +1,12 @@
+import 'dart:ui' show SemanticsAction;
+
 import 'package:anode/app_state.dart';
 import 'package:anode/data/design_repository.dart';
 import 'package:anode/editor/editor_page.dart';
 import 'package:anode/editor/effect_panel.dart';
 import 'package:anode/library/library_page.dart';
 import 'package:anode/mechanical/mechanical_pager.dart';
+import 'package:anode/mechanical/mechanical_lever.dart';
 import 'package:anode/model/dashboard.dart';
 import 'package:anode/model/dev_design.dart';
 import 'package:anode/model/optical_profile.dart';
@@ -91,6 +94,167 @@ void main() {
     await expectLater(
       find.byKey(const ValueKey('surface')),
       matchesGoldenFile('baselines/effect_open.png'),
+    );
+  });
+
+  testWidgets('automotive lever state baselines', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(520, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ColoredBox(
+          color: const Color(0xFF050807),
+          child: RepaintBoundary(
+            key: const ValueKey('surface'),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                children: <Widget>[
+                  MechanicalLever(
+                    label: 'Off',
+                    value: 0,
+                    min: 0,
+                    max: 2,
+                    referenceValue: 1,
+                    offAtMinimum: true,
+                    palette: palette,
+                    prismStyle: const PrismStyle(),
+                    soundEnabled: false,
+                    hapticsEnabled: false,
+                    onChanged: (_) {},
+                  ),
+                  const SizedBox(height: 6),
+                  MechanicalLever(
+                    label: 'Tuned',
+                    value: 1,
+                    min: 0,
+                    max: 2,
+                    referenceValue: 1,
+                    palette: palette,
+                    prismStyle: const PrismStyle(),
+                    soundEnabled: false,
+                    hapticsEnabled: false,
+                    onChanged: (_) {},
+                  ),
+                  const SizedBox(height: 6),
+                  MechanicalLever(
+                    label: 'Overdrive',
+                    value: 2,
+                    min: 0,
+                    max: 2,
+                    referenceValue: 1,
+                    palette: palette,
+                    prismStyle: const PrismStyle(),
+                    soundEnabled: false,
+                    hapticsEnabled: false,
+                    onChanged: (_) {},
+                  ),
+                  const SizedBox(height: 6),
+                  const MechanicalLever(
+                    label: 'Inherited',
+                    value: 0.72,
+                    min: 0,
+                    max: 2,
+                    referenceValue: 1,
+                    palette: palette,
+                    prismStyle: PrismStyle(),
+                    onChanged: null,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await expectLater(
+      find.byKey(const ValueKey('surface')),
+      matchesGoldenFile('baselines/mechanical_levers.png'),
+    );
+  });
+
+  testWidgets('Prism-style lever detail baseline', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(520, 260));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RepaintBoundary(
+          key: const ValueKey('surface'),
+          child: PrismStyleEditor(
+            profile: OpticalProfile(),
+            style: const PrismStyle(),
+            soundEnabled: false,
+            hapticsEnabled: false,
+            onChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('depth')));
+    await tester.pump();
+
+    await expectLater(
+      find.byKey(const ValueKey('surface')),
+      matchesGoldenFile('baselines/prism_lever_detail.png'),
+    );
+  });
+
+  testWidgets('editor PLACE and bottom-bay baselines', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(874, 402));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RepaintBoundary(
+          key: const ValueKey('surface'),
+          child: EditorPage(dashboard: dashboard, onChanged: (_) {}),
+        ),
+      ),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('canvas-speed')),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+    final sections = tester.getSemantics(
+      find.bySemanticsLabel('Editor service section'),
+    );
+    sections.owner!.performAction(sections.id, SemanticsAction.increase);
+    await tester.pump();
+    await tester.tap(find.text('PLACE'));
+    await tester.pump();
+    await expectLater(
+      find.byKey(const ValueKey('surface')),
+      matchesGoldenFile('baselines/editor_place_right.png'),
+    );
+
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RepaintBoundary(
+          key: const ValueKey('surface'),
+          child: EditorPage(
+            key: const ValueKey('portrait-editor'),
+            dashboard: dashboard,
+            onChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+    await expectLater(
+      find.byKey(const ValueKey('surface')),
+      matchesGoldenFile('baselines/editor_bay_bottom.png'),
     );
   });
 

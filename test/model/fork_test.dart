@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:ui' show Size;
+
 import 'package:anode/model/component_instance.dart';
 import 'package:anode/model/component_type.dart';
 import 'package:anode/model/dashboard.dart';
@@ -46,17 +48,17 @@ void main() {
     final moved = d.withComponent(
       d.components.first.withPlacement(
         DesignOrientation.portrait,
-        const Placement(anchor: Anchor.topLeft, offset: Offset(0.4, -0.1)),
+        const Placement(center: Offset(0.4, -0.1), size: Size(1.035, 0.588)),
       ),
     );
 
     expect(
-      moved.components.first.placements[DesignOrientation.portrait]!.anchor,
-      Anchor.topLeft,
+      moved.components.first.placements[DesignOrientation.portrait]!.center,
+      const Offset(0.4, -0.1),
     );
     expect(
-      p.components.first.placements[DesignOrientation.portrait]!.anchor,
-      Anchor.center,
+      p.components.first.placements[DesignOrientation.portrait]!.center,
+      const Offset(0, 0.20),
     );
   });
 

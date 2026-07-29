@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 import 'dart:ui' show Size;
 
-import 'package:anode/model/component_type.dart';
 import 'package:anode/model/dashboard.dart';
 import 'package:anode/model/dev_design.dart';
 import 'package:anode/model/placement.dart';
@@ -57,7 +56,6 @@ void main() {
     test('leaves every component where it already was, in design units', () {
       const device = Size(393, 852);
       final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'zero');
-      final source = dashboard.frameExtent(DesignOrientation.landscape);
       final extent = viewportFrameExtent(
         DesignOrientation.portrait,
         device,
@@ -69,24 +67,19 @@ void main() {
       );
 
       for (final component in baked.components) {
-        final type = ComponentTypes.byId(component.typeId);
         final before = component.placements[DesignOrientation.landscape]!;
         final after = component.placements[DesignOrientation.portrait]!;
         expect(
-          after.resolve(extent).dx,
-          closeTo(before.resolve(source).dx, 1e-9),
+          after.center.dx,
+          closeTo(before.center.dx, 1e-9),
           reason: '${component.id} moved in x',
         );
         expect(
-          after.resolve(extent).dy,
-          closeTo(before.resolve(source).dy, 1e-9),
+          after.center.dy,
+          closeTo(before.center.dy, 1e-9),
           reason: '${component.id} moved in y',
         );
-        expect(
-          after.resolveSizeIn(extent, type, variant: component.effectiveVariant),
-          before.resolveSizeIn(source, type, variant: component.effectiveVariant),
-          reason: '${component.id} was rescaled',
-        );
+        expect(after.size, before.size, reason: '${component.id} was rescaled');
       }
     });
   });
@@ -150,11 +143,7 @@ void main() {
     test('degrades to the primary extent rather than an unusable frame', () {
       const primary = FrameSpec(width: 2.6, height: 1);
       expect(
-        viewportFrameExtent(
-          DesignOrientation.portrait,
-          Size.zero,
-          primary,
-        ),
+        viewportFrameExtent(DesignOrientation.portrait, Size.zero, primary),
         primary.extent,
       );
     });
@@ -172,19 +161,18 @@ void main() {
     });
 
     test('an aspect-only payload decodes as a one-unit-tall frame', () {
-      final back = FrameSpec.fromJson(
-        <String, Object?>{'referenceAspect': 2.4},
-        fallback: const FrameSpec.aspect(2.6),
-      );
+      final back = FrameSpec.fromJson(<String, Object?>{
+        'referenceAspect': 2.4,
+      }, fallback: const FrameSpec.aspect(2.6));
       expect(back.width, 2.4);
       expect(back.height, 1);
     });
 
     test('a degenerate extent falls back instead of collapsing the frame', () {
-      final back = FrameSpec.fromJson(
-        <String, Object?>{'width': 0, 'height': 4},
-        fallback: const FrameSpec.aspect(2.6),
-      );
+      final back = FrameSpec.fromJson(<String, Object?>{
+        'width': 0,
+        'height': 4,
+      }, fallback: const FrameSpec.aspect(2.6));
       expect(back.extent, const Size(2.6, 1));
     });
   });

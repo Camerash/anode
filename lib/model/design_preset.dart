@@ -9,7 +9,7 @@ import 'settings.dart';
 import 'vfd_module.dart';
 
 /// Bumped when the stored shape changes in a way older builds cannot read.
-const int kSchemaVersion = 4;
+const int kSchemaVersion = 5;
 
 /// A shipped design: immutable, versioned, and never edited in place. Editing
 /// one forks it into a [Dashboard].

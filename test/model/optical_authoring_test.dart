@@ -194,7 +194,10 @@ void main() {
       id: 'digits',
       typeId: ComponentTypes.speedDigits,
       placements: const <DesignOrientation, Placement>{
-        DesignOrientation.landscape: Placement(size: Size(1.4, 0.7)),
+        DesignOrientation.landscape: Placement(
+          center: Offset.zero,
+          size: Size(1.4, 0.7),
+        ),
       },
     );
 
@@ -269,11 +272,11 @@ void main() {
       name: 'Secondary',
       regions: const <DesignOrientation, Placement>{
         DesignOrientation.landscape: Placement(
-          offset: Offset(0.4, 0),
+          center: Offset(0.4, 0),
           size: Size(0.8, 0.3),
         ),
         DesignOrientation.portrait: Placement(
-          offset: Offset(0, -0.2),
+          center: Offset(0, -0.2),
           size: Size(0.3, 0.8),
         ),
       },

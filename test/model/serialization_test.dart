@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' show Offset, Size;
 import 'package:anode/model/component_instance.dart';
 import 'package:anode/model/component_type.dart';
 import 'package:anode/model/dashboard.dart';
@@ -39,11 +40,11 @@ void main() {
     final d = back.components.firstWhere((c) => c.id == 'digits');
 
     expect(
-      d.placements[DesignOrientation.portrait]!.offset,
+      d.placements[DesignOrientation.portrait]!.center,
       const Offset(0, 0.20),
     );
     expect(
-      d.placements[DesignOrientation.landscape]!.offset,
+      d.placements[DesignOrientation.landscape]!.center,
       const Offset(0, 0.11),
     );
   });
@@ -54,7 +55,12 @@ void main() {
       'id': 'mystery',
       'typeId': 'gauge.from.the.future',
       'params': <String, Object?>{},
-      'placements': <String, Object?>{'landscape': const Placement().toJson()},
+      'placements': <String, Object?>{
+        'landscape': const Placement(
+          center: Offset.zero,
+          size: Size(1, 1),
+        ).toJson(),
+      },
     });
 
     final back = DesignPreset.fromJson(reencode(json));
@@ -69,7 +75,10 @@ void main() {
   test('an unknown orientation key is ignored, known ones survive', () {
     final json = preset().toJson();
     final first = (json['components'] as List).first as Map<String, Object?>;
-    (first['placements'] as Map)['skewLeft'] = const Placement().toJson();
+    (first['placements'] as Map)['skewLeft'] = const Placement(
+      center: Offset.zero,
+      size: Size(1, 1),
+    ).toJson();
 
     final back = DesignPreset.fromJson(reencode(json));
     final d = back.components.first;
@@ -112,5 +121,12 @@ void main() {
       Dashboard.forkFrom(preset(), id: 'd').toJson()['schemaVersion'],
       kSchemaVersion,
     );
+  });
+
+  test('old dashboard schemas are rejected instead of migrated', () {
+    final json = Dashboard.forkFrom(preset(), id: 'd').toJson();
+    json['schemaVersion'] = 4;
+
+    expect(() => Dashboard.fromJson(json), throwsFormatException);
   });
 }

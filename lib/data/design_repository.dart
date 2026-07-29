@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../model/dashboard.dart';
-import '../model/optical_profile.dart';
+import '../model/design_preset.dart';
 import '../model/settings.dart';
 
 class StoredDesignState {
@@ -24,8 +24,8 @@ class StoredDesignState {
 class DesignRepository {
   DesignRepository(this._preferences);
 
-  static const _dashboardsKey = 'anode.dashboards.v1';
-  static const _activeDesignKey = 'anode.activeDesign.v1';
+  static const _dashboardsKey = 'anode.dashboards.v2';
+  static const _activeDesignKey = 'anode.activeDesign.v2';
   static const _globalSettingsKey = 'anode.globalSettings.v1';
 
   final SharedPreferences _preferences;
@@ -33,9 +33,7 @@ class DesignRepository {
   StoredDesignState load() {
     final rawGlobal = _loadGlobalSettingsMap();
     return StoredDesignState(
-      dashboards: _loadDashboards(
-        legacyEffects: _legacyEffects(rawGlobal['layers']),
-      ),
+      dashboards: _loadDashboards(),
       activeDesignKey: _preferences.getString(_activeDesignKey),
       globalSettings: GlobalSettings.fromJson(rawGlobal),
     );
@@ -59,29 +57,13 @@ class DesignRepository {
     ]);
   }
 
-  List<Dashboard> _loadDashboards({
-    required Map<String, EffectSetting> legacyEffects,
-  }) {
+  List<Dashboard> _loadDashboards() {
     final raw = _decodeMapList(_preferences.getString(_dashboardsKey));
     final dashboards = <Dashboard>[];
     for (final value in raw) {
+      if (value['schemaVersion'] != kSchemaVersion) continue;
       try {
-        var dashboard = Dashboard.fromJson(value);
-        final settings =
-            (value['settings'] as Map?)?.cast<String, Object?>() ??
-            const <String, Object?>{};
-        if (!settings.containsKey('opticalProfile') &&
-            legacyEffects.isNotEmpty) {
-          dashboard = dashboard.copyWith(
-            settings: dashboard.settings.copyWith(
-              opticalProfile: OpticalProfile(
-                phosphorName: dashboard.settings.phosphorName,
-                effects: legacyEffects,
-              ),
-            ),
-          );
-        }
-        dashboards.add(dashboard);
+        dashboards.add(Dashboard.fromJson(value));
       } on Object {
         // One damaged user dashboard must not prevent every other design from
         // loading. The invalid payload remains in preferences until next save.
@@ -98,28 +80,6 @@ class DesignRepository {
     } on Object {
       return const <String, Object?>{};
     }
-  }
-
-  Map<String, EffectSetting> _legacyEffects(Object? raw) {
-    final layers = (raw as Map?)?.cast<String, Object?>();
-    if (layers == null) return const <String, EffectSetting>{};
-    const ids = <String, String>{
-      'bloom': EffectIds.bloom,
-      'unlitSegments': EffectIds.unlitPhosphor,
-      'gridMesh': EffectIds.gridMesh,
-      'filamentWires': EffectIds.filamentWires,
-      'grain': EffectIds.glassGrain,
-      'phosphorDecay': EffectIds.phosphorDecay,
-      'tiltParallax': EffectIds.tiltParallax,
-    };
-    return <String, EffectSetting>{
-      for (final entry in ids.entries)
-        if (layers[entry.key] is bool)
-          entry.value: EffectSetting(
-            strength: layers[entry.key] as bool ? 1 : 0,
-            resumeStrength: 1,
-          ),
-    };
   }
 
   List<Map<String, Object?>> _decodeMapList(String? raw) {

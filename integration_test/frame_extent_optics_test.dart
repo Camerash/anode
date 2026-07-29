@@ -50,6 +50,7 @@ void main() {
         params: const <String, Object?>{'cells': 9, 'maxKph': 100.0},
         placements: const <DesignOrientation, Placement>{
           DesignOrientation.landscape: Placement(
+            center: Offset.zero,
             size: Size(0.9, 0.084),
           ),
         },

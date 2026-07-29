@@ -5,7 +5,6 @@ import 'package:anode/data/design_repository.dart';
 import 'package:anode/model/component_type.dart';
 import 'package:anode/model/dashboard.dart';
 import 'package:anode/model/design_preset.dart';
-import 'package:anode/model/optical_profile.dart';
 import 'package:anode/model/settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -75,7 +74,7 @@ void main() {
     expect(source.defaults.phosphorName, 'Amber');
   });
 
-  test('legacy global layer booleans migrate into legacy dashboards', () async {
+  test('v1 dashboard payloads are rejected after schema-5 break', () async {
     final legacyDashboard = Dashboard.forkFrom(source, id: 'legacy').toJson();
     (legacyDashboard['settings'] as Map).remove('opticalProfile');
     (legacyDashboard['settings'] as Map)['phosphorName'] = 'Amber';
@@ -94,19 +93,7 @@ void main() {
 
     final stored = DesignRepository(preferences).load();
 
-    expect(stored.dashboards.single.settings.phosphorName, 'Amber');
-    expect(
-      stored.dashboards.single.settings.opticalProfile
-          .effect(EffectIds.bloom)
-          .strength,
-      0,
-    );
-    expect(
-      stored.dashboards.single.settings.opticalProfile
-          .effect(EffectIds.gridMesh)
-          .strength,
-      1,
-    );
+    expect(stored.dashboards, isEmpty);
     expect(stored.globalSettings.demoMode, isTrue);
   });
 }

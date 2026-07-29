@@ -3,7 +3,6 @@ import 'dart:ui' show Size;
 import 'package:flutter/foundation.dart';
 
 import 'component_instance.dart';
-import 'component_type.dart';
 import 'design.dart';
 import 'design_preset.dart';
 import 'placement.dart';
@@ -241,23 +240,12 @@ class Dashboard implements Design {
     final target = FrameSpec(width: extent.width, height: extent.height);
     if (hasAuthoredLayout(orientation) || !target.isValid) return this;
     final sourceOrientation = primaryOrientation;
-    final sourceFrame = frameExtent(sourceOrientation);
     final bakedComponents = <ComponentInstance>[
       for (final component in components)
         if (component.appearsIn(sourceOrientation))
           component.withPlacement(
             orientation,
-            bakeContainedPlacement(
-              placement: component.placements[sourceOrientation]!,
-              resolvedSize: component.placements[sourceOrientation]!
-                  .resolveSizeIn(
-                    sourceFrame,
-                    ComponentTypes.byId(component.typeId),
-                    variant: component.effectiveVariant,
-                  ),
-              sourceFrame: sourceFrame,
-              targetFrame: extent,
-            ),
+            component.placements[sourceOrientation]!,
           )
         else
           component,
@@ -268,12 +256,7 @@ class Dashboard implements Design {
           module.copyWith(
             regions: <DesignOrientation, Placement>{
               ...module.regions,
-              orientation: bakeContainedPlacement(
-                placement: region,
-                resolvedSize: region.resolveSizeIn(sourceFrame, null),
-                sourceFrame: sourceFrame,
-                targetFrame: extent,
-              ),
+              orientation: region,
             },
           )
         else
@@ -326,6 +309,9 @@ class Dashboard implements Design {
   };
 
   factory Dashboard.fromJson(Map<String, Object?> json) {
+    if (json['schemaVersion'] != kSchemaVersion) {
+      throw const FormatException('Unsupported dashboard schema');
+    }
     final specs = parseFrameSpecs(json['frameSpecs']);
     final legacyAspects = parseFrameAspects(json['frameAspects']);
     return Dashboard(

@@ -1,4 +1,4 @@
-import 'dart:ui' show Offset;
+import 'dart:ui' show Offset, Size;
 
 import 'component_instance.dart';
 import 'component_type.dart';
@@ -11,9 +11,18 @@ import 'placement.dart';
 /// This exists only so the renderer has a component list to consume before the
 /// editor exists, and reproduces the previously hardcoded layout exactly.
 DesignPreset developmentPreset() {
-  const digitsPlacement = Placement(offset: Offset(0, 0.11));
-  const barPlacement = Placement(offset: Offset(0, -0.33));
-  const legendPlacement = Placement(offset: Offset(0.6815, 0.11));
+  const digitsPlacement = Placement(
+    center: Offset(0, 0.11),
+    size: Size(1.035, 0.588),
+  );
+  const barPlacement = Placement(
+    center: Offset(0, -0.33),
+    size: Size(1.96, 0.084),
+  );
+  const legendPlacement = Placement(
+    center: Offset(0.6815, 0.11),
+    size: Size(0.203, 0.242),
+  );
   return DesignPreset(
     id: 'dev.classic',
     name: 'Classic',

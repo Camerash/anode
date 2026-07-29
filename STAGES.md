@@ -55,7 +55,8 @@ Commits `bdd4d01` (model) and `80831c0` (independent sizing).
       source id and version as provenance only. No delta-merging, ever.
 - [x] Per-orientation authored layouts; a missing placement means the component
       does not exist in that orientation.
-- [x] Anchor-plus-offset positioning, resolved against the frame aspect.
+- [x] Anchor-plus-offset positioning initially proved placement. Schema 5 later
+      removed anchors and spans in favour of required absolute centre and size.
 - [x] Independent width and height on `Placement.size`.
 - [x] Capability union, optionally scoped to one orientation.
 - [x] Hand-written tolerant serialization: unknown type dropped, unknown
@@ -259,8 +260,8 @@ could not be built in Stage 1:
    their renderer implementations are outstanding.
 7. **Optical scope was missing — resolved.** `OpticalProfile`,
    `EffectSetting`, generic `EffectSpec`, and sparse module/component overrides
-   now resolve dashboard -> module -> component. Legacy booleans migrate on
-   repository load.
+   now resolve dashboard -> module -> component. Schema 5 rejects old
+   dashboards; no unreleased migration remains.
 8. **Component variants were missing — resolved.** Instances persist stable
    id/revision refs; legacy remains registered after new variants are added;
    unknown refs and params survive with visible fallback. No shipped variants
@@ -372,7 +373,8 @@ handcrafted digit variant was authored during it.
       canvas resolves all module/component overrides live.
 - [x] Non-scrolling effect-button grid. Tile tap selects detail only. Detail
       supplies physical description, explicit power, segmented strength,
-      precise number, and minus/plus steppers.
+      precise number, and minus/plus steppers. The lever follow-up below
+      superseded power/bar/steppers while preserving every effect.
 - [x] Per-effect `INHERIT` / `OVERRIDE`. Inherited values remain visible but
       read-only; enabling override seeds current effective value; disabling it
       removes local value.
@@ -417,18 +419,20 @@ handcrafted digit variant was authored during it.
 - [x] Replace free/inertial overflow with integer pages, a draggable detented
       rail, 60ms carriage snap, Prism previous/next controls, adjustable
       semantics, and one feedback event per detent.
-- [x] Make effect caps label-only. Add `PHOSPHOR` as first channel and reveal
-      all values, inheritance, power, segmented strength, and steppers in a
-      top-hinged fascia that occupies zero height while closed.
+- [x] Effect caps first became label-only with a top-hinged detail fascia.
+      The lever follow-up below superseded this with icon-only overview keys
+      and an active-only detail surface.
 - [x] Add non-persisted `EffectSpec.controlLabel`; persisted effect ids and
       values remain unchanged. Unknown ids remain retained and visible.
 - [x] Rebuild editor around a 48px rail and manually latched push service bay.
-      Portrait bay enters from bottom; landscape enters from right. Selection
-      never opens it. Opening reduces preview bounds and re-contain-fits without
-      mutating authored geometry.
+      It initially keyed the edge to preview orientation; the follow-up below
+      correctly keys it to route window shape. Selection never opens it.
+      Opening reduces preview bounds and re-contain-fits without mutating
+      authored geometry.
 - [x] Page rack slots; move reorder, visibility, and removal to explicit
-      selected-item controls. Generic param, variant, module, action, anchor,
-      and placement controls use the shared mechanical primitives.
+      selected-item controls. Generic param, variant, module, action, and
+      placement controls use shared mechanical primitives. Schema 5 later
+      removed anchor controls.
 - [x] Add three-decimal X/Y/W/H readouts and 0.005-unit placement/size nudges.
 - [x] Correct edge resize: one delta, half-delta centre correction, opposite
       edge invariant, minimum `0.03` correction after clamp, no frame clamp.
@@ -469,8 +473,8 @@ Mechanical refinement model findings:
       Fallback previews remain read-only. *(Superseded by the frame-extent
       follow-up below: creation now derives a device-safe-rect envelope at the
       current fit scale and copies placements verbatim.)*
-- [x] Add independent fixed/span placement axes. Span persists start/end insets
-      and resolves against authored fixed-frame extent.
+- [x] Independent fixed/span placement axes were added, then removed by the
+      schema-5 centre/size simplification below.
 - [x] Preserve unknown component types during import/round-trip.
 - [x] Render and hit-test component overlays beyond frame bounds; dim only the
       portion outside the authored boundary. Add `BRING IN` recovery.
@@ -500,10 +504,10 @@ Follow-up model findings:
    concrete contract before the mode returns.
 3. **Alternate initialization — resolved, then superseded.** Placements were
    baked from primary contain geometry. The frame-extent follow-up below
-   replaced the rescale with a verbatim copy into a larger envelope; span axes
-   still resolve to fixed extents.
-4. **Axis span data remains lightweight.** It needs no extra module/layer
-   hierarchy and currently resolves against fixed authored frames.
+   replaced the rescale with a verbatim copy into a larger envelope; schema 5
+   then removed span axes entirely.
+4. **Axis span data — resolved by removal.** Fixed authored frames and absolute
+   centre/size made the extra alignment contract unnecessary.
 5. **Cross-version import loss — resolved.** Unknown component instances now
    survive serialization. They remain unavailable to render until a matching
    type implementation exists.
@@ -558,17 +562,14 @@ screen. It was never only a bake bug: any design authored at an aspect far from
       frame-independent. `FrameSpec.aspect(a)` keeps one-unit-tall frames
       expressible, and JSON writes the extent plus the derived aspect so an
       older build degrades rather than falling back to a default.
-- [x] `Anchor.pointIn`, `Placement.resolve` and `resolveSizeIn` (renamed from
-      `resolveSizeForAspect`) take a frame `Size`. `verticalSpan` resolves
-      against frame height instead of a hardcoded `1`, as does the minimum-size
-      clamp in `placement_transform.dart`.
+- [x] `Anchor.pointIn`, `Placement.resolve` and `resolveSizeIn` temporarily took
+      a frame `Size`. Schema 5 later removed all three with anchors/spans.
 - [x] `viewportFrameExtent` derives an alternate's envelope from the device safe
       rect at the current fit scale, swapping axes when the target orientation
       disagrees with the device. Both `CREATE` and the read-only preview call
       it, so zero-jump is structural rather than test-enforced.
-- [x] `bakeContainedPlacement` copies geometry verbatim and preserves the
-      anchor. Span axes still freeze to fixed extents — a `verticalSpan` copied
-      as-is would stretch to fill the taller envelope.
+- [x] Alternate creation copies geometry verbatim. Schema 5 made this literal:
+      placements contain only absolute centre and size.
 - [x] `uAspect` → `vec2 uFrame`, renumbered in place; flat float indices 17–19
       shifted to 18–20. `VfdPainter.paint` asserts a write past the end throws.
 - [x] Main module identified by a packed flag in `texel 8.b`, and filament Y
@@ -602,9 +603,8 @@ Frame-extent model findings:
    a property of the tube. Physically wrong, but the constant is
    photograph-tuned and folding the frame width into it would produce a rounded
    derivative of a tuned value. The fix is an authored module property.
-3. **Span axes cannot be baked verbatim — deliberate.** A span is the one thing
-   whose meaning changes with the envelope, so it is resolved once and the new
-   layout owns the result.
+3. **Span-axis bake ambiguity — resolved by schema 5 removal.** No persisted
+   placement now changes meaning when its frame envelope grows.
 4. **`VfdAnnunciator` is still unwired.** It was considered for the read-only
    badge and rejected: it demands acknowledgement, which a passive state must
    not. The mandate for fork/route feedback remains unmet.
@@ -638,6 +638,82 @@ Frame-extent verification:
 - Screenshot diffing the cluster route before and after is **not** a usable
   parity check: the simulated speed source animates, so two launches show
   different digits and different bar fill. The halo suite is the parity check.
+
+#### Stage 4 centre-placement and automotive-lever follow-up — DONE
+
+- [x] Break placement storage to schema 5: required absolute `center` and
+      `size`, persisted as `x`, `y`, `w`, `h`. Remove `Anchor`, `AxisSpan`,
+      frame resolution, anchor-relative transforms, and span-specific editor
+      controls. Dashboard/active-design preferences use v2 keys; old dashboard
+      schemas are rejected without migration.
+- [x] Alternate creation copies component and module placements verbatim into
+      the expanded frame extent.
+- [x] Add editor-wide session-only `SNAP` beside `FIT`: active by default,
+      `0.005` design-unit delta quantization relative to pointer-down geometry,
+      continuous when dark, and no mutation on toggle.
+- [x] Make move/resize pure transforms shared by components and modules.
+      Snapped resize quantizes the applied delta, keeps the opposite edge fixed,
+      and clamps to `0.03` after quantization. Selection border and renderer
+      consume the same committed placement.
+- [x] Replace paged anchor/axis placement controls with one PLACE surface:
+      exact X/Y, 3×3 D-pad, containing `BRING IN`, and W/H
+      minus/readout/plus. Direct controls always step `0.005`, independent of
+      SNAP.
+- [x] Choose service-bay edge from the route window, not preview orientation:
+      bottom for `height > width`, right otherwise. Opening still pushes and
+      re-contains the canvas.
+- [x] Add `MechanicalLever`: fixed recessed HVAC faceplate, narrow slot,
+      smoked/chrome Prism thumb, 44px thumb hit region, thumb-only direct drag,
+      hundredth quantization, exact VFD readout, adjustable semantics,
+      keyboard arrows, pointer wheel, hard stops, and detent-gated feedback.
+- [x] Replace effect power/strength bars/steppers with 21-mark `0.00–2.00`
+      levers. Zero derives OFF; `resumeStrength` remains persisted. Inherited
+      local values remain visible and disabled. Replace Prism-style bars with
+      11-mark levers and tuned double marks.
+- [x] Add non-persisted effect pictogram metadata and hand-authored line icons.
+      Overview caps are icon-only with text semantics. Active detail hard-cuts
+      away every other key and the pager. Unknown stored effects use `?`, open
+      disabled detail, and survive round-trip.
+- [x] Add goldens for lever states, effect overview/detail, Prism lever detail,
+      right-side PLACE, and bottom service bay. Existing Library, Settings,
+      pager, editor, and Prism baselines remain covered.
+
+Model findings:
+
+1. **Anchor/span placement complexity — resolved by removal.** Fixed authored
+   extents plus contain-fit need no alignment relation. Absolute centre/size is
+   sufficient for runtime, alternate copy, renderer packing, and editor chrome.
+2. **Snapping is presentation behavior, not model state.** SNAP, active effect,
+   current lever drag, and drawer edge/state remain outside dashboard JSON.
+3. **No effect was removed.** Active-only disclosure and pictograms reduce
+   control density without weakening the optical model or adding bespoke
+   persisted controls.
+4. **Z-order remains implicit list order and still needs no separate field.**
+5. **Existing unresolved gaps remain:** per-orientation params/optics,
+   declarative interactive action state, authored filament span, unwired
+   annunciator feedback, and renderer coverage for outside temperature,
+   battery, and altitude.
+
+Verification:
+
+- `flutter analyze`: clean.
+- `flutter test`: 134 passing, including schema rejection,
+  snapped/continuous transform invariants,
+  SNAP no-mutation, one-page PLACE, BRING IN, shape-driven drawer edge,
+  lever input/accessibility, icon-only effects, inheritance, unknown effects,
+  and responsive overflow.
+- `integration_test/halo_compounding_test.dart`: four tests passing on iPhone
+  17 Pro simulator, iOS 26.3, Impeller. Original seam/halo assertions remain
+  unchanged.
+- `integration_test/frame_extent_optics_test.dart`: passing on the same
+  simulator and renderer.
+- Fresh debug launch followed an explicit terminate attempt. Portrait and
+  landscape native-orientation screenshots show contain-fit without overflow;
+  the landscape file retains the simulator's expected 90-degree capture
+  rotation. Simulator input automation was unavailable, so snapped versus
+  continuous drag feel remains verified by deterministic widget transforms,
+  not claimed as a hands-on device check.
+- No shader source or tuned constant changed in this follow-up.
 
 ---
 

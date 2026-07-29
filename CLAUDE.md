@@ -221,9 +221,9 @@ These cost real time to rediscover:
 ## Optical profiles and effect scope
 
 Optical appearance is part of a design's identity, not an app-wide preference.
-The old boolean `VfdLayers` implementation has been removed. Repository loading
-migrates its legacy booleans into the baseline profile of stored legacy
-dashboards; new global settings contain device preferences only.
+The old boolean `VfdLayers` implementation has been removed. The unreleased app
+uses schema 5 and deliberately rejects old dashboard payloads rather than
+carrying migration code; global settings contain device preferences only.
 
 An effect is declared once through generic metadata: stable id, label,
 description, scope, calibrated default, minimum, maximum, step, precision, and
@@ -244,8 +244,9 @@ Strength is a calibrated multiplier, not a normalised fraction:
 - `2.00` is 200% overdrive. Start with this as the common ceiling; an effect may
   declare a lower safe maximum when its transfer function stops being useful.
 
-The segmented strength bar marks `1.00` explicitly. Persist each authored value
-as an `EffectSetting` containing `strength` and `resumeStrength`; enabled state
+The automotive strength lever double-marks `1.00` as its tuned reference.
+Persist each authored value as an `EffectSetting` containing `strength` and
+`resumeStrength`; enabled state
 is derived from `strength > 0`, never stored as a second boolean. Turning an
 effect off writes zero while retaining `resumeStrength`; turning it back on
 restores that value. Overdrive scales the result around the tuned calculation.
@@ -290,7 +291,9 @@ forever.
 Presets remain code-owned and never enter user storage. Dashboards, the active
 design reference, and global settings are persisted through `shared_preferences`.
 Editor drag writes are debounced so pointer movement does not write on every
-event.
+event. Schema-5 dashboard and active-design preferences use v2 keys. The app is
+unreleased, so older dashboard schemas are rejected rather than migrated;
+uninstall/reinstall is the supported development reset.
 
 ### Capabilities
 
@@ -406,10 +409,6 @@ The device rect is measured above the editor's own `SafeArea`. A cramped editor,
 an open service bay, or a full-screen session must never bake a different
 envelope.
 
-Span axes are the one exception to verbatim copying: they resolve to fixed
-extents on bake. A `verticalSpan` copied as-is would resolve against the taller
-new envelope and stretch to fill it, which is the jump this exists to avoid.
-
 The alternate can then diverge freely or be reset to primary fallback.
 Export/import preserves primary identity, every authored frame extent, and every
 authored placement.
@@ -418,8 +417,8 @@ There is no orientation lock and no adaptive frame mode. The app itself remains
 fully resizable and supports iPad orientations and Split View; contain fitting
 absorbs window changes without mutating design data. Adaptive responsive
 authoring is deferred until a concrete same-orientation instrument needs it.
-Placement axes may still store explicit start/end span insets, but they resolve
-against the authored fixed frame only.
+Placement stores only absolute centre and size; no anchor or span metadata
+participates in runtime fitting.
 
 ### Authored and device settings
 
@@ -504,9 +503,9 @@ does, and these surfaces sit directly on top of the render.
 - Flutter control widths are physical one-, two-, or three-unit spans. Text
   never invents an arbitrary cap width. Selection and keyboard focus use
   external locator ticks so neither can masquerade as the active lamp.
-- Anything showing a quantity uses the segmented cell bar on the same rule as
-  the gauge: cell `i` is lit when `(i + 0.5) / n <= fraction`. A continuous
-  Material slider does not belong on this substrate.
+- Gauge-like quantities and generic bounded params use the segmented cell bar.
+  Optical and Prism-style values use the recessed automotive lever described
+  below. A continuous Material slider does not belong on either substrate.
 - Dense banks of buttons are intentional period language, not a dashboard-card
   grid to simplify away. Establish hierarchy through button size, bezel depth,
   grouping, spacing, label scale, and controlled luminous intensity. Reserve a
@@ -530,14 +529,27 @@ Use shared button semantics with two renderers:
 Do not force both through one renderer. Do not give design components their own
 widgets or fragment surfaces.
 
-Effect selection is a non-scrolling button grid. Tapping an effect button
-selects its detail; it does not toggle the effect. `PHOSPHOR` is the first
-optical channel. Channel caps show labels only; illumination conveys enabled
-state and external locator ticks convey selection. A fixed-height fascia below
-the bank flips down to reveal label, physical description, segmented strength
-bar, precise number, minus/plus steppers, and an explicit power control.
-Selecting the active channel again closes the fascia; selecting another channel
-keeps it open and changes its indexed contents.
+Effect selection is a paged, non-scrolling bank of icon-face Prism keys.
+Pictograms are hand-authored period line art from non-persisted `EffectSpec`
+metadata; names remain semantics labels, never cap text. Tapping a key selects
+detail rather than toggling physics. `PHOSPHOR` is the first synthetic channel.
+Illumination conveys enabled state and external locator ticks convey selection.
+
+Selection hard-cuts the whole section to one selected icon key, name, physical
+description, inheritance control where local, exact value, and one recessed
+automotive lever. Every other effect key and the overview pager disappear.
+Tapping the selected icon returns to overview. Unknown stored ids remain
+selectable, show a `?` pictogram and exact read-only value, and survive
+round-trip.
+
+`MechanicalLever` is a cable-driven HVAC control: fixed recessed black
+faceplate, narrow horizontal slot, smoked/chrome rectangular thumb, 44px thumb
+hit region, and no inertial motion. Only direct thumb drag changes value; track
+taps never teleport it. Optical levers quantize to `0.01`, show 21 marks from
+`0.00` through `2.00`, light only the nearest mark, label the left stop `OFF`,
+and double-mark the tuned reference. Prism-style levers use 11 marks and double
+their tuned default. Feedback occurs at visible detents, tuned reference, and
+hard stops, not at every hundredth.
 
 With no component selected, the editor shows `DESIGN EFFECTS`. With a component
 selected it shows a named `LOCAL EFFECTS` context. Each local effect exposes
@@ -566,10 +578,12 @@ The whole app is switchgear, not a Material app wearing a VFD theme:
   configured click/haptic.
 - Hidden service surfaces move as mechanisms. A drawer releases its latch for
   20ms, travels linearly for 130ms, and hard-seats for 30ms. An optical fascia
-  flips about its top hinge in 150ms and occupies exactly zero layout height
-  while closed. Reduced-motion resolves either state immediately.
-- Continuous direct manipulation remains for component drag/resize and
-  segmented strength bars. This is not content navigation and must not acquire
+  may flip about its top hinge in 150ms and occupies exactly zero layout height
+  while closed. Effect selection now uses the active-only hard cut above rather
+  than reserving or animating an empty fascia. Reduced-motion resolves moving
+  mechanisms immediately.
+- Continuous direct manipulation remains for component drag/resize, levers,
+  and segmented value bars. This is not content navigation and must not acquire
   fling or inertial behaviour.
 - Text and unbounded-number authoring use a recessed `EditableText` field so
   platform keyboard, caret, selection, and accessibility behaviour survive
@@ -621,8 +635,9 @@ The editor canvas is the one place a visible frame edge is correct. Every
 authored frame holds its reference aspect regardless of window shape and scales
 to fit. Matte outside the double boundary dims rendered component portions
 without clipping their hit regions; off-frame elements remain selectable,
-draggable, and resizable. `BRING IN` recentres a fully lost item without
-changing size.
+draggable, and resizable. `BRING IN` moves each recoverable axis only far enough
+to contain the border box; an axis wider than the frame centres. Size never
+changes.
 
 The editor uses one live, shared render of the whole design plus non-painting
 selection/drag/resize overlays. It does not embed component shaders or create
@@ -631,9 +646,10 @@ so handles remain reachable; this does not change component list order or
 runtime z-order.
 
 The 48px top rail contains only `BACK`, dashboard identity, and orientation.
-Every other control lives in one manually latched service bay. In portrait it
-pushes up from the bottom and consumes 33–50% of route height; in landscape it
-pushes from the right. Opening it reduces available preview bounds, then
+Every other control lives in one manually latched service bay. Its edge follows
+the current route window, never the preview orientation: `height > width` pushes
+from the bottom; `width >= height` pushes from the right. Opening it reduces
+available preview bounds, then
 re-contain-fits the same authored frame. It never changes authored coordinates,
 fixed aspect, or element size. The closed bay leaves a 44px triangular latch.
 
@@ -651,6 +667,14 @@ before edges:
 
 Camera scale is clamped 1×–4×; `FIT` restores identity. Camera transforms never
 write placement.
+
+Canvas controls are `SNAP`, `FIT`, and `FULL`. `SNAP` is illuminated and active
+by default, lives only for the editor session, and survives preview/full-screen
+switches. It affects component and module drag/resize only. A gesture quantizes
+its total design-space delta to `0.005` relative to the pointer-down placement,
+so toggling SNAP never mutates existing off-grid geometry. With SNAP dark,
+movement and resize are fully continuous. Selection chrome always derives from
+the same committed placement sent to the renderer.
 
 The canvas drives the camera itself from a single `Listener` rather than nesting
 an `InteractiveViewer`. Its scale recogniser is an arena member that wins over
@@ -675,9 +699,15 @@ have 44x44 touch regions, straddling the border they resize rather than sitting
 inboard of it. Edge resizing applies one pointer delta, not the old
 symmetric two-delta transform. The grabbed right/bottom edge moves; the
 opposite edge remains fixed by shifting the resolved centre by half the applied
-size delta and recomputing anchor-relative offset. Minimum size is `0.03`, with
-centre correction applied after clamping. Placements remain intentionally
-unclamped to the frame.
+size delta. Minimum size is `0.03`, with centre correction applied after
+clamping. Placements remain intentionally unclamped to the frame.
+
+`Placement` is schema-5 absolute geometry: required `center: Offset` and
+required `size: Size`, persisted only as `x`, `y`, `w`, `h`. Fixed authored
+frames and contain-fit make anchors and span axes redundant. Alternate creation
+copies placements verbatim. PLACE is one non-paged surface: precise X/Y, 3×3
+D-pad with centre `BRING IN`, and W/H minus/readout/plus rows. D-pad and size
+buttons always step `0.005`, independent of SNAP.
 
 ### Model findings from the developer editor
 
@@ -688,9 +718,9 @@ special-casing controls around them:
   an optional opposite-orientation layout is explicit. Missing alternates
   render the primary through contain fit with no content rotation. Creating an
   alternate bakes that contained appearance before independent editing.
-- **Resolved during Stage 4 follow-up:** placement axes can independently use
-  fixed size or start/end span insets without introducing another component
-  hierarchy. Span insets currently resolve against fixed authored frames.
+- **Resolved by schema 5 simplification:** anchors and span axes were removed.
+  Fixed authored frames need only absolute centre and size; contain-fit handles
+  viewport mismatch without layout alignment metadata.
 - **Resolved during Stage 4 follow-up:** imported unknown component types remain
   serialized instead of being silently dropped. Renderer/editor availability is
   separate from lossless design transport.
@@ -738,10 +768,6 @@ special-casing controls around them:
   photograph-tuned and folding the frame width into it would produce a rounded
   derivative of a tuned value. Fix it by making filament span an authored module
   property, not by rewriting the expression.
-- **Deliberate trade-off:** span axes freeze to fixed extents when an alternate
-  is baked. A span is the one thing that cannot be copied verbatim without
-  changing what it resolves to, so it is resolved once and the new layout owns
-  the result.
 - `outsideTemp`, `phoneBattery`, and `altitude` are expressible and editable as
   component data, but the current shader intentionally skips them. This is a
   renderer coverage gap, not a reason to hardcode or remove them from the

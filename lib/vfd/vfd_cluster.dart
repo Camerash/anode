@@ -183,13 +183,8 @@ class VfdController extends ChangeNotifier {
       final placement = c.placements[orientation];
       if (type == null || placement == null) continue;
 
-      final frame = frameExtent;
-      final center = placement.resolve(frame);
-      final size = placement.resolveSizeIn(
-        frame,
-        type,
-        variant: c.effectiveVariant,
-      );
+      final center = placement.center;
+      final size = placement.size;
       final params = c.effectiveParams;
       final moduleProfile = opticalProfile.apply(
         _design.moduleFor(c).opticalOverrides,
@@ -354,12 +349,7 @@ class VfdController extends ChangeNotifier {
     if (module.id == kMainVfdModuleId || placement == null) {
       return (center: Offset.zero, size: frameExtent, isMain: true);
     }
-    final frame = frameExtent;
-    return (
-      center: placement.resolve(frame),
-      size: placement.resolveSizeIn(frame, null),
-      isMain: false,
-    );
+    return (center: placement.center, size: placement.size, isMain: false);
   }
 
   bool _sameAs(Float32List candidate) {

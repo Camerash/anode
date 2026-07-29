@@ -13,6 +13,7 @@ class PrismSelectorChoice<T> {
     required this.value,
     required this.label,
     this.controlKey,
+    this.face,
     this.lit = false,
     this.enabled = true,
   });
@@ -20,6 +21,7 @@ class PrismSelectorChoice<T> {
   final T value;
   final String label;
   final Key? controlKey;
+  final Widget? face;
   final bool lit;
   final bool enabled;
 }
@@ -154,6 +156,7 @@ class _ChoicePage<T> extends StatelessWidget {
         child: PrismButton(
           key: choice.controlKey ?? ValueKey<T>(choice.value),
           label: choice.label,
+          face: choice.face,
           palette: palette,
           lit: choice.lit,
           selected: isSelected,

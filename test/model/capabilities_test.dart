@@ -1,3 +1,5 @@
+import 'dart:ui' show Offset, Size;
+
 import 'package:anode/model/capabilities.dart';
 import 'package:anode/model/capability.dart';
 import 'package:anode/model/component_instance.dart';
@@ -34,7 +36,10 @@ void main() {
       id: 'legend',
       typeId: ComponentTypes.unitLegend,
       placements: <DesignOrientation, Placement>{
-        DesignOrientation.landscape: const Placement(),
+        DesignOrientation.landscape: const Placement(
+          center: Offset.zero,
+          size: Size(0.2, 0.1),
+        ),
       },
     );
     expect(dashboardWith(<ComponentInstance>[legend]).capabilities(), isEmpty);
@@ -76,7 +81,10 @@ void main() {
       id: 'x',
       typeId: 'gauge.from.the.future',
       placements: <DesignOrientation, Placement>{
-        DesignOrientation.landscape: const Placement(),
+        DesignOrientation.landscape: const Placement(
+          center: Offset.zero,
+          size: Size(0.2, 0.1),
+        ),
       },
     );
     expect(dashboardWith(<ComponentInstance>[unknown]).capabilities(), isEmpty);
@@ -87,7 +95,10 @@ void main() {
       id: 'temp',
       typeId: ComponentTypes.outsideTemp,
       placements: <DesignOrientation, Placement>{
-        DesignOrientation.landscape: const Placement(),
+        DesignOrientation.landscape: const Placement(
+          center: Offset.zero,
+          size: Size(0.2, 0.1),
+        ),
       },
     );
 

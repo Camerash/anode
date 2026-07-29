@@ -31,6 +31,7 @@ class PrismButton extends StatefulWidget {
     required this.palette,
     required this.onPressed,
     this.value,
+    this.face,
     this.lit = false,
     this.selected = false,
     this.enabled = true,
@@ -43,6 +44,7 @@ class PrismButton extends StatefulWidget {
 
   final String label;
   final String? value;
+  final Widget? face;
   final VfdPalette palette;
   final VoidCallback? onPressed;
   final bool lit;
@@ -140,7 +142,7 @@ class _PrismButtonState extends State<PrismButton> {
                             widget.role == PrismRole.compact ? 8 : 10,
                             12,
                           ),
-                          child: _label(enabled),
+                          child: widget.face ?? _label(enabled),
                         ),
                       ),
                     ),

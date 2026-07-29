@@ -1,0 +1,479 @@
+import 'dart:math' as math;
+
+import 'package:flutter/gestures.dart';
+import 'package:flutter/widgets.dart';
+
+import '../model/optical_profile.dart';
+import '../vfd/vfd_widgets.dart';
+import 'mechanical_feedback.dart';
+
+/// Cable-driven automotive slider: a fixed recessed faceplate and one moving
+/// smoked thumb. The thumb alone starts a drag; tapping the track cannot
+/// teleport a physical control.
+class MechanicalLever extends StatefulWidget {
+  const MechanicalLever({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.palette,
+    required this.prismStyle,
+    required this.onChanged,
+    this.step = 0.01,
+    this.precision = 2,
+    this.tickCount = 21,
+    this.referenceValue,
+    this.offAtMinimum = false,
+    this.leading,
+    this.soundEnabled = true,
+    this.hapticsEnabled = true,
+  }) : assert(max > min),
+       assert(step > 0),
+       assert(tickCount >= 2);
+
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final double step;
+  final int precision;
+  final int tickCount;
+  final double? referenceValue;
+  final bool offAtMinimum;
+  final Widget? leading;
+  final VfdPalette palette;
+  final PrismStyle prismStyle;
+  final ValueChanged<double>? onChanged;
+  final bool soundEnabled;
+  final bool hapticsEnabled;
+
+  @override
+  State<MechanicalLever> createState() => _MechanicalLeverState();
+}
+
+class _MechanicalLeverState extends State<MechanicalLever> {
+  static const double _height = 94;
+  static const double _thumbVisualWidth = 28;
+  static const double _thumbVisualHeight = 34;
+  static const double _thumbHitExtent = 44;
+
+  bool _dragging = false;
+  bool _focused = false;
+  double _grabOffsetX = 0;
+  int? _feedbackTick;
+  double? _feedbackValue;
+
+  bool get _enabled => widget.onChanged != null;
+  double get _fraction =>
+      ((widget.value - widget.min) / (widget.max - widget.min)).clamp(0, 1);
+
+  @override
+  void didUpdateWidget(covariant MechanicalLever oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.min != widget.min ||
+        oldWidget.max != widget.max ||
+        oldWidget.tickCount != widget.tickCount) {
+      _feedbackTick = null;
+      _feedbackValue = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    slider: true,
+    enabled: _enabled,
+    label: widget.label,
+    value: _displayValue(widget.value),
+    increasedValue: _displayValue(_snapped(widget.value + widget.step)),
+    decreasedValue: _displayValue(_snapped(widget.value - widget.step)),
+    onIncrease: _enabled ? () => _change(widget.value + widget.step) : null,
+    onDecrease: _enabled ? () => _change(widget.value - widget.step) : null,
+    child: FocusableActionDetector(
+      enabled: _enabled,
+      onShowFocusHighlight: (value) => setState(() => _focused = value),
+      actions: <Type, Action<Intent>>{
+        DirectionalFocusIntent: CallbackAction<DirectionalFocusIntent>(
+          onInvoke: (intent) {
+            if (intent.direction == TraversalDirection.left ||
+                intent.direction == TraversalDirection.down) {
+              _change(widget.value - widget.step);
+            } else if (intent.direction == TraversalDirection.right ||
+                intent.direction == TraversalDirection.up) {
+              _change(widget.value + widget.step);
+            }
+            return null;
+          },
+        ),
+      },
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final size = Size(constraints.maxWidth, _height);
+          final geometry = _LeverGeometry.from(
+            size,
+            fraction: _fraction,
+            leading: widget.leading != null,
+          );
+          return Listener(
+            key: const ValueKey('mechanical-lever'),
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: _enabled
+                ? (event) => _startDrag(event.localPosition, geometry)
+                : null,
+            onPointerMove: _enabled
+                ? (event) => _drag(event.localPosition, geometry)
+                : null,
+            onPointerUp: _enabled ? (_) => _endDrag() : null,
+            onPointerCancel: _enabled ? (_) => _endDrag() : null,
+            onPointerSignal: _enabled
+                ? (event) {
+                    if (event is PointerScrollEvent) {
+                      _change(
+                        widget.value +
+                            (event.scrollDelta.dy > 0
+                                ? -widget.step
+                                : widget.step),
+                      );
+                    }
+                  }
+                : null,
+            child: SizedBox(
+              height: _height,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: <Widget>[
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _LeverFacePainter(
+                        palette: widget.palette,
+                        geometry: geometry,
+                        tickCount: widget.tickCount,
+                        currentTick: _tickFor(widget.value),
+                        referenceFraction: widget.referenceValue == null
+                            ? null
+                            : ((widget.referenceValue! - widget.min) /
+                                      (widget.max - widget.min))
+                                  .clamp(0, 1),
+                        enabled: _enabled,
+                        focused: _focused,
+                      ),
+                    ),
+                  ),
+                  if (widget.leading case final leading?)
+                    Positioned(
+                      left: 9,
+                      top: 23,
+                      width: 34,
+                      height: 34,
+                      child: leading,
+                    ),
+                  Positioned(
+                    right: 10,
+                    top: 7,
+                    child: VfdLegend(
+                      _displayValue(widget.value),
+                      palette: widget.palette,
+                      lit: _enabled,
+                      size: 11,
+                    ),
+                  ),
+                  Positioned.fromRect(
+                    rect: geometry.thumbHitRect,
+                    child: Center(
+                      child: CustomPaint(
+                        key: const ValueKey('mechanical-lever-thumb'),
+                        size: const Size(_thumbVisualWidth, _thumbVisualHeight),
+                        painter: _LeverThumbPainter(
+                          style: widget.prismStyle,
+                          enabled: _enabled,
+                          dragging: _dragging,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    ),
+  );
+
+  void _startDrag(Offset local, _LeverGeometry geometry) {
+    if (!geometry.thumbHitRect.contains(local)) return;
+    _dragging = true;
+    _grabOffsetX = local.dx - geometry.thumbCenter.dx;
+    _feedbackTick = _tickFor(widget.value);
+    _feedbackValue = widget.value;
+    setState(() {});
+  }
+
+  void _drag(Offset local, _LeverGeometry geometry) {
+    if (!_dragging) return;
+    final x = local.dx - _grabOffsetX;
+    final fraction = ((x - geometry.trackLeft) / geometry.trackWidth).clamp(
+      0.0,
+      1.0,
+    );
+    _change(widget.min + fraction * (widget.max - widget.min));
+  }
+
+  void _endDrag() {
+    if (!_dragging) return;
+    setState(() => _dragging = false);
+  }
+
+  void _change(double raw) {
+    if (!_enabled) return;
+    final next = _snapped(raw);
+    if (next == widget.value) return;
+    final tick = _tickFor(next);
+    final previous = _feedbackValue ?? widget.value;
+    final crossedReference =
+        widget.referenceValue != null &&
+        ((previous < widget.referenceValue! &&
+                next >= widget.referenceValue!) ||
+            (previous > widget.referenceValue! &&
+                next <= widget.referenceValue!));
+    final reachedStop = next == widget.min || next == widget.max;
+    if (_feedbackTick != tick || crossedReference || reachedStop) {
+      _feedbackTick = tick;
+      actuateMechanicalFeedback(
+        soundEnabled: widget.soundEnabled,
+        hapticsEnabled: widget.hapticsEnabled,
+      );
+    }
+    _feedbackValue = next;
+    widget.onChanged?.call(next);
+  }
+
+  double _snapped(double raw) {
+    final units = ((raw - widget.min) / widget.step).round();
+    return (widget.min + units * widget.step).clamp(widget.min, widget.max);
+  }
+
+  int _tickFor(double value) =>
+      (((value - widget.min) / (widget.max - widget.min)).clamp(0, 1) *
+              (widget.tickCount - 1))
+          .round();
+
+  String _displayValue(double value) {
+    if (widget.offAtMinimum && value <= widget.min) return 'OFF · 0.00';
+    return value.toStringAsFixed(widget.precision);
+  }
+}
+
+class _LeverGeometry {
+  const _LeverGeometry({
+    required this.trackLeft,
+    required this.trackRight,
+    required this.thumbCenter,
+  });
+
+  factory _LeverGeometry.from(
+    Size size, {
+    required double fraction,
+    required bool leading,
+  }) {
+    final left = leading ? 59.0 : 22.0;
+    final right = math.max(left + 1, size.width - 22);
+    return _LeverGeometry(
+      trackLeft: left,
+      trackRight: right,
+      thumbCenter: Offset(left + (right - left) * fraction, 61),
+    );
+  }
+
+  final double trackLeft;
+  final double trackRight;
+  final Offset thumbCenter;
+
+  double get trackWidth => trackRight - trackLeft;
+  Rect get thumbHitRect => Rect.fromCenter(
+    center: thumbCenter,
+    width: _MechanicalLeverState._thumbHitExtent,
+    height: _MechanicalLeverState._thumbHitExtent,
+  );
+}
+
+class _LeverFacePainter extends CustomPainter {
+  const _LeverFacePainter({
+    required this.palette,
+    required this.geometry,
+    required this.tickCount,
+    required this.currentTick,
+    required this.referenceFraction,
+    required this.enabled,
+    required this.focused,
+  });
+
+  final VfdPalette palette;
+  final _LeverGeometry geometry;
+  final int tickCount;
+  final int currentTick;
+  final double? referenceFraction;
+  final bool enabled;
+  final bool focused;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final face = RRect.fromRectAndRadius(
+      Rect.fromLTWH(1, 1, size.width - 2, size.height - 2),
+      const Radius.circular(2),
+    );
+    canvas.drawRRect(
+      face,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[
+            Color(0xFF202522),
+            Color(0xFF090C0B),
+            Color(0xFF121614),
+          ],
+        ).createShader(face.outerRect),
+    );
+    canvas.drawRRect(
+      face,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = focused ? 1.5 : 1
+        ..color = (focused ? palette.lit : const Color(0xFF7A827E)).withValues(
+          alpha: enabled ? 0.68 : 0.25,
+        ),
+    );
+
+    final slot = RRect.fromRectAndRadius(
+      Rect.fromLTRB(geometry.trackLeft - 8, 55, geometry.trackRight + 8, 67),
+      const Radius.circular(1),
+    );
+    canvas.drawRRect(slot, Paint()..color = const Color(0xFF010202));
+    canvas.drawLine(
+      Offset(slot.left + 1, slot.top + 1),
+      Offset(slot.right - 1, slot.top + 1),
+      Paint()
+        ..strokeWidth = 1
+        ..color = const Color(0xFF000000),
+    );
+    canvas.drawLine(
+      Offset(slot.left + 1, slot.bottom - 1),
+      Offset(slot.right - 1, slot.bottom - 1),
+      Paint()
+        ..strokeWidth = 1
+        ..color = const Color(0xFF626B66).withValues(alpha: 0.35),
+    );
+
+    final inactive = Paint()
+      ..strokeWidth = 1
+      ..color = palette.unlit.withValues(alpha: enabled ? 0.34 : 0.16);
+    final active = Paint()
+      ..strokeWidth = 2
+      ..color = palette.lit.withValues(alpha: enabled ? 0.95 : 0.32)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.solid, 2);
+    for (var i = 0; i < tickCount; i++) {
+      final x = geometry.trackLeft + geometry.trackWidth * i / (tickCount - 1);
+      final isReference =
+          referenceFraction != null &&
+          (i / (tickCount - 1) - referenceFraction!).abs() <
+              0.5 / (tickCount - 1);
+      canvas.drawLine(
+        Offset(x, isReference ? 22 : 25),
+        Offset(x, 34),
+        i == currentTick ? active : inactive,
+      );
+      if (isReference) {
+        canvas.drawLine(
+          Offset(x + 3, 22),
+          Offset(x + 3, 34),
+          i == currentTick ? active : inactive,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LeverFacePainter oldDelegate) =>
+      oldDelegate.palette != palette ||
+      oldDelegate.geometry != geometry ||
+      oldDelegate.tickCount != tickCount ||
+      oldDelegate.currentTick != currentTick ||
+      oldDelegate.referenceFraction != referenceFraction ||
+      oldDelegate.enabled != enabled ||
+      oldDelegate.focused != focused;
+}
+
+class _LeverThumbPainter extends CustomPainter {
+  const _LeverThumbPainter({
+    required this.style,
+    required this.enabled,
+    required this.dragging,
+  });
+
+  final PrismStyle style;
+  final bool enabled;
+  final bool dragging;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(1, dragging ? 3 : 1, size.width - 2, size.height - 5),
+      const Radius.circular(1.5),
+    );
+    final opacity = enabled ? 1.0 : 0.45;
+    canvas.drawRRect(
+      rect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[
+            const Color(0xFFE2E6E4).withValues(alpha: 0.88 * opacity),
+            const Color(0xFF929B96).withValues(alpha: 0.92 * opacity),
+            Color.lerp(
+              const Color(0xFF4A514D),
+              const Color(0xFF080A09),
+              style.faceOpacity,
+            )!.withValues(alpha: opacity),
+            const Color(0xFF111412).withValues(alpha: opacity),
+          ],
+          stops: const <double>[0, 0.18, 0.52, 1],
+        ).createShader(rect.outerRect),
+    );
+    canvas.drawRRect(
+      rect.deflate(4.5),
+      Paint()
+        ..color = const Color(
+          0xFF070908,
+        ).withValues(alpha: (0.28 + style.faceOpacity * 0.42) * opacity),
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..color = const Color(0xFFD9DFDC).withValues(alpha: 0.58 * opacity),
+    );
+    canvas.drawLine(
+      Offset(4, rect.top + 2),
+      Offset(size.width - 4, rect.top + 2),
+      Paint()
+        ..strokeWidth = 0.8
+        ..color = const Color(0xFFE8ECEA).withValues(alpha: 0.48 * opacity),
+    );
+    canvas.drawLine(
+      Offset(3, rect.top + 4),
+      Offset(3, rect.bottom - 3),
+      Paint()
+        ..strokeWidth = 0.8
+        ..color = const Color(0xFFBBC3BF).withValues(alpha: 0.4 * opacity),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _LeverThumbPainter oldDelegate) =>
+      oldDelegate.style != style ||
+      oldDelegate.enabled != enabled ||
+      oldDelegate.dragging != dragging;
+}

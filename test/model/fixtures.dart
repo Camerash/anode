@@ -1,4 +1,4 @@
-import 'dart:ui' show Offset;
+import 'dart:ui' show Offset, Size;
 
 import 'package:anode/model/component_instance.dart';
 import 'package:anode/model/component_type.dart';
@@ -18,12 +18,12 @@ ComponentInstance digits({
       placements ??
       <DesignOrientation, Placement>{
         DesignOrientation.landscape: const Placement(
-          anchor: Anchor.center,
-          offset: Offset(0, 0.11),
+          center: Offset(0, 0.11),
+          size: Size(1.035, 0.588),
         ),
         DesignOrientation.portrait: const Placement(
-          anchor: Anchor.center,
-          offset: Offset(0, 0.20),
+          center: Offset(0, 0.20),
+          size: Size(1.035, 0.588),
         ),
       },
 );
@@ -34,8 +34,8 @@ ComponentInstance bar({String id = 'bar'}) => ComponentInstance(
   params: const <String, Object?>{'cells': 20},
   placements: <DesignOrientation, Placement>{
     DesignOrientation.landscape: const Placement(
-      anchor: Anchor.bottomCenter,
-      offset: Offset(0, 0.17),
+      center: Offset(0, -0.33),
+      size: Size(1.96, 0.084),
     ),
   },
 );
@@ -47,8 +47,8 @@ ComponentInstance altimeter({String id = 'alt'}) => ComponentInstance(
   typeId: ComponentTypes.altitude,
   placements: <DesignOrientation, Placement>{
     DesignOrientation.landscape: const Placement(
-      anchor: Anchor.centerRight,
-      offset: Offset(-0.2, 0),
+      center: Offset(0.8, 0),
+      size: Size(0.5, 0.25),
     ),
   },
 );

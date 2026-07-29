@@ -68,7 +68,7 @@ void main() {
       typeId: 'unknown',
       placements: const <DesignOrientation, Placement>{
         DesignOrientation.landscape: Placement(
-          offset: Offset(0.4, 0.2),
+          center: Offset(0.4, 0.2),
           size: Size(0.8, 0.4),
         ),
       },
@@ -92,7 +92,7 @@ void main() {
     expect(baked.frameExtent(DesignOrientation.portrait), const Size(2, 4));
     // Verbatim. The envelope grows; the geometry inside it does not move or
     // shrink, which is what keeps the optical layer at the same scale too.
-    expect(placement.offset, const Offset(0.4, 0.2));
+    expect(placement.center, const Offset(0.4, 0.2));
     expect(placement.size, const Size(0.8, 0.4));
   });
 

@@ -31,6 +31,10 @@ class EditorCanvas extends StatefulWidget {
     this.frameInset = const EdgeInsets.all(24),
     this.fullScreen = false,
     this.onToggleFullScreen,
+    this.snapEnabled = true,
+    this.onToggleSnap,
+    this.soundEnabled = true,
+    this.hapticsEnabled = true,
   });
 
   final Dashboard dashboard;
@@ -53,6 +57,10 @@ class EditorCanvas extends StatefulWidget {
   final EdgeInsets frameInset;
   final bool fullScreen;
   final VoidCallback? onToggleFullScreen;
+  final bool snapEnabled;
+  final VoidCallback? onToggleSnap;
+  final bool soundEnabled;
+  final bool hapticsEnabled;
 
   @override
   State<EditorCanvas> createState() => _EditorCanvasState();
@@ -95,7 +103,6 @@ class _EditorCanvasState extends State<EditorCanvas> {
   bool _dragging = false;
   bool _cameraGesture = false;
   Placement? _initialPlacement;
-  Size _initialResolvedSize = Size.zero;
   double _initialDesignScale = 1;
 
   double _cameraScaleAtStart = 1;
@@ -247,12 +254,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
         Positioned(
           left: boundary.left + 7,
           top: boundary.top + 7,
-          child: VfdLegend(
-            _frameLabel(),
-            palette: palette,
-            lit: true,
-            size: 9,
-          ),
+          child: VfdLegend(_frameLabel(), palette: palette, lit: true, size: 9),
         ),
       ],
     ),
@@ -264,9 +266,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
     children: <Widget>[
       for (final item in _items)
         Positioned.fromRect(
-          key: ValueKey(
-            '${item.isModule ? 'module' : 'canvas'}-${item.id}',
-          ),
+          key: ValueKey('${item.isModule ? 'module' : 'canvas'}-${item.id}'),
           rect: _screenRect(item.sceneRect),
           child: Semantics(
             button: true,
@@ -293,11 +293,26 @@ class _EditorCanvasState extends State<EditorCanvas> {
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         PrismButton(
+          key: const ValueKey('canvas-snap'),
+          label: 'Snap',
+          palette: palette,
+          lit: widget.snapEnabled,
+          selected: widget.snapEnabled,
+          role: PrismRole.compact,
+          style: widget.dashboard.settings.prismStyle,
+          soundEnabled: widget.soundEnabled,
+          hapticsEnabled: widget.hapticsEnabled,
+          onPressed: widget.onToggleSnap,
+        ),
+        const SizedBox(width: 5),
+        PrismButton(
           key: const ValueKey('canvas-fit'),
           label: 'Fit',
           palette: palette,
           role: PrismRole.compact,
           style: widget.dashboard.settings.prismStyle,
+          soundEnabled: widget.soundEnabled,
+          hapticsEnabled: widget.hapticsEnabled,
           onPressed: _fit,
         ),
         if (widget.onToggleFullScreen != null) ...<Widget>[
@@ -309,6 +324,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
             lit: widget.fullScreen,
             role: PrismRole.compact,
             style: widget.dashboard.settings.prismStyle,
+            soundEnabled: widget.soundEnabled,
+            hapticsEnabled: widget.hapticsEnabled,
             onPressed: widget.onToggleFullScreen,
           ),
         ],
@@ -335,11 +352,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
       final placement = component.placements[widget.orientation];
       if (placement == null) continue;
       final type = ComponentTypes.byId(component.typeId);
-      final size = placement.resolveSizeIn(
-        _layoutExtent,
-        type,
-        variant: component.effectiveVariant,
-      );
+      final size = placement.size;
       items.add(
         _CanvasItem(
           id: component.id,
@@ -348,7 +361,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
           placement: placement,
           resolvedSize: size,
           selected: component.id == widget.selectedId,
-          sceneRect: _sceneRect(content, placement.resolve(_layoutExtent), size),
+          sceneRect: _sceneRect(content, placement.center, size),
         ),
       );
     }
@@ -361,7 +374,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
         if (module.id != moduleId) continue;
         final placement = module.regionIn(widget.orientation);
         if (placement == null) continue;
-        final size = placement.resolveSizeIn(_layoutExtent, null);
+        final size = placement.size;
         items.add(
           _CanvasItem(
             id: module.id,
@@ -370,11 +383,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
             placement: placement,
             resolvedSize: size,
             selected: true,
-            sceneRect: _sceneRect(
-              content,
-              placement.resolve(_layoutExtent),
-              size,
-            ),
+            sceneRect: _sceneRect(content, placement.center, size),
           ),
         );
       }
@@ -466,8 +475,6 @@ class _EditorCanvasState extends State<EditorCanvas> {
     _cameraScaleAtStart = _cameraScale;
     _cameraOriginAtStart = _cameraOrigin;
     _initialPlacement = _grab.item?.placement;
-    _initialResolvedSize =
-        _grab.item?.placement.size ?? _grab.item?.resolvedSize ?? Size.zero;
     _initialDesignScale = _designScale * _cameraScale;
   }
 
@@ -597,8 +604,11 @@ class _EditorCanvasState extends State<EditorCanvas> {
     final Placement next;
     switch (_grab.kind) {
       case _GrabKind.body:
-        next = initial.copyWith(
-          offset: initial.offset + Offset(delta.dx / scale, -delta.dy / scale),
+        next = movePlacementBy(
+          initial,
+          dx: delta.dx / scale,
+          dy: -delta.dy / scale,
+          snapStep: widget.snapEnabled ? editorSnapStep : null,
         );
       case _GrabKind.resizeWidth:
         next = _resized(initial, widthDelta: delta.dx / scale);
@@ -626,10 +636,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
     double heightDelta = 0,
   }) => resizePlacementFromEdges(
     placement: initial,
-    resolvedSize: _initialResolvedSize,
-    frame: _layoutExtent,
     widthDelta: widthDelta,
     heightDelta: heightDelta,
+    snapStep: widget.snapEnabled ? editorSnapStep : null,
   );
 
   void _fit() {

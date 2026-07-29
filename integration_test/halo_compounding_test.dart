@@ -43,7 +43,7 @@ void main() {
   /// Two bars either side of the origin.
   Dashboard dashboardWith({required bool left, required bool right}) {
     Placement place(double cx) =>
-        Placement(offset: Offset(cx, 0), size: const Size(barWidth, 0.084));
+        Placement(center: Offset(cx, 0), size: const Size(barWidth, 0.084));
 
     return Dashboard(
       id: 'halo',
@@ -229,7 +229,7 @@ void main() {
           params: const <String, Object?>{'cells': 9, 'maxKph': 100.0},
           placements: const <DesignOrientation, Placement>{
             DesignOrientation.landscape: Placement(
-              offset: Offset(-0.57, 0),
+              center: Offset(-0.57, 0),
               size: Size(0.9, 0.084),
             ),
           },
@@ -242,7 +242,7 @@ void main() {
           params: const <String, Object?>{'cells': 9, 'maxKph': 100.0},
           placements: const <DesignOrientation, Placement>{
             DesignOrientation.landscape: Placement(
-              offset: Offset(0.57, 0),
+              center: Offset(0.57, 0),
               size: Size(0.9, 0.084),
             ),
           },
@@ -462,7 +462,7 @@ void main() {
             params: const <String, Object?>{'cells': 1, 'maxKph': 100.0},
             placements: const <DesignOrientation, Placement>{
               DesignOrientation.landscape: Placement(
-                offset: Offset(0, 0.11),
+                center: Offset(0, 0.11),
                 size: Size(2.4, 0.08),
               ),
             },
@@ -472,7 +472,10 @@ void main() {
           typeId: ComponentTypes.prismButton,
           params: <String, Object?>{'label': label, 'lit': lit},
           placements: const <DesignOrientation, Placement>{
-            DesignOrientation.landscape: Placement(size: Size(0.7, 0.24)),
+            DesignOrientation.landscape: Placement(
+              center: Offset.zero,
+              size: Size(0.7, 0.24),
+            ),
           },
         ),
       ],

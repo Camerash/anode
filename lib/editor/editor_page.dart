@@ -55,6 +55,7 @@ class _EditorPageState extends State<EditorPage> {
   String? _selectedModuleId;
   bool _drawerOpen = false;
   bool _fullScreen = false;
+  bool _snapEnabled = true;
 
   VfdPalette get _palette =>
       VfdPalette.of(_dashboard.settings.opticalProfile.phosphor);
@@ -173,19 +174,19 @@ class _EditorPageState extends State<EditorPage> {
         renderAssets: widget.renderAssets,
         frameInset: frameInset,
         fullScreen: _fullScreen,
-        onToggleFullScreen: () =>
-            setState(() => _fullScreen = !_fullScreen),
+        onToggleFullScreen: () => setState(() => _fullScreen = !_fullScreen),
+        snapEnabled: _snapEnabled,
+        onToggleSnap: () => setState(() => _snapEnabled = !_snapEnabled),
+        soundEnabled: widget.soundEnabled,
+        hapticsEnabled: widget.hapticsEnabled,
       );
 
   Widget _workspace(BoxConstraints constraints) {
     final layout = _WorkspaceLayout.resolve(
-      portrait: _orientation == DesignOrientation.portrait,
+      windowSize: MediaQuery.sizeOf(context),
       constraints: constraints,
     );
-    final canvas = Padding(
-      padding: const EdgeInsets.all(4),
-      child: _canvas(),
-    );
+    final canvas = Padding(padding: const EdgeInsets.all(4), child: _canvas());
     return MechanicalPushDrawer(
       key: const ValueKey('editor-workspace'),
       open: _drawerOpen,
@@ -300,7 +301,15 @@ class _EditorPageState extends State<EditorPage> {
     _replaceComponent(
       component.withPlacement(
         _layoutOrientation,
-        visible ? (existing ?? const Placement()) : null,
+        visible
+            ? (existing ??
+                  Placement(
+                    center: Offset.zero,
+                    size:
+                        ComponentTypes.byId(component.typeId)?.defaultSize ??
+                        const Size(1, 1),
+                  ))
+            : null,
       ),
     );
   }
@@ -311,7 +320,10 @@ class _EditorPageState extends State<EditorPage> {
       typeId: type.id,
       params: type.defaults,
       placements: <DesignOrientation, Placement>{
-        _layoutOrientation: const Placement(),
+        _layoutOrientation: Placement(
+          center: Offset.zero,
+          size: type.legacyVariantSpec.recommendedSize,
+        ),
       },
     );
     _replaceDashboard(_dashboard.withComponent(component));
@@ -329,7 +341,10 @@ class _EditorPageState extends State<EditorPage> {
       id: id,
       name: 'VFD module $index',
       regions: <DesignOrientation, Placement>{
-        _layoutOrientation: const Placement(size: Size(1, 0.5)),
+        _layoutOrientation: const Placement(
+          center: Offset.zero,
+          size: Size(1, 0.5),
+        ),
       },
     );
     _replaceDashboard(_dashboard.withModule(module));
@@ -397,10 +412,10 @@ class _WorkspaceLayout {
   final double drawerExtent;
 
   static _WorkspaceLayout resolve({
-    required bool portrait,
+    required Size windowSize,
     required BoxConstraints constraints,
   }) {
-    if (portrait) {
+    if (windowSize.height > windowSize.width) {
       final maxExtent = math.max(160.0, constraints.maxHeight - 120);
       return _WorkspaceLayout(
         edge: MechanicalDrawerEdge.bottom,
@@ -847,7 +862,10 @@ class _RackPanelState extends State<_RackPanel> {
     if (visible) {
       regions.remove(host.orientation);
     } else {
-      regions[host.orientation] = const Placement(size: Size(1, 0.5));
+      regions[host.orientation] = const Placement(
+        center: Offset.zero,
+        size: Size(1, 0.5),
+      );
     }
     host.onDashboardChanged(
       host.dashboard.withModule(module.copyWith(regions: regions)),
@@ -944,9 +962,7 @@ class _DesignPanel extends StatelessWidget {
                       onSubmitted: (raw) {
                         final value = double.tryParse(raw);
                         if (value != null) {
-                          host.onFrameExtentChanged(
-                            Size(value, spec.height),
-                          );
+                          host.onFrameExtentChanged(Size(value, spec.height));
                         }
                       },
                     ),
@@ -1256,7 +1272,7 @@ class _PlacementPanel extends StatelessWidget {
   const _PlacementPanel({required this.host});
 
   final _EditorServicePanel host;
-  static const _nudge = 0.005;
+  static const _nudge = editorSnapStep;
 
   @override
   Widget build(BuildContext context) {
@@ -1272,255 +1288,195 @@ class _PlacementPanel extends StatelessWidget {
     if (placement == null) {
       return VfdLegend('Not present in orientation', palette: host.palette);
     }
-    final type = component == null
-        ? null
-        : ComponentTypes.byId(component.typeId);
-    final frame = host.frameExtent;
-    final size = placement.resolveSizeIn(
-      frame,
-      type,
-      variant: component?.effectiveVariant,
-    );
-    final center = placement.resolve(frame);
     return PrismPanel(
       palette: host.palette,
       padding: const EdgeInsets.all(9),
-      child: MechanicalPager(
-        pages: <Widget>[
-          _anchorPage(placement, frame, component, module),
-          _spanPage(placement, frame, size, component, module),
-          _recoveryPage(placement, center, component, module),
-          _axisPage('X', center.dx, -_nudge, _nudge, (delta) {
-            _write(component, module, nudgePlacement(placement, dx: delta));
-          }),
-          _axisPage('Y', center.dy, -_nudge, _nudge, (delta) {
-            _write(component, module, nudgePlacement(placement, dy: delta));
-          }),
-          _axisPage('W', size.width, -_nudge, _nudge, (delta) {
-            _write(
-              component,
-              module,
-              resizePlacementFromEdges(
-                placement: placement,
-                resolvedSize: size,
-                frame: frame,
-                widthDelta: delta,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              VfdLegend('Place', palette: host.palette, lit: true, size: 11),
+              const Spacer(),
+              VfdLegend(
+                'X ${placement.center.dx.toStringAsFixed(3)}  '
+                'Y ${placement.center.dy.toStringAsFixed(3)}',
+                palette: host.palette,
+                lit: true,
+                size: 10,
               ),
-            );
-          }),
-          _axisPage('H', size.height, -_nudge, _nudge, (delta) {
-            _write(
-              component,
-              module,
-              resizePlacementFromEdges(
-                placement: placement,
-                resolvedSize: size,
-                frame: frame,
-                heightDelta: delta,
-              ),
-            );
-          }),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final dpadWidth = math.min(138.0, constraints.maxWidth * 0.48);
+                return Row(
+                  children: <Widget>[
+                    SizedBox(
+                      key: const ValueKey('placement-dpad'),
+                      width: dpadWidth,
+                      child: _dpad(placement, component, module),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: <Widget>[
+                          _sizeRow(
+                            'W',
+                            placement.size.width,
+                            () => _resize(
+                              placement,
+                              component,
+                              module,
+                              widthDelta: -_nudge,
+                            ),
+                            () => _resize(
+                              placement,
+                              component,
+                              module,
+                              widthDelta: _nudge,
+                            ),
+                          ),
+                          _sizeRow(
+                            'H',
+                            placement.size.height,
+                            () => _resize(
+                              placement,
+                              component,
+                              module,
+                              heightDelta: -_nudge,
+                            ),
+                            () => _resize(
+                              placement,
+                              component,
+                              module,
+                              heightDelta: _nudge,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
         ],
-        palette: host.palette,
-        prismStyle: host.dashboard.settings.prismStyle,
-        soundEnabled: host.soundEnabled,
-        hapticsEnabled: host.hapticsEnabled,
-        semanticLabel: 'Placement control',
       ),
     );
   }
 
-  Widget _anchorPage(
+  Widget _dpad(
     Placement placement,
-    Size frame,
     ComponentInstance? component,
     VfdModule? module,
   ) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisAlignment: MainAxisAlignment.center,
     children: <Widget>[
-      VfdLegend('Anchor', palette: host.palette, lit: true, size: 11),
-      const SizedBox(height: 8),
-      PrismSelectorBank<Anchor>(
-        choices: <PrismSelectorChoice<Anchor>>[
-          for (final anchor in Anchor.values)
-            PrismSelectorChoice<Anchor>(
-              value: anchor,
-              label: anchor.name,
-              lit: anchor == placement.anchor,
-            ),
-        ],
-        selected: placement.anchor,
-        palette: host.palette,
-        prismStyle: host.dashboard.settings.prismStyle,
-        rows: 3,
-        soundEnabled: host.soundEnabled,
-        hapticsEnabled: host.hapticsEnabled,
-        semanticLabel: 'Anchor',
-        onSelected: (anchor) {
-          final center = placement.resolve(frame);
-          _write(
+      _dpadRow(
+        null,
+        _move('Y+', placement, component, module, dy: _nudge),
+        null,
+      ),
+      _dpadRow(
+        _move('X-', placement, component, module, dx: -_nudge),
+        _button(
+          'In',
+          () => _write(
             component,
             module,
-            placement.copyWith(
-              anchor: anchor,
-              offset: center - anchor.pointIn(frame),
-            ),
-          );
-        },
-      ),
-    ],
-  );
-
-  Widget _spanPage(
-    Placement placement,
-    Size frame,
-    Size size,
-    ComponentInstance? component,
-    VfdModule? module,
-  ) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: <Widget>[
-      VfdLegend('Axis sizing', palette: host.palette, lit: true, size: 11),
-      const SizedBox(height: 8),
-      PrismSelectorBank<String>(
-        choices: <PrismSelectorChoice<String>>[
-          PrismSelectorChoice<String>(
-            value: 'x-fixed',
-            label: 'X fixed',
-            lit: placement.horizontalSpan == null,
+            bringPlacementIntoFrame(placement, host.frameExtent),
           ),
-          PrismSelectorChoice<String>(
-            value: 'x-span',
-            label: 'X span',
-            lit: placement.horizontalSpan != null,
-          ),
-          PrismSelectorChoice<String>(
-            value: 'y-fixed',
-            label: 'Y fixed',
-            lit: placement.verticalSpan == null,
-          ),
-          PrismSelectorChoice<String>(
-            value: 'y-span',
-            label: 'Y span',
-            lit: placement.verticalSpan != null,
-          ),
-        ],
-        selected: null,
-        palette: host.palette,
-        prismStyle: host.dashboard.settings.prismStyle,
-        rows: 2,
-        columns: 2,
-        soundEnabled: host.soundEnabled,
-        hapticsEnabled: host.hapticsEnabled,
-        semanticLabel: 'Axis sizing mode',
-        onSelected: (value) {
-          final center = placement.resolve(frame);
-          var next = placement.copyWith(
-            offset: center - placement.anchor.pointIn(frame),
-            size: size,
-          );
-          switch (value) {
-            case 'x-fixed':
-              next = next.withHorizontalSpan(null);
-            case 'x-span':
-              next = next.withHorizontalSpan(
-                AxisSpan(
-                  startInset: frame.width / 2 + center.dx - size.width / 2,
-                  endInset: frame.width / 2 - center.dx - size.width / 2,
-                ),
-              );
-            case 'y-fixed':
-              next = next.withVerticalSpan(null);
-            case 'y-span':
-              next = next.withVerticalSpan(
-                AxisSpan(
-                  startInset: frame.height / 2 - center.dy - size.height / 2,
-                  endInset: frame.height / 2 + center.dy - size.height / 2,
-                ),
-              );
-          }
-          _write(component, module, next);
-        },
-      ),
-    ],
-  );
-
-  Widget _recoveryPage(
-    Placement placement,
-    Offset center,
-    ComponentInstance? component,
-    VfdModule? module,
-  ) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: <Widget>[
-      VfdLegend('Frame recovery', palette: host.palette, lit: true, size: 11),
-      const SizedBox(height: 8),
-      VfdLegend(
-        'Centers item without changing size.',
-        palette: host.palette,
-        size: 9,
-      ),
-      const Spacer(),
-      Center(
-        child: PrismButton(
-          label: 'Bring in',
-          palette: host.palette,
-          role: PrismRole.standard,
-          span: PrismSpan.two,
-          style: host.dashboard.settings.prismStyle,
-          soundEnabled: host.soundEnabled,
-          hapticsEnabled: host.hapticsEnabled,
-          onPressed: () => _write(
-            component,
-            module,
-            nudgePlacement(placement, dx: -center.dx, dy: -center.dy),
-          ),
+          key: const ValueKey('placement-bring-in'),
         ),
+        _move('X+', placement, component, module, dx: _nudge),
       ),
-      const Spacer(),
+      _dpadRow(
+        null,
+        _move('Y-', placement, component, module, dy: -_nudge),
+        null,
+      ),
     ],
   );
 
-  Widget _axisPage(
+  Widget _dpadRow(Widget? left, Widget middle, Widget? right) => Expanded(
+    child: Row(
+      children: <Widget>[
+        Expanded(child: left ?? const SizedBox.shrink()),
+        Expanded(child: middle),
+        Expanded(child: right ?? const SizedBox.shrink()),
+      ],
+    ),
+  );
+
+  Widget _move(
+    String label,
+    Placement placement,
+    ComponentInstance? component,
+    VfdModule? module, {
+    double dx = 0,
+    double dy = 0,
+  }) => _button(
+    label,
+    () => _write(component, module, nudgePlacement(placement, dx: dx, dy: dy)),
+    key: ValueKey('placement-${label.toLowerCase()}'),
+  );
+
+  Widget _sizeRow(
     String axis,
     double value,
-    double decrease,
-    double increase,
-    ValueChanged<double> onNudge,
-  ) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
+    VoidCallback decrease,
+    VoidCallback increase,
+  ) => Row(
     children: <Widget>[
-      VfdLegend('$axis placement', palette: host.palette, lit: true, size: 11),
-      const Spacer(),
-      Center(
-        child: VfdLegend(
-          value.toStringAsFixed(3),
-          palette: host.palette,
-          lit: true,
-          size: 18,
+      _button('-', decrease, key: ValueKey('placement-$axis-minus')),
+      Expanded(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            VfdLegend(axis, palette: host.palette, size: 9),
+            VfdLegend(
+              value.toStringAsFixed(3),
+              palette: host.palette,
+              lit: true,
+              size: 11,
+            ),
+          ],
         ),
       ),
-      const Spacer(),
-      Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[
-          _nudgeButton('$axis -', () => onNudge(decrease)),
-          const SizedBox(width: 8),
-          _nudgeButton('$axis +', () => onNudge(increase)),
-        ],
-      ),
+      _button('+', increase, key: ValueKey('placement-$axis-plus')),
     ],
   );
 
-  Widget _nudgeButton(String label, VoidCallback onPressed) => PrismButton(
-    label: label,
-    palette: host.palette,
-    role: PrismRole.compact,
-    span: PrismSpan.two,
-    style: host.dashboard.settings.prismStyle,
-    soundEnabled: host.soundEnabled,
-    hapticsEnabled: host.hapticsEnabled,
-    onPressed: onPressed,
+  Widget _button(String label, VoidCallback onPressed, {Key? key}) =>
+      PrismButton(
+        key: key,
+        label: label,
+        palette: host.palette,
+        role: PrismRole.compact,
+        style: host.dashboard.settings.prismStyle,
+        soundEnabled: host.soundEnabled,
+        hapticsEnabled: host.hapticsEnabled,
+        onPressed: onPressed,
+      );
+
+  void _resize(
+    Placement placement,
+    ComponentInstance? component,
+    VfdModule? module, {
+    double widthDelta = 0,
+    double heightDelta = 0,
+  }) => _write(
+    component,
+    module,
+    resizePlacementFromEdges(
+      placement: placement,
+      widthDelta: widthDelta,
+      heightDelta: heightDelta,
+    ),
   );
 
   void _write(

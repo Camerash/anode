@@ -1,3 +1,5 @@
+import 'dart:ui' show Size;
+
 import 'package:flutter/foundation.dart';
 
 import 'action_binding.dart';
@@ -113,6 +115,17 @@ class ComponentInstance {
   };
 
   factory ComponentInstance.fromJson(Map<String, Object?> json) {
+    final typeId = json['typeId'] as String? ?? '';
+    final variant = json['variant'] is Map
+        ? VariantReference.fromJson(
+            (json['variant'] as Map).cast<String, Object?>(),
+          )
+        : null;
+    final type = ComponentTypes.byId(typeId);
+    final fallbackSize =
+        type?.variant(variant ?? type.legacyVariant)?.recommendedSize ??
+        type?.defaultSize ??
+        const Size(1, 1);
     final rawPlacements =
         json['placements'] as Map<String, Object?>? ??
         const <String, Object?>{};
@@ -122,20 +135,17 @@ class ComponentInstance {
       if (orientation == null) continue; // unknown orientation: ignore
       placements[orientation] = Placement.fromJson(
         (e.value as Map).cast<String, Object?>(),
+        fallbackSize: fallbackSize,
       );
     }
     return ComponentInstance(
       id: json['id'] as String? ?? '',
-      typeId: json['typeId'] as String? ?? '',
+      typeId: typeId,
       params:
           (json['params'] as Map?)?.cast<String, Object?>() ??
           const <String, Object?>{},
       moduleId: json['moduleId'] as String? ?? kMainVfdModuleId,
-      variant: json['variant'] is Map
-          ? VariantReference.fromJson(
-              (json['variant'] as Map).cast<String, Object?>(),
-            )
-          : null,
+      variant: variant,
       opticalOverrides: OpticalOverrides.fromJson(
         (json['opticalOverrides'] as Map?)?.cast<String, Object?>() ??
             const <String, Object?>{},

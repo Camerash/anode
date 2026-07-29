@@ -4,7 +4,6 @@ import 'package:flutter/widgets.dart';
 
 import '../actions/action_registry.dart';
 import '../model/component_instance.dart';
-import '../model/component_type.dart';
 import '../model/design.dart';
 import '../model/placement.dart';
 import 'vfd_cluster.dart';
@@ -62,14 +61,8 @@ class DesignActionOverlay extends StatelessWidget {
     Offset frameCenter,
   ) {
     final placement = component.placements[orientation]!;
-    final center = placement.resolve(frame);
-    // Span axes resolve against the frame, so the hit region has to as well or
-    // a span-authored component is grabbable somewhere it is not drawn.
-    final extent = placement.resolveSizeIn(
-      frame,
-      ComponentTypes.byId(component.typeId),
-      variant: component.effectiveVariant,
-    );
+    final center = placement.center;
+    final extent = placement.size;
     final binding = component.actionBinding!;
     final action = registry[binding.actionId];
     final enabled = action?.available ?? false;
