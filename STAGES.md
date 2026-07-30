@@ -93,23 +93,30 @@ boundaries.
 
 ### Texture format — read this before touching `component_data.dart`
 
-Three separate traps here, each of which produced a plausible-looking wrong
-render rather than an error. All three cost a device round trip to find.
+Four separate traps here, each of which produced a plausible-looking wrong
+render rather than an error. All four cost a device round trip to find.
 
 **1. Only RGB carries data. Alpha is always 1.0.** Pixel formats are
 premultiplied, so a payload value stored in alpha comes back scaled — or zeroed
 when the value happens to be 0. Storing a spare `0` in alpha blanked every
 component; the symptom was a near-black screen with only filament wires.
 
-**2. The range is clamped to [0, 1] even though the format is float.**
-`rgbaFloat32` keeps full precision inside that range but pins anything outside
-it. A width of 1.035 read back as 1.0, and the bar's type id of 2 read back as
-1 — so the bar and the legend both rendered as one-digit speed readouts.
-Everything is now stored scaled, with an offset for signed values:
-`positionRange`, `sizeScale`, `typeScale`, `countScale` in
-`component_data.dart`, mirrored in `vfd.frag`.
+**2. The range is clamped to [0, 1] even though the upload format is float.**
+A width of 1.035 read back as 1.0, and the bar's type id of 2 read back as 1 —
+so the bar and the legend both rendered as one-digit speed readouts. Everything
+is stored scaled through ranges mirrored between Dart and GLSL.
 
-**3. Values do not survive exactly.** A digit count of 3 comes back very
+**3. The sampled image path is 8-bit normalised.** `rgbaFloat32` describes the
+upload buffer, not the precision seen by this Impeller sampler. The former
+signed position encoding sat around 0.5; one sampled step decoded to 0.125
+design units. In the editor that made shader geometry jump tens of pixels while
+its Flutter border moved continuously. All eight geometry scalars now use two
+RGB lanes as high/low bytes. Position signs live in integer metadata. Non-Prism
+rows store low bytes in the two unused RGB lanes of each digit payload; Prism
+rows store them after the maximum 24 glyphs. This preserves the 22×16 texture,
+16-component limit, sampler count and uniform map.
+
+**4. Values do not survive exactly.** A digit count of 3 comes back very
 slightly above 3, so `float(k) >= count` drew a fourth digit — visible as a
 phantom digit box sitting on top of the unit legend. The shader compares
 against a rounded count instead.
@@ -118,35 +125,37 @@ against a rounded count instead.
 tuned values, and they carry headroom deliberately: the main module's size is
 now the authored frame extent, and a landscape primary contained into a narrow
 tall window derives an envelope 8.32 units tall at 320×1024 — which the previous
-`sizeScale` of 8 clamped silently. `rgbaFloat32` resolves roughly 6e-8 inside
-[0, 1], so even at these ranges a decoded value is good to about 2e-6 design
-units, or 6e-4 px at the halo test's 300 px per unit.
+`sizeScale` of 8 clamped silently. Two-byte geometry resolves position to about
+0.00024 design units and size to about 0.00049 design units: below one physical
+pixel at the editor and integration-test scales.
 
-The main module is identified by an explicit packed flag in `texel 8.b`, not by
-comparing its size against the frame. Its size now *equals* the frame extent, so
-a geometric test would also fire for an authored sub-module a user happened to
-size to the whole frame — silently making its grain global and its filaments use
-the tube reference.
+The main module is identified by an explicit bit in the module flags at
+`texel 8.b`, not by comparing its size against the frame. Its size now *equals*
+the frame extent, so a geometric test would also fire for an authored sub-module
+a user happened to size to the whole frame — silently making its grain global
+and its filaments use the tube reference. The same flags carry module-centre
+signs.
 
 Layout, mirrored between `component_data.dart` and `vfd.frag`:
 
-    texel 0:        type, cx, cy
-    texel 1:        w, h, paramA
+    texel 0:        type + component-position signs, |cx| high, |cy| high
+    texel 1:        w high, h high, paramA
     texel 2:        paramB, component variant code, Prism lit
     texel 3:        component phosphor RGB
     texel 4:        emission, bloom, phosphor texture
     texel 5:        grid, unlit phosphor, decay
-    texel 6:        module centre x/y, module width
-    texel 7:        module height, glass grain, filament strength
-    texel 8:        Prism pressed, filament variant code, main-module flag
+    texel 6:        |module centre x/y| high, module width high
+    texel 7:        module height high, glass grain, filament strength
+    texel 8:        Prism pressed, filament variant code, module flags
     texel 9:        Prism bevel, face opacity, inactive luminosity
-    texels 10..21:  digit segment payload, or 24 Prism glyph indices
+    texels 10..21:  digit segment payload / Prism glyphs + geometry low bytes
 
 `paramA` is digit count, cell count, or lit unit index depending on type.
 For Prism rows it carries rendered glyph count. `paramB` is the bar's fill
-fraction. The segment buffer keeps a stride of eight — seven segments plus a
-spare for a future decimal point. Prism rows reuse those same RGB slots; texture
-dimensions and the sixteen-component limit do not change.
+fraction. Each digit owns nine payload RGB lanes: seven segment values plus two
+geometry low bytes. Prism rows reuse the first 24 payload lanes for glyphs and
+eight later lanes for geometry. Texture dimensions and the sixteen-component
+limit do not change.
 
 ### Known constraint: `decodeImageFromPixelsSync` is Impeller-only
 
@@ -155,9 +164,10 @@ headless on Skia. Consequences:
 
 - Any widget test that pumps `VfdCluster` must run under `integration_test` on
   a device, not `flutter test`. The halo acceptance test already does.
-- The precision question was answered on device rather than by a probe: values
-  inside [0, 1] survive with full float precision, values outside it are
-  clamped. Hence the normalised encoding above.
+- Precision must be answered through rendered pixels, not by inspecting the
+  `Float32List`: its values are narrowed by the sampled image path. The
+  frame-extent integration suite measures a 0.005-unit move as a 1.5px render
+  shift at 300px per design unit.
 
 ### Float uniform index map
 
@@ -803,6 +813,44 @@ Verification:
   were visually inspected through deterministic goldens; simulator UI
   automation was unavailable, so direct editor drag feel is not claimed.
 - No persisted schema, shader source, tuned constant, or shipped preset changed.
+
+#### Stage 4 sampled-geometry precision follow-up — DONE
+
+- [x] Reproduce the reported border/render divergence on Impeller with rendered
+      pixels: a 0.005-unit authored move advanced the Flutter selection border
+      by 1.5px at test scale while shader geometry moved 0px.
+- [x] Identify the real quantizer. The `rgbaFloat32` upload buffer reaches this
+      sampled image path as 8-bit normalised channels; a single signed-position
+      channel yielded 0.125-unit render steps.
+- [x] Encode component and module centre/size as eight 16-bit high/low byte
+      pairs. Position signs are folded into component-type and module-flag
+      metadata, keeping both geometry bytes available for magnitude.
+- [x] Reuse payload capacity without widening the texture: non-Prism rows use
+      the two spare RGB lanes in each digit payload; Prism rows use lanes after
+      the maximum 24 glyphs. Texture remains 22×16 with sixteen component rows,
+      two samplers, the same float-uniform map and one shared fragment pass.
+- [x] Preserve SNAP semantics. SNAP still quantizes authored gesture deltas to
+      0.005 units; smooth mode writes continuous doubles. Both modes now reach
+      renderer geometry below one physical pixel of packing error.
+- [x] Update the authoritative texture map and add packing regressions for
+      signed component/module positions, non-Prism payload lanes and Prism
+      payload lanes.
+
+Verification:
+
+- `flutter analyze`: clean.
+- `flutter test`: 141 passing.
+- `integration_test/halo_compounding_test.dart`: four tests passing on iPhone
+  17 Pro simulator, iOS 26.3, Impeller. Original seam/halo assertions remain
+  unchanged.
+- `integration_test/frame_extent_optics_test.dart`: three tests passing on the
+  same simulator. A combined 0.005-unit move and width change now produces
+  sub-pixel rendered movement instead of remaining pinned.
+- Fresh debug launch followed explicit termination; native-orientation runtime
+  screenshot rendered component, legend, bar, filament and halo geometry
+  cleanly.
+- No persisted schema, texture dimensions, uniform indices, optical tuned
+  constants, component limit or shipped preset changed.
 
 ---
 

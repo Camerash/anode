@@ -14,6 +14,21 @@ final List<double> awkward = Float32List.fromList(<double>[
   0.6815,
 ]).toList();
 
+double packedGeometry(
+  Float32List floats,
+  int base,
+  int value, {
+  bool prism = false,
+}) {
+  final lowOffsets = prism
+      ? ComponentData.prismGeometryLowByteOffsets
+      : ComponentData.nonPrismGeometryLowByteOffsets;
+  return ComponentData.decodePackedScalar(
+    floats[base + ComponentData.geometryHighByteOffsets[value]],
+    floats[base + lowOffsets[value]],
+  );
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -54,17 +69,33 @@ void main() {
     // Compared loosely: the buffer narrows to float32, the expectations do not.
     expect(
       floats[0],
-      closeTo(ComponentData.encodeType(ShaderType.digits), 1e-7),
+      closeTo(
+        ComponentData.encodeTypeAndPositionSigns(
+          ShaderType.digits,
+          awkward[3],
+          0.11,
+        ),
+        1e-7,
+      ),
     );
-    expect(floats[1], closeTo(ComponentData.encodePosition(awkward[3]), 1e-7));
+    expect(
+      packedGeometry(floats, 0, 0),
+      closeTo(ComponentData.encodePositionMagnitude(awkward[3]), 1 / 65535),
+    );
     expect(floats[6], closeTo(ComponentData.encodeCount(3), 1e-7));
     expect(floats[9], closeTo(ComponentData.encodeCount(7), 1e-7));
     expect(floats[12], closeTo(0.2, 1e-7));
     expect(floats[13], closeTo(0.7, 1e-7));
     expect(floats[14], closeTo(0.4, 1e-7));
     expect(floats[17], closeTo(ComponentData.encodeEffect(1.5), 1e-7));
-    expect(floats[24], closeTo(ComponentData.encodePosition(-0.4), 1e-7));
-    expect(floats[26], closeTo(ComponentData.encodeSize(0.9), 1e-7));
+    expect(
+      packedGeometry(floats, 0, 4),
+      closeTo(ComponentData.encodePositionMagnitude(-0.4), 1 / 65535),
+    );
+    expect(
+      packedGeometry(floats, 0, 6),
+      closeTo(ComponentData.encodeSize(0.9), 1 / 65535),
+    );
     expect(floats[32], 1);
     expect(floats[33], closeTo(ComponentData.encodeCount(2), 1e-7));
     expect(floats[36], closeTo(0.16, 1e-7));
@@ -86,18 +117,21 @@ void main() {
     const second = ComponentData.floatsPerComponent;
     expect(
       floats[second + 0],
-      closeTo(ComponentData.encodeType(ShaderType.bar), 1e-7),
+      closeTo(
+        ComponentData.encodeTypeAndPositionSigns(ShaderType.bar, 0, -0.33),
+        1e-7,
+      ),
     );
     expect(
-      floats[second + 5],
-      closeTo(ComponentData.encodeSize(awkward[2]), 1e-7),
+      packedGeometry(floats, second, 3),
+      closeTo(ComponentData.encodeSize(awkward[2]), 1 / 65535),
     );
     expect(floats[second + 8], 0.5); // a fraction, stored raw
   });
 
   test('nothing stored falls outside the clamped range', () {
-    // The texture keeps float precision but is range-clamped, so anything
-    // outside [0, 1] comes back pinned to the boundary.
+    // The sampled texture is normalised, so anything outside [0, 1] comes back
+    // pinned to the boundary.
     final floats = ComponentData.pack(<ComponentFrame>[
       ComponentFrame(
         type: ShaderType.legend,
@@ -121,8 +155,8 @@ void main() {
     final floats = ComponentData.pack(<ComponentFrame>[
       ComponentFrame(
         type: ShaderType.prism,
-        centerX: 0,
-        centerY: 0,
+        centerX: -0.005,
+        centerY: 0.0173,
         width: 0.7,
         height: 0.24,
         paramA: 63,
@@ -140,6 +174,14 @@ void main() {
       expect(floats[offset], closeTo(glyphs[i], 1e-7));
     }
     expect(floats[payload + (glyphs.length ~/ 3) * 4 + 2], 0);
+    expect(
+      packedGeometry(floats, 0, 0, prism: true) * ComponentData.positionRange,
+      closeTo(0.005, ComponentData.positionRange / 65535),
+    );
+    expect(
+      packedGeometry(floats, 0, 1, prism: true) * ComponentData.positionRange,
+      closeTo(0.0173, ComponentData.positionRange / 65535),
+    );
   });
 
   test('Prism payload length clamps to atlas capacity', () {
@@ -224,16 +266,58 @@ void main() {
       const lastIndex = ComponentData.maxComponents - 1;
       const last = lastIndex * ComponentData.floatsPerComponent;
       expect(
-        floats[last + 1],
-        closeTo(ComponentData.encodePosition(lastIndex / 100), 1e-7),
+        packedGeometry(floats, last, 0),
+        closeTo(
+          ComponentData.encodePositionMagnitude(lastIndex / 100),
+          1 / 65535,
+        ),
       );
     },
   );
 
   test('a position beyond the representable range clamps to the edge', () {
-    expect(ComponentData.encodePosition(5000), 1.0);
-    expect(ComponentData.encodePosition(-5000), 0.0);
+    expect(ComponentData.encodePositionMagnitude(5000), 1.0);
+    expect(ComponentData.encodePositionMagnitude(-5000), 1.0);
     expect(ComponentData.encodeSize(5000), 1.0);
+  });
+
+  test('position signs round-trip independently from magnitudes', () {
+    final floats = ComponentData.pack(<ComponentFrame>[
+      ComponentFrame(
+        type: ShaderType.legend,
+        centerX: -0.005,
+        centerY: 0.0173,
+        width: 1,
+        height: 1,
+        moduleCenterX: 0.125,
+        moduleCenterY: -0.25,
+        isMainModule: false,
+      ),
+    ]);
+
+    final typeAndSigns = (floats[0] * ComponentData.typeAndPositionSignScale)
+        .round();
+    expect(typeAndSigns ~/ 4, ShaderType.legend);
+    expect(typeAndSigns % 4, 1);
+    expect(
+      packedGeometry(floats, 0, 0) * ComponentData.positionRange,
+      closeTo(0.005, ComponentData.positionRange / 65535),
+    );
+    expect(
+      packedGeometry(floats, 0, 1) * ComponentData.positionRange,
+      closeTo(0.0173, ComponentData.positionRange / 65535),
+    );
+
+    final moduleFlags = (floats[34] * ComponentData.moduleFlagScale).round();
+    expect(moduleFlags, 4);
+    expect(
+      packedGeometry(floats, 0, 4) * ComponentData.positionRange,
+      closeTo(0.125, ComponentData.positionRange / 65535),
+    );
+    expect(
+      packedGeometry(floats, 0, 5) * ComponentData.positionRange,
+      closeTo(0.25, ComponentData.positionRange / 65535),
+    );
   });
 
   test('the range covers an envelope derived from a narrow tall window', () {
@@ -271,7 +355,7 @@ void main() {
       ),
     ]);
 
-    expect(floats[34], 1.0);
+    expect(floats[34], 1 / ComponentData.moduleFlagScale);
     expect(floats[ComponentData.floatsPerComponent + 34], 0.0);
   });
 }

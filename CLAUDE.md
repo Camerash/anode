@@ -203,10 +203,16 @@ These cost real time to rediscover:
   - *Alpha is not a data channel.* Pixel formats are premultiplied, so a value
     stored in alpha comes back scaled — and a texel whose alpha happens to be 0
     returns nothing at all. Always write 1.0 there. Three floats per texel.
-  - *The range is clamped even though the format is float.* `rgbaFloat32` keeps
-    full precision inside [0, 1] but pins anything outside it, so a width of
-    1.035 reads back as 1.0 and a type id of 2 reads back as 1. Store scaled,
-    and offset anything signed.
+  - *The sampled path is 8-bit normalised even though the upload is
+    `rgbaFloat32`.* It pins anything outside [0, 1], and a single channel has
+    only 256 sampled states. Store scaled. Every geometry scalar uses high/low
+    bytes for 16-bit precision; position signs are folded into integer metadata
+    rather than spending a geometry channel.
+  - *Geometry low bytes deliberately dual-use payload lanes.* Non-Prism rows
+    use the two spare RGB lanes in each digit's nine-lane payload; Prism rows
+    use lanes after the maximum 24 glyphs. Do not fill those lanes with new
+    segment or glyph data without relocating all eight geometry low bytes in
+    both `component_data.dart` and `vfd.frag`.
   - *Values do not survive exactly.* A count of 3 comes back very slightly
     above 3, so `k >= count` draws one item too many. Compare against a rounded
     count.

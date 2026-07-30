@@ -101,7 +101,7 @@ class ComponentFrame {
   final List<double> segments;
 }
 
-/// Packs component data into a small floating point texture.
+/// Packs component data into a small sampled texture.
 ///
 /// Per-component parameters cannot be individual uniforms: four gauges would
 /// exhaust the uniform budget. The shader samples this at exact texel centres,
@@ -115,35 +115,56 @@ abstract final class ComponentData {
   static const int maxComponents = 16;
   static const int maxDigits = 4;
 
-  /// **Everything stored must lie in [0, 1].** The texture keeps full float
-  /// precision but is range-clamped, so a raw design-unit value above 1 comes
-  /// back as exactly 1 and a negative one as 0. Unclamped, a component width of
-  /// 1.035 read back as 1.0 and the bar's type id of 2 read back as 1, which
-  /// rendered every gauge as a one-digit speed readout.
+  /// **Everything stored must lie in [0, 1].** The upload is `rgbaFloat32`, but
+  /// Impeller samples these image channels as 8-bit normalised values. A raw
+  /// design-unit value above 1 comes back as exactly 1 and a negative one as 0.
+  /// Geometry therefore uses two channels per scalar; metadata and optical
+  /// values remain single-byte normalised fields.
   ///
   /// Values already in [0, 1] — segment brightness, fill fractions — are stored
-  /// raw so they keep every bit of precision. Mirrored in `vfd.frag`.
+  /// raw. Mirrored in `vfd.frag`.
   ///
   /// These are encoding ranges, not photograph-tuned values, so they carry
   /// headroom deliberately. A design unit is frame-independent, and the main
   /// module's size is now the authored frame extent, so a landscape primary
   /// contained into a narrow tall window derives an envelope several units
   /// tall — 8.32 units at 320x1024, which the previous `sizeScale` of 8 would
-  /// have silently clamped. `rgbaFloat32` resolves roughly 6e-8 inside [0, 1],
-  /// so even at these ranges a decoded value is good to about 2e-6 design
-  /// units, or 6e-4 px at the halo test's 300 px per unit.
+  /// have silently clamped. Positions use sign–magnitude, then all eight
+  /// geometry scalars are split into high and low bytes for 16-bit precision.
   static const double positionRange = 16.0;
   static const double sizeScale = 32.0;
-  static const double typeScale = 8.0;
+
+  /// Component type plus the signs of its X/Y coordinates. Both type and signs
+  /// are integer metadata, so folding them together costs no precision.
+  static const double typeAndPositionSignScale = 32.0;
   static const double countScale = 64.0;
   static const double effectScale = 2.0;
+  static const double moduleFlagScale = 8.0;
 
-  /// Signed, so it needs an offset as well as a scale.
-  static double encodePosition(double v) =>
-      _store(v / (2 * positionRange) + 0.5);
+  /// Position magnitude. Signs live in integer metadata instead of biasing the
+  /// value around 0.5.
+  ///
+  /// Signs are packed with integer metadata so the two geometry bytes carry
+  /// magnitude only.
+  static double encodePositionMagnitude(double v) =>
+      _store(v.abs() / positionRange);
+
+  static double encodeTypeAndPositionSigns(double type, double x, double y) {
+    final signs = (x < 0 ? 1 : 0) | (y < 0 ? 2 : 0);
+    return _store((type * 4 + signs) / typeAndPositionSignScale);
+  }
+
+  static double encodeModuleFlags({
+    required bool isMain,
+    required double centerX,
+    required double centerY,
+  }) {
+    final flags =
+        (isMain ? 1 : 0) | (centerX < 0 ? 2 : 0) | (centerY < 0 ? 4 : 0);
+    return _store(flags / moduleFlagScale);
+  }
 
   static double encodeSize(double v) => _store(v / sizeScale);
-  static double encodeType(double v) => _store(v / typeScale);
   static double encodeCount(double v) => _store(v / countScale);
   static double encodeEffect(double v) => _store(v / effectScale);
 
@@ -151,15 +172,15 @@ abstract final class ComponentData {
   /// representable range rather than wrapping into another field's value.
   static double _store(double v) => v.clamp(0.0, 1.0);
 
-  /// texel 0: type, cx, cy
+  /// texel 0: type + component-position signs, |cx|, |cy|
   /// texel 1: w, h, paramA
   /// texel 2: paramB, variant code, prism lit
   /// texel 3: phosphor r, g, b
   /// texel 4: emission, bloom, phosphor texture
   /// texel 5: grid, unlit phosphor, decay
-  /// texel 6: module cx, cy, width
+  /// texel 6: |module cx|, |module cy|, width
   /// texel 7: module height, glass grain, filament
-  /// texel 8: prism pressed, filament variant code, main-module flag
+  /// texel 8: prism pressed, filament variant code, module flags
   /// texel 9: prism bevel, face opacity, inactive luminosity
   /// texel 10..21: digit segment payload, or up to 24 Prism glyph indices
   static const int headerTexels = 10;
@@ -171,6 +192,50 @@ abstract final class ComponentData {
 
   /// Stride of the segment brightness buffer, seven segments plus a spare.
   static const int segmentStride = 8;
+
+  /// Low bytes for cx, cy, w, h, module cx, module cy, module w, module h.
+  ///
+  /// Digit payload reserves nine RGB lanes per digit but uses seven. Its two
+  /// spare lanes across four digits hold exactly these eight bytes. Prism uses
+  /// at most 24 of its 36 payload lanes, so its bytes live after the glyphs.
+  /// This dual use keeps the 22×16 texture and 16-component limit unchanged.
+  static const List<int> geometryHighByteOffsets = <int>[
+    1,
+    2,
+    4,
+    5,
+    24,
+    25,
+    26,
+    28,
+  ];
+
+  static const List<int> nonPrismGeometryLowByteOffsets = <int>[
+    (headerTexels + 2) * 4 + 1,
+    (headerTexels + 2) * 4 + 2,
+    (headerTexels + 5) * 4 + 1,
+    (headerTexels + 5) * 4 + 2,
+    (headerTexels + 8) * 4 + 1,
+    (headerTexels + 8) * 4 + 2,
+    (headerTexels + 11) * 4 + 1,
+    (headerTexels + 11) * 4 + 2,
+  ];
+
+  static const List<int> prismGeometryLowByteOffsets = <int>[
+    (headerTexels + 8) * 4,
+    (headerTexels + 8) * 4 + 1,
+    (headerTexels + 8) * 4 + 2,
+    (headerTexels + 9) * 4,
+    (headerTexels + 9) * 4 + 1,
+    (headerTexels + 9) * 4 + 2,
+    (headerTexels + 10) * 4,
+    (headerTexels + 10) * 4 + 1,
+  ];
+
+  /// Reconstructs one normalised scalar from sampled high/low byte channels.
+  /// Public for packing tests; shader-side `decodePackedScalar` mirrors it.
+  static double decodePackedScalar(double high, double low) =>
+      ((high * 255).round() * 256 + (low * 255).round()) / 65535;
 
   /// Builds the pixel buffer. Kept separate from [encode] so it can be asserted
   /// on directly in tests without an engine.
@@ -191,13 +256,12 @@ abstract final class ComponentData {
         0,
         PrismGlyphs.maxVisibleGlyphs,
       );
+      final geometryLowByteOffsets = f.type == ShaderType.prism
+          ? prismGeometryLowByteOffsets
+          : nonPrismGeometryLowByteOffsets;
 
-      out[base + 0] = encodeType(f.type);
-      out[base + 1] = encodePosition(f.centerX);
-      out[base + 2] = encodePosition(f.centerY);
+      out[base + 0] = encodeTypeAndPositionSigns(f.type, f.centerX, f.centerY);
 
-      out[base + 4] = encodeSize(f.width);
-      out[base + 5] = encodeSize(f.height);
       out[base + 6] = encodeCount(
         f.type == ShaderType.prism ? prismGlyphCount.toDouble() : f.paramA,
       );
@@ -219,21 +283,39 @@ abstract final class ComponentData {
       out[base + 21] = encodeEffect(f.unlit);
       out[base + 22] = encodeEffect(f.decay);
 
-      out[base + 24] = encodePosition(f.moduleCenterX);
-      out[base + 25] = encodePosition(f.moduleCenterY);
-      out[base + 26] = encodeSize(f.moduleWidth);
-
-      out[base + 28] = encodeSize(f.moduleHeight);
       out[base + 29] = encodeEffect(f.glassGrain);
       out[base + 30] = encodeEffect(f.filament);
 
       out[base + 32] = _store(f.prismPressed);
       out[base + 33] = encodeCount(f.filamentVariantCode);
-      out[base + 34] = f.isMainModule ? 1.0 : 0.0;
+      out[base + 34] = encodeModuleFlags(
+        isMain: f.isMainModule,
+        centerX: f.moduleCenterX,
+        centerY: f.moduleCenterY,
+      );
 
       out[base + 36] = _store(f.prismBevelDepth);
       out[base + 37] = _store(f.prismFaceOpacity);
       out[base + 38] = _store(f.prismInactiveLuminosity);
+
+      final geometry = <double>[
+        encodePositionMagnitude(f.centerX),
+        encodePositionMagnitude(f.centerY),
+        encodeSize(f.width),
+        encodeSize(f.height),
+        encodePositionMagnitude(f.moduleCenterX),
+        encodePositionMagnitude(f.moduleCenterY),
+        encodeSize(f.moduleWidth),
+        encodeSize(f.moduleHeight),
+      ];
+      for (var value = 0; value < geometry.length; value++) {
+        _writePackedScalar(
+          out,
+          base + geometryHighByteOffsets[value],
+          base + geometryLowByteOffsets[value],
+          geometry[value],
+        );
+      }
 
       if (f.type == ShaderType.prism) {
         for (var glyph = 0; glyph < prismGlyphCount; glyph++) {
@@ -253,6 +335,17 @@ abstract final class ComponentData {
       }
     }
     return out;
+  }
+
+  static void _writePackedScalar(
+    Float32List out,
+    int highOffset,
+    int lowOffset,
+    double value,
+  ) {
+    final encoded = (_store(value) * 65535).round();
+    out[highOffset] = ((encoded >> 8) & 0xFF) / 255;
+    out[lowOffset] = (encoded & 0xFF) / 255;
   }
 
   /// Synchronous so the texture can be rebuilt inside the tick without async

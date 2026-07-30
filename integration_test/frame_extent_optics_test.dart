@@ -272,6 +272,80 @@ void main() {
     expect(controller.dataImage, isNotNull);
     expect(controller.dataImage, isNot(same(beforeImage)));
   });
+
+  testWidgets('sub-grid authored geometry reaches the rendered component', (
+    tester,
+  ) async {
+    Dashboard atGeometry(double x, {double widthDelta = 0}) {
+      final source = landscapeDesign();
+      final component = source.components.single;
+      final placement = component.placements[DesignOrientation.landscape]!;
+      return source.withComponent(
+        component.withPlacement(
+          DesignOrientation.landscape,
+          placement.copyWith(
+            center: Offset(x, placement.center.dy),
+            size: Size(
+              placement.size.width + widthDelta,
+              placement.size.height,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final before = await centreProfile(
+      tester,
+      atGeometry(0),
+      DesignOrientation.landscape,
+      landscapeExtent,
+    );
+    final after = await centreProfile(
+      tester,
+      atGeometry(0.005, widthDelta: 0.005),
+      DesignOrientation.landscape,
+      landscapeExtent,
+    );
+    final beforeCentroid = _luminousCentroid(before);
+    final afterCentroid = _luminousCentroid(after);
+
+    // At 300 px per design unit, a 0.005-unit move is 1.5 px. The rendered
+    // component must follow that authored delta rather than remaining pinned to
+    // a lower-precision data-texture coordinate.
+    expect(afterCentroid - beforeCentroid, closeTo(1.5, 0.35));
+    expect(_luminousSpan(after) - _luminousSpan(before), closeTo(1.5, 0.55));
+  });
+}
+
+double _luminousCentroid(List<double> profile) {
+  final floor = profile.reduce(math.min);
+  var weightedPosition = 0.0;
+  var totalWeight = 0.0;
+  for (var x = 0; x < profile.length; x++) {
+    final weight = math.max(0.0, profile[x] - floor - 4);
+    weightedPosition += x * weight;
+    totalWeight += weight;
+  }
+  return weightedPosition / totalWeight;
+}
+
+double _luminousSpan(List<double> profile) {
+  final floor = profile.reduce(math.min);
+  final peak = profile.reduce(math.max);
+  final threshold = floor + (peak - floor) * 0.15;
+  var first = 0;
+  while (first < profile.length && profile[first] < threshold) {
+    first++;
+  }
+  var last = profile.length - 1;
+  while (last >= 0 && profile[last] < threshold) {
+    last--;
+  }
+  final leftFraction =
+      (threshold - profile[first - 1]) / (profile[first] - profile[first - 1]);
+  final rightFraction =
+      (profile[last] - threshold) / (profile[last] - profile[last + 1]);
+  return (last + rightFraction) - (first - 1 + leftFraction);
 }
 
 /// Distance in pixels from the outermost lit edge to where the halo has fallen

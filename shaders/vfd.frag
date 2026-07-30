@@ -34,14 +34,15 @@ const int MAX_COMPONENTS = 16;
 const float HEADER_TEXELS = 10.0;
 const float TEXELS_PER_DIGIT = 3.0;
 
-// The data texture is range-clamped to [0, 1] even though it holds floats, so
-// everything outside that range is stored normalised. Mirrored in
-// component_data.dart.
+// The image path samples normalised 8-bit channels even though Dart uploads an
+// rgbaFloat32 buffer. Everything is stored in [0, 1]; geometry combines high
+// and low byte lanes below. Mirrored in component_data.dart.
 const float POSITION_RANGE = 16.0;
 const float SIZE_SCALE = 32.0;
-const float TYPE_SCALE = 8.0;
+const float TYPE_POSITION_SIGN_SCALE = 32.0;
 const float COUNT_SCALE = 64.0;
 const float EFFECT_SCALE = 2.0;
+const float MODULE_FLAG_SCALE = 8.0;
 // The reference tube height the filament layout was measured against. New
 // constant, not a rescaled one: the main module used to be hardcoded one unit
 // tall on the Dart side, so this preserves that geometry now that its size is
@@ -50,8 +51,26 @@ const float MAIN_TUBE_HEIGHT = 1.0;
 const float PRISM_GLYPH_COUNT = 43.0;
 const vec2 PRISM_ATLAS_GRID = vec2(8.0, 6.0);
 
-float decodePosition(float s) { return (s - 0.5) * 2.0 * POSITION_RANGE; }
-vec2 decodePosition(vec2 s) { return (s - 0.5) * 2.0 * POSITION_RANGE; }
+float decodePackedScalar(float highByte, float lowByte) {
+  float high = round(highByte * 255.0);
+  float low = round(lowByte * 255.0);
+  return (high * 256.0 + low) / 65535.0;
+}
+
+vec2 decodePackedScalar(vec2 highByte, vec2 lowByte) {
+  return vec2(
+    decodePackedScalar(highByte.x, lowByte.x),
+    decodePackedScalar(highByte.y, lowByte.y)
+  );
+}
+
+vec2 decodePosition(vec2 highByte, vec2 lowByte, float signBits) {
+  vec2 signs = vec2(
+    1.0 - 2.0 * step(0.5, mod(signBits, 2.0)),
+    1.0 - 2.0 * step(1.5, signBits)
+  );
+  return decodePackedScalar(highByte, lowByte) * POSITION_RANGE * signs;
+}
 
 // Component type ids, mirrored in component_data.dart.
 const float TYPE_DIGITS = 1.0;
@@ -378,9 +397,30 @@ void main() {
     float row = float(i);
     vec3 head = fetch(row, 0.0).rgb;
     vec3 body = fetch(row, 1.0).rgb;
-    float type = head.x * TYPE_SCALE;
-    vec2 c = decodePosition(head.yz);
-    vec2 sz = body.xy * SIZE_SCALE;
+    float typeAndSigns = round(head.x * TYPE_POSITION_SIGN_SCALE);
+    float type = floor(typeAndSigns / 4.0);
+    vec4 componentGeometryLow;
+    vec4 moduleGeometryLow;
+    if (type < TYPE_PRISM - 0.5) {
+      vec3 low0 = fetch(row, HEADER_TEXELS + 2.0).rgb;
+      vec3 low1 = fetch(row, HEADER_TEXELS + 5.0).rgb;
+      vec3 low2 = fetch(row, HEADER_TEXELS + 8.0).rgb;
+      vec3 low3 = fetch(row, HEADER_TEXELS + 11.0).rgb;
+      componentGeometryLow = vec4(low0.gb, low1.gb);
+      moduleGeometryLow = vec4(low2.gb, low3.gb);
+    } else {
+      vec3 low0 = fetch(row, HEADER_TEXELS + 8.0).rgb;
+      vec3 low1 = fetch(row, HEADER_TEXELS + 9.0).rgb;
+      vec3 low2 = fetch(row, HEADER_TEXELS + 10.0).rgb;
+      componentGeometryLow = vec4(low0.rgb, low1.r);
+      moduleGeometryLow = vec4(low1.gb, low2.rg);
+    }
+    vec2 c = decodePosition(
+      head.yz,
+      componentGeometryLow.xy,
+      mod(typeAndSigns, 4.0)
+    );
+    vec2 sz = decodePackedScalar(body.xy, componentGeometryLow.zw) * SIZE_SCALE;
     float count = body.z * COUNT_SCALE;
     vec3 params = fetch(row, 2.0).rgb;
     vec3 phosphor = fetch(row, 3.0).rgb;
@@ -426,15 +466,23 @@ void main() {
     vec3 unlitCol = mix(vec3(0.085, 0.095, 0.090), phosphor * 0.13, 0.40);
     unlitDelta += (unlitCol - substrate) * dim * opticalB.y;
 
-    vec2 moduleCenter = decodePosition(moduleA.xy);
-    vec2 moduleSize = vec2(moduleA.z * SIZE_SCALE, moduleB.x * SIZE_SCALE);
+    float moduleFlags = round(interaction.b * MODULE_FLAG_SCALE);
+    vec2 moduleCenter = decodePosition(
+      moduleA.xy,
+      moduleGeometryLow.xy,
+      floor(moduleFlags / 2.0)
+    );
+    vec2 moduleSize = vec2(
+      decodePackedScalar(moduleA.z, moduleGeometryLow.z),
+      decodePackedScalar(moduleB.x, moduleGeometryLow.w)
+    ) * SIZE_SCALE;
     vec2 mq = q - moduleCenter;
     float inModule = step(abs(mq.x), moduleSize.x * 0.5)
                    * step(abs(mq.y), moduleSize.y * 0.5);
     // Packed explicitly. The main module's size now equals the frame extent, so
     // comparing geometry would also match an authored sub-module a user sized
     // to the whole frame.
-    float mainModule = step(0.5, interaction.b);
+    float mainModule = mod(moduleFlags, 2.0);
     grainStrength = max(
       grainStrength,
       moduleB.y * EFFECT_SCALE * mix(inModule, 1.0, mainModule)
