@@ -55,7 +55,7 @@ void main() {
     );
   });
 
-  testWidgets('effect tray closed and open baselines', (tester) async {
+  testWidgets('LOOK fascia and service hatch baselines', (tester) async {
     await tester.binding.setSurfaceSize(const Size(700, 500));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final profile = OpticalProfile(
@@ -88,9 +88,8 @@ void main() {
       find.byKey(const ValueKey('surface')),
       matchesGoldenFile('baselines/effect_closed.png'),
     );
-    await tester.tap(find.byKey(const ValueKey('effect-bloom')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 150));
+    await tester.tap(find.byKey(const ValueKey('look-tune')));
+    await tester.pumpAndSettle();
     await expectLater(
       find.byKey(const ValueKey('surface')),
       matchesGoldenFile('baselines/effect_open.png'),

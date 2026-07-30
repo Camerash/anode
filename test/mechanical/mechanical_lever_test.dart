@@ -61,23 +61,32 @@ void main() {
     expect(harness.value, 0.72);
   });
 
-  testWidgets('thumb drag quantizes to hundredths and reaches OFF stop', (
+  testWidgets('thumb drag lands only on visible detents and reaches OFF', (
     tester,
   ) async {
-    final harness = await pumpLever(tester);
+    final changes = <double>[];
+    final harness = await pumpLever(tester, observe: changes.add);
     final thumb = find.byKey(const ValueKey('mechanical-lever-thumb'));
     final lever = tester.getRect(
       find.byKey(const ValueKey('mechanical-lever')),
     );
 
-    await tester.dragFrom(tester.getCenter(thumb), Offset(-lever.width, 0));
+    await tester.dragFrom(
+      tester.getCenter(thumb),
+      Offset(-lever.width, 0),
+      touchSlopX: 0,
+    );
     await tester.pump();
 
     expect(harness.value, 0);
+    expect(
+      changes.every((value) => value * 10 == (value * 10).round()),
+      isTrue,
+    );
     expect(find.text('OFF · 0.00'), findsOneWidget);
   });
 
-  testWidgets('semantics, keyboard, and wheel adjust one hundredth', (
+  testWidgets('semantics, keyboard, and wheel move one physical detent', (
     tester,
   ) async {
     final harness = await pumpLever(tester, initial: 1);
@@ -88,12 +97,12 @@ void main() {
 
     semantics.owner!.performAction(semantics.id, SemanticsAction.increase);
     await tester.pump();
-    expect(harness.value, 1.01);
+    expect(harness.value, closeTo(1.1, 1e-9));
 
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump();
-    expect(harness.value, 1);
+    expect(harness.value, closeTo(1, 1e-9));
 
     await tester.sendEventToBinding(
       PointerScrollEvent(
@@ -102,7 +111,22 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(harness.value, 1.01);
+    expect(harness.value, closeTo(1.1, 1e-9));
+  });
+
+  test('non-uniform tuned reference replaces nearest interior detent', () {
+    final detents = mechanicalLeverDetents(
+      min: 0.6,
+      max: 0.95,
+      count: 11,
+      referenceValue: 0.78,
+    );
+
+    expect(detents, hasLength(11));
+    expect(detents, contains(0.78));
+    expect(detents.first, 0.6);
+    expect(detents.last, 0.95);
+    expect(detents, orderedEquals(detents.toList()..sort()));
   });
 
   testWidgets('disabled lever ignores direct and semantic input', (

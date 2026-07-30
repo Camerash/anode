@@ -23,7 +23,7 @@ import 'effect_panel.dart';
 import 'param_editor.dart';
 import 'placement_transform.dart';
 
-enum _EditorSection { rack, design, part, module, optics, prism, place }
+enum _EditorSection { rack, design, part, module, look, prism, place }
 
 class EditorPage extends StatefulWidget {
   const EditorPage({
@@ -505,7 +505,7 @@ class _EditorServicePanelState extends State<_EditorServicePanel> {
     if (widget.layoutInherited) {
       return const <_EditorSection>[
         _EditorSection.design,
-        _EditorSection.optics,
+        _EditorSection.look,
         _EditorSection.prism,
       ];
     }
@@ -513,7 +513,7 @@ class _EditorServicePanelState extends State<_EditorServicePanel> {
       return const <_EditorSection>[
         _EditorSection.rack,
         _EditorSection.part,
-        _EditorSection.optics,
+        _EditorSection.look,
         _EditorSection.place,
       ];
     }
@@ -521,14 +521,14 @@ class _EditorServicePanelState extends State<_EditorServicePanel> {
       return const <_EditorSection>[
         _EditorSection.rack,
         _EditorSection.module,
-        _EditorSection.optics,
+        _EditorSection.look,
         _EditorSection.place,
       ];
     }
     return const <_EditorSection>[
       _EditorSection.rack,
       _EditorSection.design,
-      _EditorSection.optics,
+      _EditorSection.look,
       _EditorSection.prism,
     ];
   }
@@ -581,7 +581,7 @@ class _EditorServicePanelState extends State<_EditorServicePanel> {
     _EditorSection.design => _DesignPanel(host: widget),
     _EditorSection.part => _PartPanel(host: widget),
     _EditorSection.module => _ModulePanel(host: widget),
-    _EditorSection.optics => _optics(),
+    _EditorSection.look => _look(),
     _EditorSection.prism => PrismStyleEditor(
       profile: widget.dashboard.settings.opticalProfile,
       style: widget.dashboard.settings.prismStyle,
@@ -596,7 +596,7 @@ class _EditorServicePanelState extends State<_EditorServicePanel> {
     _EditorSection.place => _PlacementPanel(host: widget),
   };
 
-  Widget _optics() {
+  Widget _look() {
     final component = _selectedComponent;
     if (component != null) {
       final module = widget.dashboard.moduleFor(component);

@@ -506,11 +506,12 @@ does, and these surfaces sit directly on top of the render.
 - Gauge-like quantities and generic bounded params use the segmented cell bar.
   Optical and Prism-style values use the recessed automotive lever described
   below. A continuous Material slider does not belong on either substrate.
-- Dense banks of buttons are intentional period language, not a dashboard-card
-  grid to simplify away. Establish hierarchy through button size, bezel depth,
-  grouping, spacing, label scale, and controlled luminous intensity. Reserve a
-  consistent light treatment for state so hierarchy never makes an inactive
-  control look active.
+- Dense banks of buttons are intentional period language when the functions are
+  familiar and individually useful. They are not permission to expose renderer
+  internals as an unlabeled keypad. Establish hierarchy through button size,
+  bezel depth, grouping, spacing, label scale, and controlled luminous
+  intensity. Reserve a consistent light treatment for state so hierarchy never
+  makes an inactive control look active.
 - Sound and haptics are app preferences. One low-latency physical click and one
   actuation haptic are enough initially; no per-design sound packs.
 
@@ -529,34 +530,44 @@ Use shared button semantics with two renderers:
 Do not force both through one renderer. Do not give design components their own
 widgets or fragment surfaces.
 
-Effect selection is a paged, non-scrolling bank of icon-face Prism keys.
-Pictograms are hand-authored period line art from non-persisted `EffectSpec`
-metadata; names remain semantics labels, never cap text. Tapping a key selects
-detail rather than toggling physics. `PHOSPHOR` is the first synthetic channel.
-Illumination conveys enabled state and external locator ticks convey selection.
+The editor section is named `LOOK`, not `OPTICS`. Its normal fascia exposes two
+decisions only: the current phosphor colour and a `TUNE` latch. Tapping the
+colour hard-cuts to the three labelled phosphor choices; local scopes also
+offer `USE DESIGN` to clear the phosphor override.
 
-Selection hard-cuts the whole section to one selected icon key, name, physical
-description, inheritance control where local, exact value, and one recessed
-automotive lever. Every other effect key and the overview pager disappear.
-Tapping the selected icon returns to overview. Unknown stored ids remain
-selectable, show a `?` pictogram and exact read-only value, and survive
-round-trip.
+`TUNE` flips the fascia about its top hinge and reveals a fixed-footprint
+service face. The surrounding service bay and canvas do not change size. The
+service face shows one effect at a time: previous and next Prism keys with hard
+stops, an indexed position readout, the effect's name and physical description,
+a small secondary pictogram, inheritance control where local, exact value, and
+one recessed automotive lever. No effect overview grid, pager or scrolling
+exists. The last selected service channel is editor-session state only.
+
+Pictograms remain hand-authored period line art from non-persisted `EffectSpec`
+metadata, but never identify a control without its name. Unknown stored ids
+remain in the indexed sequence, show a `?`, expose their exact read-only value,
+and survive round-trip. Closing the hatch changes no authored value.
 
 `MechanicalLever` is a cable-driven HVAC control: fixed recessed black
 faceplate, narrow horizontal slot, smoked/chrome rectangular thumb, 44px thumb
 hit region, and no inertial motion. Only direct thumb drag changes value; track
-taps never teleport it. Optical levers quantize to `0.01`, show 21 marks from
-`0.00` through `2.00`, light only the nearest mark, label the left stop `OFF`,
-and double-mark the tuned reference. Prism-style levers use 11 marks and double
-their tuned default. Feedback occurs at visible detents, tuned reference, and
-hard stops, not at every hundredth.
+taps never teleport it. Every visible mark is a real detent: the thumb, stored
+value, keyboard/wheel step, semantics action, illuminated marker, and feedback
+all resolve to the same detent value. Optical levers have 21 detents from
+`0.00` through `2.00` at `0.10` intervals, label the left stop `OFF`, and
+double-mark the reachable tuned reference. Prism-style levers use 11 detents;
+if their tuned default is not on the uniform sequence, it replaces the nearest
+interior mark so it remains an exact reachable double detent. Values never move
+smoothly between illuminated marks.
 
-With no component selected, the editor shows `DESIGN EFFECTS`. With a component
-selected it shows a named `LOCAL EFFECTS` context. Each local effect exposes
-`INHERIT` / `OVERRIDE`; inherited values remain visible but read-only. Changing
-an override updates the selected component live. The panel itself continues to
-use dashboard styling. Keep context labels visible so selecting a component
-cannot silently change what identical controls mean.
+With no component selected, the `LOOK` fascia edits the dashboard profile. With
+a component or module selected it names that local context and displays whether
+its phosphor and current service channel use the design value or a local
+override. Each local service effect exposes `INHERIT` / `OVERRIDE`; inherited
+values remain visible but read-only. Changing an override updates the selected
+object live. The panel itself continues to use dashboard styling. Keep context
+labels visible so selecting an object cannot silently change what identical
+controls mean.
 
 An immutable template can activate or clone only. Clone opens a confirmation
 surface with optional naming, then creates and activates a dashboard before
@@ -577,11 +588,10 @@ The whole app is switchgear, not a Material app wearing a VFD theme:
   previous/next controls when height permits them. Crossing one detent emits one
   configured click/haptic.
 - Hidden service surfaces move as mechanisms. A drawer releases its latch for
-  20ms, travels linearly for 130ms, and hard-seats for 30ms. An optical fascia
-  may flip about its top hinge in 150ms and occupies exactly zero layout height
-  while closed. Effect selection now uses the active-only hard cut above rather
-  than reserving or animating an empty fascia. Reduced-motion resolves moving
-  mechanisms immediately.
+  20ms, travels linearly for 130ms, and hard-seats for 30ms. The LOOK service
+  fascia flips about its top hinge in 150ms between two faces occupying the
+  exact same footprint; it never expands the panel or moves the canvas.
+  Reduced-motion resolves moving mechanisms immediately.
 - Continuous direct manipulation remains for component drag/resize, levers,
   and segmented value bars. This is not content navigation and must not acquire
   fling or inertial behaviour.

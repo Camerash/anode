@@ -664,8 +664,10 @@ Frame-extent verification:
       re-contains the canvas.
 - [x] Add `MechanicalLever`: fixed recessed HVAC faceplate, narrow slot,
       smoked/chrome Prism thumb, 44px thumb hit region, thumb-only direct drag,
-      hundredth quantization, exact VFD readout, adjustable semantics,
+      initially hundredth quantization, exact VFD readout, adjustable semantics,
       keyboard arrows, pointer wheel, hard stops, and detent-gated feedback.
+      The service-hatch follow-up below supersedes hundredths with true physical
+      stops.
 - [x] Replace effect power/strength bars/steppers with 21-mark `0.00–2.00`
       levers. Zero derives OFF; `resumeStrength` remains persisted. Inherited
       local values remain visible and disabled. Replace Prism-style bars with
@@ -673,7 +675,8 @@ Frame-extent verification:
 - [x] Add non-persisted effect pictogram metadata and hand-authored line icons.
       Overview caps are icon-only with text semantics. Active detail hard-cuts
       away every other key and the pager. Unknown stored effects use `?`, open
-      disabled detail, and survive round-trip.
+      disabled detail, and survive round-trip. The service-hatch follow-up below
+      removes this overview entirely and retains pictograms as secondary marks.
 - [x] Add goldens for lever states, effect overview/detail, Prism lever detail,
       right-side PLACE, and bottom service bay. Existing Library, Settings,
       pager, editor, and Prism baselines remain covered.
@@ -683,8 +686,9 @@ Model findings:
 1. **Anchor/span placement complexity — resolved by removal.** Fixed authored
    extents plus contain-fit need no alignment relation. Absolute centre/size is
    sufficient for runtime, alternate copy, renderer packing, and editor chrome.
-2. **Snapping is presentation behavior, not model state.** SNAP, active effect,
-   current lever drag, and drawer edge/state remain outside dashboard JSON.
+2. **Snapping is presentation behavior, not model state.** SNAP, service
+   channel, hatch face, current lever drag, and drawer edge/state remain outside
+   dashboard JSON.
 3. **No effect was removed.** Active-only disclosure and pictograms reduce
    control density without weakening the optical model or adding bespoke
    persisted controls.
@@ -714,6 +718,48 @@ Verification:
   continuous drag feel remains verified by deterministic widget transforms,
   not claimed as a hands-on device check.
 - No shader source or tuned constant changed in this follow-up.
+
+#### Stage 4 optical service-hatch follow-up — DONE
+
+- [x] Rename the editor section `OPTICS` to `LOOK`.
+- [x] Replace the paged icon overview with a normal fascia exposing only the
+      current phosphor colour and a `TUNE` latch.
+- [x] Add a labelled phosphor hard-cut: three dashboard colours, plus
+      `USE DESIGN` for local scopes.
+- [x] Add a fixed-footprint top-hinged service hatch. Opening it replaces
+      the fascia without changing service-bay or canvas dimensions.
+- [x] Show one labelled effect at a time with previous/next hard stops, index,
+      description, secondary pictogram, exact value, local inheritance, and
+      the existing lever. Preserve unknown stored effects as disabled channels.
+- [x] Make every lever mark a real detent. Optical values step by `0.10` across
+      21 marks; Prism values use 11 explicit detents with the tuned reference
+      inserted exactly when it is not uniform. Thumb position, stored value,
+      semantics, keyboard/wheel input, illuminated mark, and feedback must
+      agree.
+- [x] Update headless interaction tests, responsive coverage, service-hatch
+      goldens, and both Impeller guards. Commit as one Stage 4 follow-up and
+      stop before Stage 5.
+
+Verification:
+
+- `flutter analyze`: clean.
+- `flutter test`: 138 passing. Coverage includes true detent drag,
+  semantics/keyboard/wheel parity, non-uniform tuned-reference insertion,
+  fixed hatch footprint, reduced motion, fascia/phosphor/service flows,
+  hard stops, remembered service index, local inheritance, unknown effects,
+  and a 280×150 minimum local side-bay face without overflow.
+- `integration_test/halo_compounding_test.dart`: four tests passing on iPhone
+  17 Pro simulator, iOS 26.3, Impeller. Original seam/halo assertions remain
+  unchanged.
+- `integration_test/frame_extent_optics_test.dart`: passing on the same
+  simulator and renderer.
+- Fresh debug launch followed an explicit terminate attempt. Portrait and
+  landscape runtime screenshots rendered cleanly; landscape capture retains
+  the simulator's expected 90-degree native orientation. Service faces were
+  visually checked through regenerated goldens. Direct device manipulation was
+  unavailable, so lever feel is covered deterministically rather than claimed
+  as a hands-on check.
+- No persisted schema, shader source, tuned constant, or shipped preset changed.
 
 ---
 

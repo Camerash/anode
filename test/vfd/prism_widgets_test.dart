@@ -1,4 +1,4 @@
-import 'dart:ui' show SemanticsAction, Tristate;
+import 'dart:ui' show Tristate;
 
 import 'package:anode/editor/effect_pictogram.dart';
 import 'package:anode/editor/effect_panel.dart';
@@ -317,24 +317,21 @@ void main() {
     await gesture.up();
   });
 
-  testWidgets('effect tile selects detail without changing strength', (
-    tester,
-  ) async {
+  testWidgets('LOOK fascia exposes only phosphor and TUNE', (tester) async {
     final profile = OpticalProfile(
       effects: <String, EffectSetting>{
-        EffectIds.bloom: const EffectSetting(
+        EffectIds.emission: const EffectSetting(
           strength: 0.72,
           resumeStrength: 0.72,
         ),
       },
     );
     var changes = 0;
-
     await tester.pumpWidget(
       MaterialApp(
         home: SizedBox(
           width: 700,
-          height: 1100,
+          height: 500,
           child: EffectPanel(
             title: 'Design effects',
             dashboardProfile: profile,
@@ -349,41 +346,85 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('effect-bloom')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 150));
-    expect(changes, 0);
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('effect-bloom')),
-        matching: find.text('0.72'),
-      ),
-      findsNothing,
+    final footprint = tester.getSize(
+      find.byKey(const ValueKey('mechanical-service-hatch')),
     );
-    expect(find.text('0.72'), findsOneWidget);
+    expect(find.byKey(const ValueKey('look-phosphor')), findsOneWidget);
+    expect(find.byKey(const ValueKey('look-tune')), findsOneWidget);
+    expect(find.byType(EffectPictogram), findsNothing);
+    expect(find.byType(MechanicalLever), findsNothing);
+    expect(find.byKey(const ValueKey('pager-detent-rail')), findsNothing);
+    expect(find.text('0.72'), findsNothing);
 
-    await tester.drag(
-      find.descendant(
-        of: find.byKey(const ValueKey('effect-lever-bloom')),
-        matching: find.byKey(const ValueKey('mechanical-lever-thumb')),
-      ),
-      const Offset(40, 0),
+    await tester.tap(find.byKey(const ValueKey('look-tune')));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getSize(find.byKey(const ValueKey('mechanical-service-hatch'))),
+      footprint,
     );
-    await tester.pump();
-    expect(changes, greaterThan(0));
+    expect(changes, 0);
+    expect(find.textContaining('EMISSION'), findsOneWidget);
+    expect(find.text('0.72'), findsOneWidget);
+    expect(find.byType(EffectPictogram), findsOneWidget);
+    expect(find.byType(MechanicalLever), findsOneWidget);
+    expect(find.byKey(const ValueKey('pager-detent-rail')), findsNothing);
   });
 
-  testWidgets('effect overview uses icon faces without cap names or values', (
+  testWidgets('service lever writes only visible detent values', (
     tester,
   ) async {
     final profile = OpticalProfile(
       effects: <String, EffectSetting>{
-        EffectIds.bloom: const EffectSetting(
+        EffectIds.emission: const EffectSetting(
           strength: 0.72,
           resumeStrength: 0.72,
         ),
       },
     );
+    final strengths = <double>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 700,
+          height: 500,
+          child: EffectPanel(
+            title: 'Design effects',
+            dashboardProfile: profile,
+            baseProfile: profile,
+            scope: EffectScope.dashboard,
+            prismStyle: const PrismStyle(),
+            soundEnabled: false,
+            hapticsEnabled: false,
+            onProfileChanged: (value) =>
+                strengths.add(value.effect(EffectIds.emission).strength),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('look-tune')));
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.descendant(
+        of: find.byKey(const ValueKey('effect-lever-emission')),
+        matching: find.byKey(const ValueKey('mechanical-lever-thumb')),
+      ),
+      const Offset(40, 0),
+    );
+    await tester.pump();
+
+    expect(strengths, isNotEmpty);
+    expect(
+      strengths.every((value) => value * 10 == (value * 10).round()),
+      isTrue,
+    );
+  });
+
+  testWidgets('service channel uses hard stops and remembers its index', (
+    tester,
+  ) async {
+    final profile = OpticalProfile();
     await tester.pumpWidget(
       MaterialApp(
         home: SizedBox(
@@ -403,18 +444,25 @@ void main() {
       ),
     );
 
-    expect(find.byType(EffectPictogram), findsWidgets);
-    expect(find.text('BLOOM'), findsNothing);
-    expect(find.text('0.72'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('look-tune')));
+    await tester.pumpAndSettle();
+    final previous = tester.widget<PrismButton>(
+      find.byKey(const ValueKey('service-effect-previous')),
+    );
+    expect(previous.enabled, isFalse);
 
-    await tester.tap(find.byKey(const ValueKey('effect-bloom')));
+    await tester.tap(find.byKey(const ValueKey('service-effect-next')));
     await tester.pump();
-    expect(find.text('BLOOM'), findsOneWidget);
-    expect(find.text('0.72'), findsOneWidget);
-    expect(find.byKey(const ValueKey('effect-emission')), findsNothing);
+    expect(find.textContaining('BLOOM'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('service-hatch-close')));
+    await tester.pumpAndSettle();
+    expect(find.byType(MechanicalLever), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('look-tune')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('BLOOM'), findsOneWidget);
   });
 
-  testWidgets('unknown stored effect remains selectable with disabled detail', (
+  testWidgets('unknown stored effect remains indexed and read-only', (
     tester,
   ) async {
     final profile = OpticalProfile(
@@ -444,13 +492,16 @@ void main() {
       ),
     );
 
-    final channels = tester.getSemantics(
-      find.bySemanticsLabel('Design effects channels'),
-    );
-    channels.owner!.performAction(channels.id, SemanticsAction.increase);
-    await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('effect-futureScatter')));
-    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('look-tune')));
+    await tester.pumpAndSettle();
+    for (
+      var index = 0;
+      index < EffectSpecs.forScope(EffectScope.dashboard).length;
+      index++
+    ) {
+      await tester.tap(find.byKey(const ValueKey('service-effect-next')));
+      await tester.pump();
+    }
 
     final lever = find.byKey(const ValueKey('effect-lever-futureScatter'));
     expect(lever, findsOneWidget);
@@ -494,52 +545,24 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('effect-bloom')));
+    await tester.tap(find.byKey(const ValueKey('look-tune')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('service-effect-next')));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 150));
+    expect(
+      tester
+          .getSemantics(find.byKey(const ValueKey('effect-lever-bloom')))
+          .flagsCollection
+          .isEnabled,
+      Tristate.isFalse,
+    );
     await tester.tap(find.byKey(const ValueKey('effect-override-bloom')));
     await tester.pump();
 
     expect(changed?.effects[EffectIds.bloom]?.strength, 1.27);
   });
 
-  testWidgets(
-    'active detail hides bank and selected icon returns to overview',
-    (tester) async {
-      final profile = OpticalProfile();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: SizedBox(
-            width: 700,
-            height: 500,
-            child: EffectPanel(
-              title: 'Design effects',
-              dashboardProfile: profile,
-              baseProfile: profile,
-              scope: EffectScope.dashboard,
-              prismStyle: const PrismStyle(),
-              soundEnabled: false,
-              hapticsEnabled: false,
-              onProfileChanged: (_) {},
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.byKey(const ValueKey('effect-bloom')));
-      await tester.pump();
-      expect(find.byKey(const ValueKey('effect-emission')), findsNothing);
-      expect(find.byType(MechanicalLever), findsOneWidget);
-      expect(find.byKey(const ValueKey('pager-detent-rail')), findsNothing);
-
-      await tester.tap(find.byKey(const ValueKey('active-effect-bloom')));
-      await tester.pump();
-      expect(find.byKey(const ValueKey('effect-emission')), findsOneWidget);
-      expect(find.byType(MechanicalLever), findsNothing);
-    },
-  );
-
-  testWidgets('phosphor channel changes profile live', (tester) async {
+  testWidgets('phosphor hard-cut changes profile live', (tester) async {
     final profile = OpticalProfile();
     OpticalProfile? changed;
     await tester.pumpWidget(
@@ -561,11 +584,44 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('effect-phosphor')));
+    await tester.tap(find.byKey(const ValueKey('look-phosphor')));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 150));
-    await tester.tap(find.byKey(const ValueKey('Red')));
+    await tester.tap(find.byKey(const ValueKey('phosphor-Red')));
     await tester.pump();
     expect(changed?.phosphorName, 'Red');
+  });
+
+  testWidgets('local service face fits minimum side-bay footprint', (
+    tester,
+  ) async {
+    final profile = OpticalProfile();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 280,
+            height: 150,
+            child: EffectPanel(
+              title: 'Speed digits · Local effects',
+              dashboardProfile: profile,
+              baseProfile: profile,
+              overrides: OpticalOverrides(),
+              scope: EffectScope.component,
+              prismStyle: const PrismStyle(),
+              soundEnabled: false,
+              hapticsEnabled: false,
+              onOverridesChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('look-tune')));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(MechanicalLever), findsOneWidget);
   });
 }
