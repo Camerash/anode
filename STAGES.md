@@ -659,7 +659,7 @@ Frame-extent verification:
 - [x] Alternate creation copies component and module placements verbatim into
       the expanded frame extent.
 - [x] Add editor-wide session-only `SNAP` beside `FIT`: active by default,
-      `0.5` design-unit delta quantization relative to pointer-down geometry,
+      `0.1` design-unit delta quantization relative to pointer-down geometry,
       continuous when dark, and no mutation on toggle.
 - [x] Make move/resize pure transforms shared by components and modules.
       Snapped resize quantizes the applied delta, keeps the opposite edge fixed,
@@ -830,9 +830,9 @@ Verification:
       the maximum 24 glyphs. Texture remains 22×16 with sixteen component rows,
       two samplers, the same float-uniform map and one shared fragment pass.
 - [x] Restore a perceptible mechanical SNAP after removing renderer
-      quantization: drag/resize uses fixed 0.5-unit detents (half the reference
-      tube height), while PLACE retains 0.005-unit fine controls. One coarse
-      detent equals one hundred fine steps. Neither grid depends on viewport
+      quantization: drag/resize uses fixed 0.1-unit detents (one tenth of the
+      reference tube height), while PLACE retains 0.005-unit fine controls. One
+      coarse detent equals twenty fine steps. Neither grid depends on viewport
       pixels or camera zoom; smooth mode still writes continuous doubles.
 - [x] Update the authoritative texture map and add packing regressions for
       signed component/module positions, non-Prism payload lanes and Prism
