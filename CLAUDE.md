@@ -697,7 +697,7 @@ write placement.
 Canvas controls are `SNAP`, `FIT`, and `FULL`. `SNAP` is illuminated and active
 by default, lives only for the editor session, and survives preview/full-screen
 switches. It affects component and module drag/resize only. A gesture quantizes
-its total design-space delta to `0.025` relative to the pointer-down placement,
+its total design-space delta to `0.5` relative to the pointer-down placement,
 so toggling SNAP never mutates existing off-grid geometry. With SNAP dark,
 movement and resize are fully continuous. Selection chrome always derives from
 the same committed placement sent to the renderer. Authored geometry refreshes
@@ -737,8 +737,8 @@ frames and contain-fit make anchors and span axes redundant. Alternate creation
 copies placements verbatim. PLACE is one non-paged surface: precise X/Y, 3×3
 D-pad with centre `BRING IN`, and W/H minus/readout/plus rows. D-pad and size
 buttons always step `0.005`, independent of SNAP. One drag/resize detent is
-therefore five fine-control steps. The coarse grid is fixed in design units
-(`1 / 40` of the reference tube height), never derived from viewport pixels or
+therefore one hundred fine-control steps. The coarse grid is fixed in design
+units (half the reference tube height), never derived from viewport pixels or
 camera zoom, so imported geometry edits remain deterministic across devices.
 
 ### Model findings from the developer editor

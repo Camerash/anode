@@ -114,6 +114,7 @@ void main() {
                   orientation: DesignOrientation.landscape,
                   deviceSafeSize: const Size(900, 500),
                   selectedId: 'speed',
+                  snapEnabled: false,
                   onSelect: (_) {},
                   onPlacementChanged: (id, placement) {
                     final component = dashboard.components.firstWhere(
@@ -203,6 +204,7 @@ void main() {
                   orientation: DesignOrientation.landscape,
                   deviceSafeSize: const Size(900, 500),
                   selectedId: 'speed',
+                  snapEnabled: false,
                   onSelect: (_) {},
                   onPlacementChanged: (id, placement) {
                     final component = dashboard.components.firstWhere(
@@ -272,6 +274,7 @@ void main() {
                   orientation: DesignOrientation.landscape,
                   deviceSafeSize: const Size(900, 500),
                   selectedId: component.id,
+                  snapEnabled: false,
                   onSelect: (_) {},
                   onPlacementChanged: (id, placement) {
                     rebuild(() {

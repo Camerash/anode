@@ -65,8 +65,8 @@ void main() {
     expect(y.dy, closeTo(0.195, 1e-12));
   });
 
-  test('one drag detent contains five fine-control steps', () {
-    expect(editorSnapStep, editorFineStep * 5);
+  test('one drag detent contains one hundred fine-control steps', () {
+    expect(editorSnapStep, editorFineStep * 100);
   });
 
   test('continuous movement preserves exact deltas', () {
@@ -87,21 +87,21 @@ void main() {
     );
     final moved = movePlacementBy(
       placement,
-      dx: 0.0372,
-      dy: -0.0131,
+      dx: 0.31,
+      dy: -0.26,
       snapStep: editorSnapStep,
     );
     final resized = resizePlacementFromEdges(
       placement: placement,
-      widthDelta: 0.0372,
-      heightDelta: -0.0131,
+      widthDelta: 0.31,
+      heightDelta: 0.26,
       snapStep: editorSnapStep,
     );
 
-    expect(moved.center.dx, closeTo(0.128, 1e-12));
-    expect(moved.center.dy, closeTo(-0.232, 1e-12));
-    expect(resized.size.width, closeTo(0.528, 1e-12));
-    expect(resized.size.height, closeTo(0.178, 1e-12));
+    expect(moved.center.dx, closeTo(0.603, 1e-12));
+    expect(moved.center.dy, closeTo(-0.707, 1e-12));
+    expect(resized.size.width, closeTo(1.003, 1e-12));
+    expect(resized.size.height, closeTo(0.703, 1e-12));
     expect(
       resized.center.dx - resized.size.width / 2,
       closeTo(placement.center.dx - placement.size.width / 2, 1e-12),
