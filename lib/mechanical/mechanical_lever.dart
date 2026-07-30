@@ -195,6 +195,26 @@ class _MechanicalLeverState extends State<MechanicalLever> {
                       ),
                     ),
                   ),
+                  Positioned(
+                    left: geometry.trackLeft - 10,
+                    right: size.width - geometry.trackRight - 10,
+                    bottom: 5,
+                    child: IgnorePointer(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: <Widget>[
+                          VfdLegend(
+                            widget.offAtMinimum ? 'OFF' : 'MIN',
+                            palette: widget.palette,
+                            size: 7,
+                          ),
+                          if (widget.referenceValue != null)
+                            VfdLegend('REF', palette: widget.palette, size: 7),
+                          VfdLegend('MAX', palette: widget.palette, size: 7),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),

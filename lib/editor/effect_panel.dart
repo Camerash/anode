@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../mechanical/mechanical_channel_drum.dart';
 import '../mechanical/mechanical_lever.dart';
 import '../mechanical/mechanical_service_hatch.dart';
 import '../mechanical/prism_selector_bank.dart';
@@ -208,30 +209,51 @@ class _EffectPanelState extends State<EffectPanel> {
     return ColoredBox(
       color: const Color(0xFF050706),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2),
+        padding: const EdgeInsets.fromLTRB(4, 4, 4, 7),
         child: Column(
           children: <Widget>[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Expanded(
+                  child: MechanicalChannelDrum(
+                    labels: <String>[for (final item in specs) item.label],
+                    index: index,
+                    palette: _palette,
+                    prismStyle: widget.prismStyle,
+                    soundEnabled: widget.soundEnabled,
+                    hapticsEnabled: widget.hapticsEnabled,
+                    semanticLabel: 'Effect channel',
+                    onChanged: (value) => setState(() => _serviceIndex = value),
+                  ),
+                ),
+                const SizedBox(width: 5),
+                _serviceButton(
+                  key: const ValueKey('service-hatch-close'),
+                  label: 'Close',
+                  onPressed: () =>
+                      setState(() => _face = _EffectPanelFace.fascia),
+                ),
+              ],
+            ),
+            const SizedBox(height: 5),
             SizedBox(
-              height: PrismMetrics.height(PrismRole.compact),
+              height: 44,
               child: Row(
                 children: <Widget>[
-                  _serviceButton(
-                    key: const ValueKey('service-effect-previous'),
-                    label: 'Prev',
-                    enabled: index > 0,
-                    onPressed: () => setState(() => _serviceIndex = index - 1),
+                  SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: _icon(
+                      spec.pictogramId,
+                      lit: setting.enabled,
+                      enabled: known,
+                    ),
                   ),
-                  const SizedBox(width: 3),
+                  const SizedBox(width: 7),
                   Expanded(child: _serviceIdentity(spec, index, specs.length)),
-                  const SizedBox(width: 3),
-                  _serviceButton(
-                    key: const ValueKey('service-effect-next'),
-                    label: 'Next',
-                    enabled: index < specs.length - 1,
-                    onPressed: () => setState(() => _serviceIndex = index + 1),
-                  ),
                   if (widget.local && known) ...<Widget>[
-                    const SizedBox(width: 3),
+                    const SizedBox(width: 5),
                     _serviceButton(
                       key: ValueKey('effect-override-${spec.id}'),
                       label: 'Override',
@@ -240,40 +262,33 @@ class _EffectPanelState extends State<EffectPanel> {
                       onPressed: () => _toggleOverride(spec, overridden),
                     ),
                   ],
-                  const SizedBox(width: 3),
-                  _serviceButton(
-                    key: const ValueKey('service-hatch-close'),
-                    label: 'Close',
-                    onPressed: () =>
-                        setState(() => _face = _EffectPanelFace.fascia),
-                  ),
                 ],
               ),
             ),
-            const SizedBox(height: 4),
-            MechanicalLever(
-              key: ValueKey('effect-lever-${spec.id}'),
-              label: '${spec.label} strength',
-              value: setting.strength,
-              min: 0,
-              max: spec.maxStrength,
-              precision: spec.precision,
-              tickCount: 21,
-              referenceValue: spec.defaultStrength,
-              offAtMinimum: true,
-              leading: _icon(
-                spec.pictogramId,
-                lit: setting.enabled,
-                enabled: known,
+            const SizedBox(height: 5),
+            Expanded(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: MechanicalLever(
+                  key: ValueKey('effect-lever-${spec.id}'),
+                  label: '${spec.label} strength',
+                  value: setting.strength,
+                  min: 0,
+                  max: spec.maxStrength,
+                  precision: spec.precision,
+                  tickCount: 21,
+                  referenceValue: spec.defaultStrength,
+                  offAtMinimum: true,
+                  palette: _palette,
+                  prismStyle: widget.prismStyle,
+                  soundEnabled: widget.soundEnabled,
+                  hapticsEnabled: widget.hapticsEnabled,
+                  onChanged: editable
+                      ? (value) =>
+                            _setEffect(spec, setting.withStrength(value, spec))
+                      : null,
+                ),
               ),
-              palette: _palette,
-              prismStyle: widget.prismStyle,
-              soundEnabled: widget.soundEnabled,
-              hapticsEnabled: widget.hapticsEnabled,
-              onChanged: editable
-                  ? (value) =>
-                        _setEffect(spec, setting.withStrength(value, spec))
-                  : null,
             ),
           ],
         ),
@@ -281,21 +296,23 @@ class _EffectPanelState extends State<EffectPanel> {
     );
   }
 
-  Widget _serviceIdentity(EffectSpec spec, int index, int count) => FittedBox(
-    fit: BoxFit.scaleDown,
-    alignment: Alignment.centerLeft,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        VfdLegend(
-          '${index + 1} / $count · ${spec.label}',
-          palette: _palette,
-          lit: true,
-          size: 11,
-        ),
-        VfdLegend(spec.description, palette: _palette, size: 8),
-      ],
-    ),
+  Widget _serviceIdentity(EffectSpec spec, int index, int count) => Column(
+    mainAxisAlignment: MainAxisAlignment.center,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      VfdLegend(
+        'Channel ${index + 1} / $count',
+        palette: _palette,
+        lit: true,
+        size: 10,
+      ),
+      const SizedBox(height: 2),
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: VfdLegend(spec.description, palette: _palette, size: 8),
+      ),
+    ],
   );
 
   Widget _serviceButton({

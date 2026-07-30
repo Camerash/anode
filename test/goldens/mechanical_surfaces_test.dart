@@ -55,6 +55,43 @@ void main() {
     );
   });
 
+  testWidgets('editor PART register and ADD catalogue baselines', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(874, 402));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RepaintBoundary(
+          key: const ValueKey('surface'),
+          child: EditorPage(dashboard: dashboard, onChanged: (_) {}),
+        ),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('canvas-speed')),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+    await expectLater(
+      find.byKey(const ValueKey('surface')),
+      matchesGoldenFile('baselines/editor_part_register.png'),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('canvas-add')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+    await expectLater(
+      find.byKey(const ValueKey('surface')),
+      matchesGoldenFile('baselines/editor_add_catalogue.png'),
+    );
+  });
+
   testWidgets('LOOK fascia and service hatch baselines', (tester) async {
     await tester.binding.setSurfaceSize(const Size(700, 500));
     addTearDown(() => tester.binding.setSurfaceSize(null));

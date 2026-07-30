@@ -557,11 +557,13 @@ reveals a fixed-footprint service face. The surrounding service bay and canvas
 do not change size. The shutter releases for 20ms, travels at constant rate for
 110ms, and hard-seats for 20ms. It never rotates, scales, eases, or collapses in
 perspective; a narrow moving edge and shadow provide its only simulated depth.
-The service face shows one effect at a time: previous and next Prism keys with hard
-stops, an indexed position readout, the effect's name and physical description,
-a small secondary pictogram, inheritance control where local, exact value, and
-one recessed automotive lever. No effect overview grid, pager or scrolling
-exists. The last selected service channel is editor-session state only.
+The service face shows one effect at a time through an indexed channel drum.
+Previous, current, and next labels remain visible; fixed previous/next Prism
+keys move exactly one hard step. A dedicated line carries the physical
+description, small secondary pictogram, and local inheritance control. Exact
+value and one full-width recessed automotive lever sit below. No effect
+overview grid, pager, or scrolling exists. The last selected service channel
+is editor-session state only.
 
 Pictograms remain hand-authored period line art from non-persisted `EffectSpec`
 metadata, but never identify a control without its name. Unknown stored ids
@@ -702,6 +704,9 @@ write placement.
 Canvas controls are `ADD`, `SNAP`, `FIT`, and `FULL`. `ADD` opens a dedicated
 catalogue, outside the contextual inspector. Catalogue rows come from component
 registry metadata and use fixed mechanical pages, never kinetic scrolling.
+One selected-item cradle owns the catalogue's only live VFD renderer; tapping a
+row changes that preview without adding anything. Never create one fragment
+pass or animation controller per row.
 Long-pressing a row and dragging it onto the authored canvas creates the part at
 the dropped design-space centre; dropping a module creates an independently
 placeable tube region. The drag target remains disabled for inherited read-only
@@ -760,6 +765,12 @@ duplicate element list, visibility key, or reorder key. Z-order remains implicit
 list order until overlap proves a real need. Selected PART and non-main MODULE
 panels expose a constant-red `REMOVE` key; first actuation arms an inline
 confirmation face and a second red `REMOVE` commits.
+
+PART opens on an indexed register showing every available control and its
+current value: variant, module, optional action, then generic component params.
+Selecting one register key opens its focused control; `BACK` returns to the
+register. Overflow may use fixed complete pages, but must never hide control
+identity behind an unlabeled step position.
 
 ### Model findings from the developer editor
 

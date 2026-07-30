@@ -200,6 +200,8 @@ class _EditorPageState extends State<EditorPage> {
           ? EditorAddCatalogue(
               palette: _palette,
               prismStyle: _dashboard.settings.prismStyle,
+              dashboard: _dashboard,
+              renderAssets: widget.renderAssets,
               soundEnabled: widget.soundEnabled,
               hapticsEnabled: widget.hapticsEnabled,
               onClose: () => setState(() => _addCatalogueOpen = false),
@@ -1036,10 +1038,25 @@ class _DesignPanel extends StatelessWidget {
   }
 }
 
-class _PartPanel extends StatelessWidget {
+class _PartPanel extends StatefulWidget {
   const _PartPanel({required this.host});
 
   final _EditorServicePanel host;
+
+  @override
+  State<_PartPanel> createState() => _PartPanelState();
+}
+
+class _PartPanelState extends State<_PartPanel> {
+  String? _controlId;
+
+  _EditorServicePanel get host => widget.host;
+
+  @override
+  void didUpdateWidget(covariant _PartPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.host.selectedId != host.selectedId) _controlId = null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1058,29 +1075,9 @@ class _PartPanel extends StatelessWidget {
       child: Column(
         children: <Widget>[
           Expanded(
-            child: MechanicalPager(
-              pages: <Widget>[
-                _variant(component, type),
-                _module(component),
-                if (component.typeId == ComponentTypes.prismButton)
-                  _action(component),
-                ParamEditor(
-                  specs: type.paramsFor(component.effectiveVariant),
-                  values: component.effectiveParams,
-                  palette: host.palette,
-                  prismStyle: host.dashboard.settings.prismStyle,
-                  soundEnabled: host.soundEnabled,
-                  hapticsEnabled: host.hapticsEnabled,
-                  onChanged: (key, value) =>
-                      host.onComponentChanged(component.withParam(key, value)),
-                ),
-              ],
-              palette: host.palette,
-              prismStyle: host.dashboard.settings.prismStyle,
-              soundEnabled: host.soundEnabled,
-              hapticsEnabled: host.hapticsEnabled,
-              semanticLabel: 'Part controls',
-            ),
+            child: _controlId == null
+                ? _register(component, type)
+                : _detail(component, type, _controlId!),
           ),
           const SizedBox(height: 6),
           _GuardedRemove(
@@ -1094,6 +1091,168 @@ class _PartPanel extends StatelessWidget {
       ),
     );
   }
+
+  Widget _register(ComponentInstance component, ComponentTypeSpec type) {
+    final controls = _controls(component, type);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 280 ? 2 : 1;
+        final rows = (constraints.maxHeight / 50).floor().clamp(1, 3);
+        final pageCapacity = columns * rows;
+        final pages = <Widget>[];
+        for (var start = 0; start < controls.length; start += pageCapacity) {
+          final end = math.min(start + pageCapacity, controls.length);
+          pages.add(
+            Column(
+              children: <Widget>[
+                for (var row = 0; row < rows; row++) ...<Widget>[
+                  if (row > 0) const SizedBox(height: 4),
+                  Expanded(
+                    child: Row(
+                      children: <Widget>[
+                        for (var column = 0; column < columns; column++) ...[
+                          if (column > 0) const SizedBox(width: 4),
+                          Expanded(
+                            child: start + row * columns + column < end
+                                ? _registerButton(
+                                    controls[start + row * columns + column],
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }
+        return MechanicalPager(
+          pages: pages,
+          palette: host.palette,
+          prismStyle: host.dashboard.settings.prismStyle,
+          soundEnabled: host.soundEnabled,
+          hapticsEnabled: host.hapticsEnabled,
+          semanticLabel: 'Part control register',
+        );
+      },
+    );
+  }
+
+  Widget _registerButton(_PartControl control) => FittedBox(
+    key: ValueKey('part-control-${control.id}'),
+    fit: BoxFit.scaleDown,
+    child: PrismButton(
+      label: control.label,
+      value: control.value,
+      palette: host.palette,
+      role: PrismRole.compact,
+      span: PrismSpan.two,
+      style: host.dashboard.settings.prismStyle,
+      soundEnabled: host.soundEnabled,
+      hapticsEnabled: host.hapticsEnabled,
+      onPressed: () => setState(() => _controlId = control.id),
+    ),
+  );
+
+  Widget _detail(
+    ComponentInstance component,
+    ComponentTypeSpec type,
+    String controlId,
+  ) {
+    final control = _controls(
+      component,
+      type,
+    ).where((item) => item.id == controlId).firstOrNull;
+    if (control == null) {
+      _controlId = null;
+      return _register(component, type);
+    }
+    final body = switch (controlId) {
+      'variant' => _variant(component, type),
+      'module' => _module(component),
+      'action' => _action(component),
+      _ => ParamEditor(
+        specs: type
+            .paramsFor(component.effectiveVariant)
+            .where((spec) => 'param:${spec.key}' == controlId)
+            .toList(growable: false),
+        values: component.effectiveParams,
+        palette: host.palette,
+        prismStyle: host.dashboard.settings.prismStyle,
+        soundEnabled: host.soundEnabled,
+        hapticsEnabled: host.hapticsEnabled,
+        onChanged: (key, value) =>
+            host.onComponentChanged(component.withParam(key, value)),
+      ),
+    };
+    return Column(
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            PrismButton(
+              key: const ValueKey('part-control-back'),
+              label: 'Back',
+              palette: host.palette,
+              role: PrismRole.compact,
+              style: host.dashboard.settings.prismStyle,
+              soundEnabled: host.soundEnabled,
+              hapticsEnabled: host.hapticsEnabled,
+              onPressed: () => setState(() => _controlId = null),
+            ),
+            const SizedBox(width: 7),
+            Expanded(
+              child: VfdLegend(
+                control.label,
+                palette: host.palette,
+                lit: true,
+                size: 11,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 7),
+        Expanded(child: body),
+      ],
+    );
+  }
+
+  List<_PartControl> _controls(
+    ComponentInstance component,
+    ComponentTypeSpec type,
+  ) {
+    final variant =
+        type.variant(component.effectiveVariant)?.displayName ??
+        component.effectiveVariant.id;
+    final module = host.dashboard.modules
+        .where((item) => item.id == component.moduleId)
+        .firstOrNull;
+    final controls = <_PartControl>[
+      _PartControl('variant', 'Variant', variant),
+      _PartControl('module', 'Module', module?.name ?? 'Missing'),
+      if (component.typeId == ComponentTypes.prismButton)
+        _PartControl(
+          'action',
+          'Action',
+          component.actionBinding?.actionId ?? 'None',
+        ),
+      for (final spec in type.paramsFor(component.effectiveVariant))
+        _PartControl(
+          'param:${spec.key}',
+          spec.label,
+          _controlValue(component.effectiveParams[spec.key]),
+        ),
+    ];
+    return controls;
+  }
+
+  String _controlValue(Object? value) => switch (value) {
+    bool item => item ? 'On' : 'Off',
+    double item => item.toStringAsFixed(2),
+    null => '—',
+    _ => value.toString(),
+  };
 
   Widget _variant(ComponentInstance component, ComponentTypeSpec type) {
     final known = type.variant(component.effectiveVariant);
@@ -1240,6 +1399,14 @@ class _PartPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+class _PartControl {
+  const _PartControl(this.id, this.label, this.value);
+
+  final String id;
+  final String label;
+  final String value;
 }
 
 class _ModulePanel extends StatelessWidget {

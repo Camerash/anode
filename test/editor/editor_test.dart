@@ -567,6 +567,9 @@ void main() {
     expect(find.text('SEGMENTED NUMERIC SPEED READOUT.'), findsOneWidget);
 
     final source = find.byKey(const ValueKey('add-outsideTemp'));
+    await tester.tap(source);
+    await tester.pump();
+    expect(find.text('PREVIEW · OUTSIDE TEMPERATURE'), findsOneWidget);
     final target = tester.getCenter(
       find.byKey(const ValueKey('editor-authored-frame')),
     );
@@ -581,6 +584,38 @@ void main() {
       dashboard.components.where((value) => value.typeId == 'outsideTemp'),
       hasLength(1),
     );
+  });
+
+  testWidgets('PART opens with indexed register before focused control', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(900, 500));
+    final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorPage(dashboard: dashboard, onChanged: (_) {}),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('canvas-speed')),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+
+    expect(find.byKey(const ValueKey('part-control-variant')), findsOneWidget);
+    expect(find.byKey(const ValueKey('part-control-module')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('part-control-param:digits')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const ValueKey('part-control-variant')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('part-control-back')), findsOneWidget);
+    expect(find.text('VARIANT'), findsWidgets);
   });
 
   testWidgets('authored frame exposes registration and exact aspect readout', (

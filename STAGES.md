@@ -893,6 +893,43 @@ Findings:
 3. RACK confirmed no need for explicit z-order, visibility, or inventory UI.
    Reintroduce layer management only after a real overlapping design needs it.
 
+#### Stage 4 catalogue and control-legibility follow-up — DONE
+
+- [x] Add one live VFD preview cradle to the ADD catalogue. Row tap selects the
+      preview; long-press drag remains the only insertion gesture. Rows retain
+      fixed complete pages and descriptive registry metadata.
+- [x] Replace PART's anonymous top-level pager with an indexed register showing
+      variant, module, optional action, and every generic param with current
+      value. A focused control has an explicit BACK key.
+- [x] Replace LOOK's compressed identity strip with a hard-stepped automotive
+      channel drum. Previous/current/next labels stay visible, description and
+      pictogram have a dedicated line, local OVERRIDE remains discrete, and the
+      full-width lever labels OFF/MIN, REF, and MAX.
+- [x] Preserve one fragment pass for the authored scene. Catalogue preview uses
+      one controller and one renderer total, never one renderer per row.
+
+Findings:
+
+1. Several registered parts still have no shader implementation. Their
+   catalogue metadata remains visible and lossless, but live preview is blank
+   until renderer coverage is added; faking a different component would be
+   misleading.
+2. PART controls now prove generic param metadata is sufficient for discovery;
+   no bespoke control was required.
+
+Verification:
+
+- `flutter analyze`: clean.
+- `flutter test`: 145 passing, including channel-drum hard stops, catalogue
+  selection/insertion, indexed PART detail, responsive layouts, and updated
+  mechanical surface goldens.
+- `integration_test/halo_compounding_test.dart`: 4/4 on iPhone 17 Pro
+  simulator, iOS 26.3, Impeller. Original seam/halo assertions unchanged.
+- `integration_test/frame_extent_optics_test.dart`: 3/3 on the same simulator.
+- Fresh debug launch followed explicit termination. Native portrait screenshot
+  confirms runtime render reaches the full physical viewport behind the device
+  cutout; no shader constant or composite ordering changed.
+
 ---
 
 ## Stage 5 — speed estimation — NOT STARTED

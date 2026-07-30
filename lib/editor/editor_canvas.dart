@@ -8,11 +8,11 @@ import '../model/component_type.dart';
 import '../model/dashboard.dart';
 import '../model/placement.dart';
 import '../model/vfd_module.dart';
-import '../vfd/vfd_cluster.dart';
 import '../vfd/vfd_render_assets.dart';
 import '../vfd/prism_widgets.dart';
 import '../vfd/vfd_widgets.dart';
 import 'editor_add_catalogue.dart';
+import 'editor_live_preview.dart';
 import 'placement_transform.dart';
 
 class EditorCanvas extends StatefulWidget {
@@ -238,7 +238,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
       clipBehavior: Clip.hardEdge,
       children: <Widget>[
         if (widget.renderAssets != null)
-          _LiveVfdPreview(
+          EditorLiveVfdPreview(
             renderAssets: widget.renderAssets!,
             dashboard: widget.dashboard,
             orientation: widget.orientation,
@@ -1022,51 +1022,4 @@ class _OutsideFramePainter extends CustomPainter {
       oldDelegate.frame != frame ||
       oldDelegate.palette != palette ||
       oldDelegate.insideScrim != insideScrim;
-}
-
-class _LiveVfdPreview extends StatefulWidget {
-  const _LiveVfdPreview({
-    required this.renderAssets,
-    required this.dashboard,
-    required this.orientation,
-    required this.safeInsets,
-  });
-
-  final VfdRenderAssets renderAssets;
-  final Dashboard dashboard;
-  final DesignOrientation orientation;
-  final EdgeInsets safeInsets;
-
-  @override
-  State<_LiveVfdPreview> createState() => _LiveVfdPreviewState();
-}
-
-class _LiveVfdPreviewState extends State<_LiveVfdPreview>
-    with SingleTickerProviderStateMixin {
-  late final VfdController _controller = VfdController(
-    vsync: this,
-    design: widget.dashboard,
-    orientation: widget.orientation,
-  )..speedKph = 95;
-
-  @override
-  void didUpdateWidget(covariant _LiveVfdPreview oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _controller
-      ..design = widget.dashboard
-      ..orientation = widget.orientation;
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => VfdCluster(
-    renderAssets: widget.renderAssets,
-    controller: _controller,
-    safeInsets: widget.safeInsets,
-  );
 }

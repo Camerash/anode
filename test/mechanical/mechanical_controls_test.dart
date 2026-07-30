@@ -1,4 +1,5 @@
 import 'package:anode/mechanical/mechanical_flip_tray.dart';
+import 'package:anode/mechanical/mechanical_channel_drum.dart';
 import 'package:anode/mechanical/mechanical_pager.dart';
 import 'package:anode/mechanical/mechanical_push_drawer.dart';
 import 'package:anode/model/optical_profile.dart';
@@ -282,5 +283,41 @@ void main() {
     await tester.tapAt(Offset(rect.left + rect.width * 0.36, rect.center.dy));
     expect(changed, closeTo(0.7, 1e-9));
     expect(tester.getSemantics(bar).flagsCollection.isSlider, isTrue);
+  });
+
+  testWidgets('channel drum exposes neighbours and hard indexed steps', (
+    tester,
+  ) async {
+    var index = 1;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, rebuild) => MechanicalChannelDrum(
+            labels: const <String>['EMISSION', 'BLOOM', 'GRID'],
+            index: index,
+            palette: palette,
+            prismStyle: const PrismStyle(),
+            soundEnabled: false,
+            hapticsEnabled: false,
+            onChanged: (value) => rebuild(() => index = value),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('EMISSION'), findsOneWidget);
+    expect(find.text('BLOOM'), findsOneWidget);
+    expect(find.text('GRID'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('service-effect-next')));
+    await tester.pump();
+    expect(index, 2);
+    expect(
+      tester
+          .widget<PrismButton>(
+            find.byKey(const ValueKey('service-effect-next')),
+          )
+          .enabled,
+      isFalse,
+    );
   });
 }

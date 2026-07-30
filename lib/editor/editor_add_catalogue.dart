@@ -3,10 +3,16 @@ import 'package:flutter/widgets.dart';
 import '../mechanical/mechanical_feedback.dart';
 import '../mechanical/mechanical_pager.dart';
 import '../mechanical/prism_selector_bank.dart';
+import '../model/component_instance.dart';
 import '../model/component_type.dart';
+import '../model/dashboard.dart';
 import '../model/optical_profile.dart';
+import '../model/placement.dart';
+import '../model/vfd_module.dart';
 import '../vfd/prism_widgets.dart';
+import '../vfd/vfd_render_assets.dart';
 import '../vfd/vfd_widgets.dart';
+import 'editor_live_preview.dart';
 
 enum EditorAddKind { parts, modules }
 
@@ -33,6 +39,8 @@ class EditorAddCatalogue extends StatefulWidget {
     required this.soundEnabled,
     required this.hapticsEnabled,
     required this.onClose,
+    required this.dashboard,
+    this.renderAssets,
   });
 
   final VfdPalette palette;
@@ -40,6 +48,8 @@ class EditorAddCatalogue extends StatefulWidget {
   final bool soundEnabled;
   final bool hapticsEnabled;
   final VoidCallback onClose;
+  final Dashboard dashboard;
+  final VfdRenderAssets? renderAssets;
 
   @override
   State<EditorAddCatalogue> createState() => _EditorAddCatalogueState();
@@ -47,6 +57,7 @@ class EditorAddCatalogue extends StatefulWidget {
 
 class _EditorAddCatalogueState extends State<EditorAddCatalogue> {
   EditorAddKind _kind = EditorAddKind.parts;
+  EditorAddRequest? _selected;
 
   List<EditorAddRequest> get _items => switch (_kind) {
     EditorAddKind.parts => <EditorAddRequest>[
@@ -56,6 +67,20 @@ class _EditorAddCatalogueState extends State<EditorAddCatalogue> {
       EditorAddRequest.module(),
     ],
   };
+
+  EditorAddRequest get _currentSelection {
+    final items = _items;
+    final selected = _selected;
+    if (selected != null &&
+        items.any(
+          (item) =>
+              item.kind == selected.kind &&
+              item.componentType?.id == selected.componentType?.id,
+        )) {
+      return selected;
+    }
+    return items.first;
+  }
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -84,7 +109,10 @@ class _EditorAddCatalogueState extends State<EditorAddCatalogue> {
                 soundEnabled: widget.soundEnabled,
                 hapticsEnabled: widget.hapticsEnabled,
                 semanticLabel: 'Add catalogue type',
-                onSelected: (value) => setState(() => _kind = value),
+                onSelected: (value) => setState(() {
+                  _kind = value;
+                  _selected = null;
+                }),
               ),
             ),
             const SizedBox(width: 6),
@@ -101,6 +129,16 @@ class _EditorAddCatalogueState extends State<EditorAddCatalogue> {
           ],
         ),
         const SizedBox(height: 8),
+        SizedBox(
+          height: 92,
+          child: _CataloguePreview(
+            request: _currentSelection,
+            dashboard: widget.dashboard,
+            renderAssets: widget.renderAssets,
+            palette: widget.palette,
+          ),
+        ),
+        const SizedBox(height: 6),
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -139,6 +177,11 @@ class _EditorAddCatalogueState extends State<EditorAddCatalogue> {
                   palette: widget.palette,
                   soundEnabled: widget.soundEnabled,
                   hapticsEnabled: widget.hapticsEnabled,
+                  selected:
+                      items[index].kind == _currentSelection.kind &&
+                      items[index].componentType?.id ==
+                          _currentSelection.componentType?.id,
+                  onSelected: () => setState(() => _selected = items[index]),
                 ),
               ),
               if (index + 1 < end) const SizedBox(height: 4),
@@ -157,12 +200,16 @@ class _CatalogueRow extends StatelessWidget {
     required this.palette,
     required this.soundEnabled,
     required this.hapticsEnabled,
+    required this.selected,
+    required this.onSelected,
   });
 
   final EditorAddRequest request;
   final VfdPalette palette;
   final bool soundEnabled;
   final bool hapticsEnabled;
+  final bool selected;
+  final VoidCallback onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -173,20 +220,30 @@ class _CatalogueRow extends StatelessWidget {
       description: description,
       palette: palette,
     );
-    return Semantics(
-      label: request.label,
-      hint: 'Long press, then drag onto the design',
-      child: LongPressDraggable<EditorAddRequest>(
-        key: ValueKey('add-${request.componentType?.id ?? 'module'}'),
-        data: request,
-        hapticFeedbackOnStart: false,
-        onDragStarted: () => actuateMechanicalFeedback(
-          soundEnabled: soundEnabled,
-          hapticsEnabled: hapticsEnabled,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onSelected,
+      child: Semantics(
+        label: request.label,
+        selected: selected,
+        hint: 'Tap to preview. Long press, then drag onto the design',
+        child: LongPressDraggable<EditorAddRequest>(
+          key: ValueKey('add-${request.componentType?.id ?? 'module'}'),
+          data: request,
+          hapticFeedbackOnStart: false,
+          onDragStarted: () => actuateMechanicalFeedback(
+            soundEnabled: soundEnabled,
+            hapticsEnabled: hapticsEnabled,
+          ),
+          feedback: SizedBox(width: 240, height: 58, child: face),
+          childWhenDragging: Opacity(opacity: 0.32, child: face),
+          child: _CatalogueFace(
+            request: request,
+            description: description,
+            palette: palette,
+            selected: selected,
+          ),
         ),
-        feedback: SizedBox(width: 240, height: 58, child: face),
-        childWhenDragging: Opacity(opacity: 0.32, child: face),
-        child: face,
       ),
     );
   }
@@ -197,17 +254,23 @@ class _CatalogueFace extends StatelessWidget {
     required this.request,
     required this.description,
     required this.palette,
+    this.selected = false,
   });
 
   final EditorAddRequest request;
   final String description;
   final VfdPalette palette;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(
       color: const Color(0xFF090D0C),
-      border: Border.all(color: palette.unlit.withValues(alpha: 0.42)),
+      border: Border.all(
+        color: (selected ? palette.lit : palette.unlit).withValues(
+          alpha: selected ? 0.9 : 0.42,
+        ),
+      ),
     ),
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -236,6 +299,129 @@ class _CatalogueFace extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _CataloguePreview extends StatelessWidget {
+  const _CataloguePreview({
+    required this.request,
+    required this.dashboard,
+    required this.renderAssets,
+    required this.palette,
+  });
+
+  final EditorAddRequest request;
+  final Dashboard dashboard;
+  final VfdRenderAssets? renderAssets;
+  final VfdPalette palette;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: const Color(0xFF020403),
+      border: Border.all(color: palette.unlit.withValues(alpha: 0.5)),
+    ),
+    child: Stack(
+      children: <Widget>[
+        Positioned.fill(
+          child: renderAssets == null
+              ? CustomPaint(painter: _PreviewStandbyPainter(palette))
+              : EditorLiveVfdPreview(
+                  renderAssets: renderAssets!,
+                  dashboard: _previewDashboard(),
+                  orientation: DesignOrientation.landscape,
+                ),
+        ),
+        Positioned(
+          left: 7,
+          top: 5,
+          child: VfdLegend(
+            'Preview · ${request.label}',
+            palette: palette,
+            lit: true,
+            size: 8,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Dashboard _previewDashboard() {
+    const orientation = DesignOrientation.landscape;
+    const frame = FrameSpec(width: 2.6, height: 1);
+    final type =
+        request.componentType ??
+        ComponentTypes.byId(ComponentTypes.speedDigits)!;
+    final recommended =
+        type.variant(type.legacyVariant)?.recommendedSize ?? type.defaultSize;
+    final scale = (1.7 / recommended.width)
+        .clamp(0.0, 1.0)
+        .clamp(0.0, (0.62 / recommended.height).clamp(0.0, 1.0));
+    final size = Size(recommended.width * scale, recommended.height * scale);
+    const previewModuleId = 'catalogue.preview.module';
+    final moduleRequest = request.kind == EditorAddKind.modules;
+    return Dashboard(
+      id: 'catalogue.preview',
+      name: request.label,
+      primaryOrientation: orientation,
+      frameSpecs: const <DesignOrientation, FrameSpec>{orientation: frame},
+      settings: dashboard.settings,
+      modules: moduleRequest
+          ? <VfdModule>[
+              VfdModule(id: kMainVfdModuleId, name: 'Main tube'),
+              VfdModule(
+                id: previewModuleId,
+                name: 'Preview module',
+                regions: const <DesignOrientation, Placement>{
+                  orientation: Placement(
+                    center: Offset.zero,
+                    size: Size(1.9, 0.72),
+                  ),
+                },
+              ),
+            ]
+          : dashboard.modules,
+      components: <ComponentInstance>[
+        ComponentInstance(
+          id: 'catalogue.preview.part',
+          typeId: type.id,
+          moduleId: moduleRequest ? previewModuleId : kMainVfdModuleId,
+          placements: <DesignOrientation, Placement>{
+            orientation: Placement(center: Offset.zero, size: size),
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _PreviewStandbyPainter extends CustomPainter {
+  const _PreviewStandbyPainter(this.palette);
+
+  final VfdPalette palette;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = palette.unlit.withValues(alpha: 0.32)
+      ..style = PaintingStyle.stroke;
+    canvas.drawRect(
+      Rect.fromCenter(
+        center: size.center(Offset.zero),
+        width: size.width * 0.45,
+        height: size.height * 0.36,
+      ),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(size.width * 0.18, size.height * 0.74),
+      Offset(size.width * 0.82, size.height * 0.74),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PreviewStandbyPainter oldDelegate) =>
+      oldDelegate.palette != palette;
 }
 
 class _DragGripPainter extends CustomPainter {
