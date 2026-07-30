@@ -142,16 +142,18 @@ bezel mask, no `ClipRRect`, no rounded corners, no fixed `AspectRatio`. On OLED
 the near-black substrate blends into the device bezel so the tube appears to
 continue past the glass. Any vignette is a gentle falloff, never an edge.
 
-Content insets to safe area; the background does not. System UI is hidden.
+Authored design content uses the complete device viewport, including unsafe
+regions. App chrome such as `SET`, editor rails, and service controls remains
+inside the safe area. System UI is hidden.
 
 Every design owns a primary fixed `FrameSpec` and may own one explicit
 opposite-orientation alternate. A `FrameSpec` stores an **extent** — width and
 height in design units — not a bare aspect. The authored extent is
-**contain-fitted inside the safe rect**, picking the tighter axis and centring
+**contain-fitted inside the full viewport**, picking the tighter axis and centring
 the frame. A missing alternate uses the primary unchanged; content never
-rotates. Contain fit never crops or clamps component placement. The safe rect
-governs placement only, so halo, sheen, and grain keep evaluating across the
-full fragment bounds and spill past both the frame and screen edge.
+rotates. Contain fit never crops or clamps component placement. Halo, sheen,
+and grain keep evaluating across the full fragment bounds and spill past both
+the authored frame and screen edge.
 
 **A design unit is frame-independent.** It is a physical unit of the tube face,
 roughly the height of the module in the reference photographs — it is not "the
@@ -402,7 +404,7 @@ inherited primary contained and dimmed inside it. That is what the runtime
 actually shows, so `CREATE` is visibly a promotion of exactly what is on screen.
 
 `CREATE PORTRAIT` or `CREATE LANDSCAPE` explicitly adds an independent
-alternate. Its extent comes from the **device safe rect measured at the current
+alternate. Its extent comes from the **full device viewport measured at the current
 fit scale**: given a primary of extent `(pw, ph)` and a device rect `(W, H)`
 oriented to the target, `s = min(W/pw, H/ph)` and the new extent is `(W/s, H/s)`.
 Placements are then copied **verbatim** — nothing is rescaled. This is what makes
@@ -411,9 +413,12 @@ the geometry does not move, and because a design unit still means the same
 thing, neither does the optical layer. Both the read-only preview and the bake
 call one shared function, so they cannot disagree.
 
-The device rect is measured above the editor's own `SafeArea`. A cramped editor,
-an open service bay, or a full-screen session must never bake a different
-envelope.
+The device rect is `MediaQuery.size`, never size minus safe padding. A cramped
+editor, an open service bay, or a full-screen session must never bake a
+different envelope. Safe padding is a dim, non-rendering editor guide only.
+Flutter's rectangular insets do not describe a Dynamic Island silhouette;
+precise portable cutout guides belong to future device-profile metadata, not
+component placement.
 
 The alternate can then diverge freely or be reset to primary fallback.
 Export/import preserves primary identity, every authored frame extent, and every
@@ -652,18 +657,17 @@ depth already rules out accidental entry.
 ### The editor is its own route
 
 Editing needs persistent chrome that tuning does not, so it gets a dedicated
-screen: a contain-fit authored canvas plus a component list and inspector. On
+screen: a contain-fit authored canvas plus a contextual inspector. On
 entry, current window orientation is previewed. The top switch chooses portrait
 or landscape viewport. If no matching alternate exists, it shows the contained
 primary read-only and offers explicit creation.
 
-The editor canvas is the one place a visible frame edge is correct. Every
-authored frame holds its reference aspect regardless of window shape and scales
-to fit. Matte outside the double boundary dims rendered component portions
-without clipping their hit regions; off-frame elements remain selectable,
-draggable, and resizable. `BRING IN` moves each recoverable axis only far enough
-to contain the border box; an axis wider than the frame centres. Size never
-changes.
+The editor canvas is the one place visible frame edges are correct. Its outer
+boundary is the complete runtime device envelope; the fixed authored frame is
+contained inside it. A dim safe-area guide never constrains placement or enters
+render output. Matte outside the authored boundary dims rendered component
+portions without clipping their hit regions; off-frame elements remain
+selectable, draggable, and resizable.
 
 The editor uses one live, shared render of the whole design plus non-painting
 selection/drag/resize overlays. It does not embed component shaders or create
@@ -677,7 +681,8 @@ the current route window, never the preview orientation: `height > width` pushes
 from the bottom; `width >= height` pushes from the right. Opening it reduces
 available preview bounds, then
 re-contain-fits the same authored frame. It never changes authored coordinates,
-fixed aspect, or element size. The closed bay leaves a 44px triangular latch.
+fixed aspect, or element size. The closed bay leaves a compact Prism `PANEL`
+latch. Its permanent legend stays unchanged; illumination means open.
 
 There is no camera mode switch. One pointer gesture is resolved at pointer-down
 by explicit hit-testing against known screen-space rects, topmost first, corner
@@ -694,7 +699,15 @@ before edges:
 Camera scale is clamped 1×–4×; `FIT` restores identity. Camera transforms never
 write placement.
 
-Canvas controls are `SNAP`, `FIT`, and `FULL`. `SNAP` is illuminated and active
+Canvas controls are `ADD`, `SNAP`, `FIT`, and `FULL`. `ADD` opens a dedicated
+catalogue, outside the contextual inspector. Catalogue rows come from component
+registry metadata and use fixed mechanical pages, never kinetic scrolling.
+Long-pressing a row and dragging it onto the authored canvas creates the part at
+the dropped design-space centre; dropping a module creates an independently
+placeable tube region. The drag target remains disabled for inherited read-only
+layouts.
+
+`SNAP` is illuminated and active
 by default, lives only for the editor session, and survives preview/full-screen
 switches. It affects component and module drag/resize only. A gesture quantizes
 its total design-space delta to `0.1` relative to the pointer-down placement,
@@ -735,11 +748,18 @@ clamping. Placements remain intentionally unclamped to the frame.
 required `size: Size`, persisted only as `x`, `y`, `w`, `h`. Fixed authored
 frames and contain-fit make anchors and span axes redundant. Alternate creation
 copies placements verbatim. PLACE is one non-paged surface: precise X/Y, 3×3
-D-pad with centre `BRING IN`, and W/H minus/readout/plus rows. D-pad and size
+D-pad with centre `CENTER`, and W/H minus/readout/plus rows. `CENTER` writes
+`Offset.zero` without changing size. D-pad and size
 buttons always step `0.005`, independent of SNAP. One drag/resize detent is
 therefore twenty fine-control steps. The coarse grid is fixed in design units
 (one tenth of the reference tube height), never derived from viewport pixels
 or camera zoom, so imported geometry edits remain deterministic across devices.
+
+The canvas is the only inventory and selection surface. There is no RACK,
+duplicate element list, visibility key, or reorder key. Z-order remains implicit
+list order until overlap proves a real need. Selected PART and non-main MODULE
+panels expose a constant-red `REMOVE` key; first actuation arms an inline
+confirmation face and a second red `REMOVE` commits.
 
 ### Model findings from the developer editor
 

@@ -2,6 +2,7 @@ import 'package:anode/mechanical/mechanical_flip_tray.dart';
 import 'package:anode/mechanical/mechanical_pager.dart';
 import 'package:anode/mechanical/mechanical_push_drawer.dart';
 import 'package:anode/model/optical_profile.dart';
+import 'package:anode/vfd/prism_widgets.dart';
 import 'package:anode/vfd/vfd_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -219,6 +220,7 @@ void main() {
                   edge: MechanicalDrawerEdge.right,
                   extent: 180,
                   palette: palette,
+                  prismStyle: const PrismStyle(),
                   soundEnabled: false,
                   hapticsEnabled: false,
                   onOpenChanged: (value) => rebuild(() => open = value),
@@ -236,9 +238,15 @@ void main() {
       tester.getSize(find.byKey(const ValueKey('drawer-content'))).width,
       500,
     );
+    expect(find.text('PANEL'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
+    final latch = tester.widget<PrismButton>(
+      find.byKey(const ValueKey('mechanical-drawer-latch')),
+    );
+    expect(latch.label, 'Panel');
+    expect(latch.lit, isTrue);
     expect(
       tester.getSize(find.byKey(const ValueKey('drawer-content'))).width,
       320,

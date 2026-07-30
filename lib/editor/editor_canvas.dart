@@ -12,6 +12,7 @@ import '../vfd/vfd_cluster.dart';
 import '../vfd/vfd_render_assets.dart';
 import '../vfd/prism_widgets.dart';
 import '../vfd/vfd_widgets.dart';
+import 'editor_add_catalogue.dart';
 import 'placement_transform.dart';
 
 class EditorCanvas extends StatefulWidget {
@@ -22,7 +23,8 @@ class EditorCanvas extends StatefulWidget {
     required this.selectedId,
     required this.onSelect,
     required this.onPlacementChanged,
-    required this.deviceSafeSize,
+    required this.deviceViewportSize,
+    this.deviceSafeInsets = EdgeInsets.zero,
     this.selectedModuleId,
     this.onModulePlacementChanged,
     this.renderAssets,
@@ -31,6 +33,8 @@ class EditorCanvas extends StatefulWidget {
     this.frameInset = const EdgeInsets.all(24),
     this.fullScreen = false,
     this.onToggleFullScreen,
+    this.onAddRequested,
+    this.onAddDropped,
     this.snapEnabled = true,
     this.onToggleSnap,
     this.soundEnabled = true,
@@ -44,10 +48,10 @@ class EditorCanvas extends StatefulWidget {
   final void Function(String componentId, Placement placement)
   onPlacementChanged;
 
-  /// The device's own safe rect, measured above the editor's `SafeArea`. The
-  /// read-only preview of an unauthored orientation shows the envelope this
-  /// would produce, which is the same one `CREATE` bakes.
-  final Size deviceSafeSize;
+  /// Full device viewport. Unsafe regions remain authorable; [deviceSafeInsets]
+  /// paint a non-rendering guide only.
+  final Size deviceViewportSize;
+  final EdgeInsets deviceSafeInsets;
   final String? selectedModuleId;
   final void Function(String moduleId, Placement placement)?
   onModulePlacementChanged;
@@ -57,6 +61,8 @@ class EditorCanvas extends StatefulWidget {
   final EdgeInsets frameInset;
   final bool fullScreen;
   final VoidCallback? onToggleFullScreen;
+  final VoidCallback? onAddRequested;
+  final void Function(EditorAddRequest request, Offset center)? onAddDropped;
   final bool snapEnabled;
   final VoidCallback? onToggleSnap;
   final bool soundEnabled;
@@ -135,16 +141,15 @@ class _EditorCanvasState extends State<EditorCanvas> {
           );
           final layoutExtent = widget.dashboard.frameExtent(widget.orientation);
 
-          // An unauthored orientation is previewed as the device envelope it
-          // would be given, with the inherited layout contained inside it —
-          // which is what the runtime actually shows, and what CREATE bakes.
-          final boundaryExtent = widget.editable
-              ? layoutExtent
-              : viewportFrameExtent(
-                  widget.previewOrientation ?? widget.orientation,
-                  widget.deviceSafeSize,
-                  widget.dashboard.frameSpec(widget.orientation),
-                );
+          // Outer boundary is always the complete runtime viewport. Authored
+          // geometry remains inside its fixed contained frame.
+          final previewOrientation =
+              widget.previewOrientation ?? widget.orientation;
+          final boundaryExtent = viewportFrameExtent(
+            previewOrientation,
+            widget.deviceViewportSize,
+            widget.dashboard.frameSpec(widget.orientation),
+          );
 
           final bounds = widget.frameInset.deflateRect(Offset.zero & sceneSize);
           final boundary = _containRect(
@@ -156,45 +161,60 @@ class _EditorCanvasState extends State<EditorCanvas> {
             ),
             boundaryExtent,
           );
-          final content = widget.editable
-              ? boundary
-              : _containRect(boundary, layoutExtent);
+          final content = _containRect(boundary, layoutExtent);
+          final safeGuide = _safeGuideRect(boundary, previewOrientation);
 
           _layoutExtent = layoutExtent;
           _designScale = content.height / layoutExtent.height;
           _items = _buildItems(content);
 
-          return Stack(
-            fit: StackFit.expand,
-            children: <Widget>[
-              ClipRect(
-                key: const ValueKey('editor-camera'),
-                child: Transform(
-                  transform: _cameraTransform(),
-                  alignment: Alignment.topLeft,
-                  child: _buildScene(
-                    sceneSize: sceneSize,
-                    boundary: boundary,
-                    content: content,
-                    palette: palette,
+          return DragTarget<EditorAddRequest>(
+            onWillAcceptWithDetails: (_) =>
+                widget.editable && widget.onAddDropped != null,
+            onAcceptWithDetails: (details) =>
+                _acceptDrop(context, content, details),
+            builder: (context, candidates, rejected) => Stack(
+              fit: StackFit.expand,
+              children: <Widget>[
+                ClipRect(
+                  key: const ValueKey('editor-camera'),
+                  child: Transform(
+                    transform: _cameraTransform(),
+                    alignment: Alignment.topLeft,
+                    child: _buildScene(
+                      sceneSize: sceneSize,
+                      boundary: boundary,
+                      content: content,
+                      safeGuide: safeGuide,
+                      palette: palette,
+                    ),
                   ),
                 ),
-              ),
-              // Selection chrome lives in screen space so handles stay a
-              // constant 44px at any zoom, and so the hit test never has to
-              // undo the camera transform.
-              _overlay(),
-              Listener(
-                behavior: HitTestBehavior.opaque,
-                onPointerDown: _onPointerDown,
-                onPointerMove: _onPointerMove,
-                onPointerUp: (event) => _endPointer(event.pointer, tap: true),
-                onPointerCancel: (event) =>
-                    _endPointer(event.pointer, tap: false),
-                onPointerSignal: _onPointerSignal,
-              ),
-              _controls(palette),
-            ],
+                // Selection chrome lives in screen space so handles stay a
+                // constant 44px at any zoom, and so the hit test never has to
+                // undo the camera transform.
+                _overlay(),
+                Listener(
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: _onPointerDown,
+                  onPointerMove: _onPointerMove,
+                  onPointerUp: (event) => _endPointer(event.pointer, tap: true),
+                  onPointerCancel: (event) =>
+                      _endPointer(event.pointer, tap: false),
+                  onPointerSignal: _onPointerSignal,
+                ),
+                if (candidates.isNotEmpty)
+                  IgnorePointer(
+                    child: CustomPaint(
+                      painter: _DropTargetPainter(
+                        palette: palette,
+                        frame: content,
+                      ),
+                    ),
+                  ),
+                _controls(palette),
+              ],
+            ),
           );
         },
       ),
@@ -209,6 +229,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
     required Size sceneSize,
     required Rect boundary,
     required Rect content,
+    required Rect? safeGuide,
     required VfdPalette palette,
   }) => SizedBox.fromSize(
     size: sceneSize,
@@ -233,7 +254,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
           ),
         CustomPaint(
           painter: _OutsideFramePainter(
-            frame: boundary,
+            frame: content,
             palette: palette,
             // Dimming, not opacity: an Opacity layer over the shader forces a
             // saveLayer above the render pass.
@@ -244,16 +265,28 @@ class _EditorCanvasState extends State<EditorCanvas> {
           painter: _AuthoredFramePainter(
             palette: palette,
             frame: boundary,
-            innerFrame: widget.editable ? null : content,
+            innerFrame: content,
           ),
         ),
+        if (safeGuide != null)
+          CustomPaint(
+            key: const ValueKey('device-safe-guide'),
+            painter: _DeviceSafeGuidePainter(
+              palette: palette,
+              safeFrame: safeGuide,
+            ),
+          ),
         Positioned.fromRect(
           rect: boundary,
           child: const SizedBox(key: ValueKey('editor-canvas')),
         ),
+        Positioned.fromRect(
+          rect: content,
+          child: const SizedBox(key: ValueKey('editor-authored-frame')),
+        ),
         Positioned(
-          left: boundary.left + 7,
-          top: boundary.top + 7,
+          left: content.left + 7,
+          top: content.top + 7,
           child: VfdLegend(_frameLabel(), palette: palette, lit: true, size: 9),
         ),
       ],
@@ -292,6 +325,19 @@ class _EditorCanvasState extends State<EditorCanvas> {
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
+        if (widget.onAddRequested != null) ...<Widget>[
+          PrismButton(
+            key: const ValueKey('canvas-add'),
+            label: 'Add',
+            palette: palette,
+            role: PrismRole.compact,
+            style: widget.dashboard.settings.prismStyle,
+            soundEnabled: widget.soundEnabled,
+            hapticsEnabled: widget.hapticsEnabled,
+            onPressed: widget.editable ? widget.onAddRequested : null,
+          ),
+          const SizedBox(width: 5),
+        ],
         PrismButton(
           key: const ValueKey('canvas-snap'),
           label: 'Snap',
@@ -420,6 +466,48 @@ class _EditorCanvasState extends State<EditorCanvas> {
       width,
       height,
     );
+  }
+
+  Rect? _safeGuideRect(Rect boundary, DesignOrientation target) {
+    var insets = widget.deviceSafeInsets;
+    var viewport = widget.deviceViewportSize;
+    final viewportPortrait = viewport.height >= viewport.width;
+    final targetPortrait = target == DesignOrientation.portrait;
+    if (viewportPortrait != targetPortrait) {
+      viewport = Size(viewport.height, viewport.width);
+      insets = EdgeInsets.fromLTRB(
+        insets.bottom,
+        insets.left,
+        insets.top,
+        insets.right,
+      );
+    }
+    if (insets == EdgeInsets.zero ||
+        viewport.width <= 0 ||
+        viewport.height <= 0) {
+      return null;
+    }
+    return Rect.fromLTRB(
+      boundary.left + boundary.width * insets.left / viewport.width,
+      boundary.top + boundary.height * insets.top / viewport.height,
+      boundary.right - boundary.width * insets.right / viewport.width,
+      boundary.bottom - boundary.height * insets.bottom / viewport.height,
+    );
+  }
+
+  void _acceptDrop(
+    BuildContext context,
+    Rect content,
+    DragTargetDetails<EditorAddRequest> details,
+  ) {
+    final box = context.findRenderObject()! as RenderBox;
+    final local = box.globalToLocal(details.offset);
+    final scene = (local - _cameraOrigin) / _cameraScale;
+    final center = Offset(
+      (scene.dx - content.center.dx) / _designScale,
+      -(scene.dy - content.center.dy) / _designScale,
+    );
+    widget.onAddDropped?.call(details.data, center);
   }
 
   // --- interaction ----------------------------------------------------------
@@ -833,6 +921,70 @@ class _AuthoredFramePainter extends CustomPainter {
       oldDelegate.palette != palette ||
       oldDelegate.frame != frame ||
       oldDelegate.innerFrame != innerFrame;
+}
+
+class _DeviceSafeGuidePainter extends CustomPainter {
+  const _DeviceSafeGuidePainter({
+    required this.palette,
+    required this.safeFrame,
+  });
+
+  final VfdPalette palette;
+  final Rect safeFrame;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final guide = Paint()
+      ..color = palette.unlit.withValues(alpha: 0.34)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+    canvas.drawRect(safeFrame, guide);
+    const mark = 7.0;
+    for (final corner in <Offset>[
+      safeFrame.topLeft,
+      safeFrame.topRight,
+      safeFrame.bottomLeft,
+      safeFrame.bottomRight,
+    ]) {
+      final horizontal = corner.dx == safeFrame.left ? mark : -mark;
+      final vertical = corner.dy == safeFrame.top ? mark : -mark;
+      canvas
+        ..drawLine(corner, corner + Offset(horizontal, 0), guide)
+        ..drawLine(corner, corner + Offset(0, vertical), guide);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DeviceSafeGuidePainter oldDelegate) =>
+      oldDelegate.palette != palette || oldDelegate.safeFrame != safeFrame;
+}
+
+class _DropTargetPainter extends CustomPainter {
+  const _DropTargetPainter({required this.palette, required this.frame});
+
+  final VfdPalette palette;
+  final Rect frame;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(
+      frame,
+      Paint()
+        ..color = palette.lit.withValues(alpha: 0.10)
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawRect(
+      frame.deflate(2),
+      Paint()
+        ..color = palette.lit.withValues(alpha: 0.92)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _DropTargetPainter oldDelegate) =>
+      oldDelegate.palette != palette || oldDelegate.frame != frame;
 }
 
 class _OutsideFramePainter extends CustomPainter {

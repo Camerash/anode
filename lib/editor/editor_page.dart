@@ -18,12 +18,13 @@ import '../model/vfd_module.dart';
 import '../vfd/prism_widgets.dart';
 import '../vfd/vfd_render_assets.dart';
 import '../vfd/vfd_widgets.dart';
+import 'editor_add_catalogue.dart';
 import 'editor_canvas.dart';
 import 'effect_panel.dart';
 import 'param_editor.dart';
 import 'placement_transform.dart';
 
-enum _EditorSection { rack, design, part, module, look, prism, place }
+enum _EditorSection { design, part, module, look, prism, place }
 
 class EditorPage extends StatefulWidget {
   const EditorPage({
@@ -54,6 +55,7 @@ class _EditorPageState extends State<EditorPage> {
   String? _selectedId;
   String? _selectedModuleId;
   bool _drawerOpen = false;
+  bool _addCatalogueOpen = false;
   bool _fullScreen = false;
   bool _snapEnabled = true;
 
@@ -75,25 +77,18 @@ class _EditorPageState extends State<EditorPage> {
     _orientation = current;
   }
 
-  /// The device's own safe rect. Read here, above this route's `SafeArea`,
-  /// which would otherwise have consumed the padding. `CREATE` and the
-  /// read-only preview both size their envelope from it, so neither depends on
-  /// how much room the editor chrome happens to leave.
-  Size get _deviceSafeSize {
-    final size = MediaQuery.sizeOf(context);
-    final padding = MediaQuery.paddingOf(context);
-    return Size(
-      math.max(1, size.width - padding.horizontal),
-      math.max(1, size.height - padding.vertical),
-    );
-  }
+  /// Full physical viewport. Authored designs may deliberately use unsafe
+  /// regions; safe insets are editor guides, never layout constraints.
+  Size get _deviceViewportSize => MediaQuery.sizeOf(context);
+
+  EdgeInsets get _deviceSafeInsets => MediaQuery.paddingOf(context);
 
   @override
   Widget build(BuildContext context) {
     if (_fullScreen) {
       return ColoredBox(
         color: const Color(0xFF050807),
-        child: _canvas(frameInset: MediaQuery.paddingOf(context)),
+        child: _canvas(frameInset: EdgeInsets.zero),
       );
     }
     return ColoredBox(
@@ -165,7 +160,8 @@ class _EditorPageState extends State<EditorPage> {
         orientation: _layoutOrientation,
         previewOrientation: _orientation,
         editable: !_layoutInherited,
-        deviceSafeSize: _deviceSafeSize,
+        deviceViewportSize: _deviceViewportSize,
+        deviceSafeInsets: _deviceSafeInsets,
         selectedId: _selectedId,
         selectedModuleId: _selectedModuleId,
         onSelect: _selectComponent,
@@ -175,6 +171,8 @@ class _EditorPageState extends State<EditorPage> {
         frameInset: frameInset,
         fullScreen: _fullScreen,
         onToggleFullScreen: () => setState(() => _fullScreen = !_fullScreen),
+        onAddRequested: _layoutInherited ? null : _openAddCatalogue,
+        onAddDropped: _layoutInherited ? null : _addDropped,
         snapEnabled: _snapEnabled,
         onToggleSnap: () => setState(() => _snapEnabled = !_snapEnabled),
         soundEnabled: widget.soundEnabled,
@@ -193,50 +191,93 @@ class _EditorPageState extends State<EditorPage> {
       edge: layout.edge,
       extent: layout.drawerExtent,
       palette: _palette,
+      prismStyle: _dashboard.settings.prismStyle,
       soundEnabled: widget.soundEnabled,
       hapticsEnabled: widget.hapticsEnabled,
       onOpenChanged: (open) => setState(() => _drawerOpen = open),
       content: canvas,
-      drawer: _EditorServicePanel(
-        dashboard: _dashboard,
-        orientation: _layoutOrientation,
-        previewOrientation: _orientation,
-        layoutInherited: _layoutInherited,
-        frameExtent: _dashboard.frameExtent(_layoutOrientation),
-        selectedId: _selectedId,
-        selectedModuleId: _selectedModuleId,
-        palette: _palette,
-        soundEnabled: widget.soundEnabled,
-        hapticsEnabled: widget.hapticsEnabled,
-        actionRegistry: widget.actionRegistry ?? ActionRegistry.forAuthoring(),
-        onSelectComponent: _selectComponent,
-        onSelectModule: _selectModule,
-        onAddComponent: _addComponent,
-        onAddModule: _addModule,
-        onRemoveComponent: _removeComponent,
-        onRemoveModule: _removeModule,
-        onMoveComponent: _moveComponent,
-        onVisibilityChanged: _setVisibility,
-        onComponentChanged: _replaceComponent,
-        onDashboardChanged: _replaceDashboard,
-        onFrameExtentChanged: _setFrameExtent,
-        onCreateLayout: _createPreviewLayout,
-        onRemoveLayout: _removePreviewLayout,
-        onPlacementChanged: _setPlacement,
-        onModulePlacementChanged: _setModulePlacement,
-      ),
+      drawer: _addCatalogueOpen
+          ? EditorAddCatalogue(
+              palette: _palette,
+              prismStyle: _dashboard.settings.prismStyle,
+              soundEnabled: widget.soundEnabled,
+              hapticsEnabled: widget.hapticsEnabled,
+              onClose: () => setState(() => _addCatalogueOpen = false),
+            )
+          : _servicePanel(),
     );
   }
+
+  Widget _servicePanel() => _EditorServicePanel(
+    dashboard: _dashboard,
+    orientation: _layoutOrientation,
+    previewOrientation: _orientation,
+    layoutInherited: _layoutInherited,
+    selectedId: _selectedId,
+    selectedModuleId: _selectedModuleId,
+    palette: _palette,
+    soundEnabled: widget.soundEnabled,
+    hapticsEnabled: widget.hapticsEnabled,
+    actionRegistry: widget.actionRegistry ?? ActionRegistry.forAuthoring(),
+    onSelectComponent: _selectComponent,
+    onSelectModule: _selectModule,
+    onAddComponent: (type) => _addComponent(type, Offset.zero),
+    onAddModule: () => _addModule(Offset.zero),
+    onRemoveComponent: _removeComponent,
+    onRemoveModule: _removeModule,
+    onMoveComponent: _moveComponent,
+    onVisibilityChanged: _setVisibility,
+    onComponentChanged: _replaceComponent,
+    onDashboardChanged: _replaceDashboard,
+    onFrameExtentChanged: _setFrameExtent,
+    onCreateLayout: _createPreviewLayout,
+    onRemoveLayout: _removePreviewLayout,
+    onPlacementChanged: _setPlacement,
+    onModulePlacementChanged: _setModulePlacement,
+  );
 
   void _selectComponent(String? id) => setState(() {
     _selectedId = id;
     _selectedModuleId = null;
+    _addCatalogueOpen = false;
   });
 
   void _selectModule(String id) => setState(() {
     _selectedId = null;
     _selectedModuleId = id;
+    _addCatalogueOpen = false;
   });
+
+  void _openAddCatalogue() => setState(() {
+    _addCatalogueOpen = true;
+    _drawerOpen = true;
+  });
+
+  void _addDropped(EditorAddRequest request, Offset center) {
+    if (request.componentType case final type?) {
+      _addComponent(type, center);
+    } else {
+      _addModule(center);
+    }
+  }
+
+  void _setVisibility(ComponentInstance component, bool visible) {
+    final existing = component.placements[_layoutOrientation];
+    _replaceComponent(
+      component.withPlacement(
+        _layoutOrientation,
+        visible
+            ? (existing ??
+                  Placement(
+                    center: Offset.zero,
+                    size:
+                        ComponentTypes.byId(component.typeId)?.defaultSize ??
+                        const Size(1, 1),
+                  ))
+            : null,
+      ),
+    );
+  }
 
   void _setFrameExtent(Size value) {
     if (_layoutInherited) return;
@@ -261,7 +302,7 @@ class _EditorPageState extends State<EditorPage> {
         // is what becomes authored.
         extent: viewportFrameExtent(
           _orientation,
-          _deviceSafeSize,
+          _deviceViewportSize,
           _dashboard.frameSpec(_layoutOrientation),
         ),
       ),
@@ -296,32 +337,14 @@ class _EditorPageState extends State<EditorPage> {
     );
   }
 
-  void _setVisibility(ComponentInstance component, bool visible) {
-    final existing = component.placements[_layoutOrientation];
-    _replaceComponent(
-      component.withPlacement(
-        _layoutOrientation,
-        visible
-            ? (existing ??
-                  Placement(
-                    center: Offset.zero,
-                    size:
-                        ComponentTypes.byId(component.typeId)?.defaultSize ??
-                        const Size(1, 1),
-                  ))
-            : null,
-      ),
-    );
-  }
-
-  void _addComponent(ComponentTypeSpec type) {
+  void _addComponent(ComponentTypeSpec type, Offset center) {
     final component = ComponentInstance(
       id: _nextComponentId(type.id),
       typeId: type.id,
       params: type.defaults,
       placements: <DesignOrientation, Placement>{
         _layoutOrientation: Placement(
-          center: Offset.zero,
+          center: center,
           size: type.legacyVariantSpec.recommendedSize,
         ),
       },
@@ -330,7 +353,7 @@ class _EditorPageState extends State<EditorPage> {
     _selectComponent(component.id);
   }
 
-  void _addModule() {
+  void _addModule(Offset center) {
     var index = 2;
     var id = 'module-$index';
     final ids = _dashboard.modules.map((module) => module.id).toSet();
@@ -341,10 +364,7 @@ class _EditorPageState extends State<EditorPage> {
       id: id,
       name: 'VFD module $index',
       regions: <DesignOrientation, Placement>{
-        _layoutOrientation: const Placement(
-          center: Offset.zero,
-          size: Size(1, 0.5),
-        ),
+        _layoutOrientation: Placement(center: center, size: Size(1, 0.5)),
       },
     );
     _replaceDashboard(_dashboard.withModule(module));
@@ -442,7 +462,6 @@ class _EditorServicePanel extends StatefulWidget {
     required this.orientation,
     required this.previewOrientation,
     required this.layoutInherited,
-    required this.frameExtent,
     required this.selectedId,
     required this.selectedModuleId,
     required this.palette,
@@ -470,7 +489,6 @@ class _EditorServicePanel extends StatefulWidget {
   final DesignOrientation orientation;
   final DesignOrientation previewOrientation;
   final bool layoutInherited;
-  final Size frameExtent;
   final String? selectedId;
   final String? selectedModuleId;
   final VfdPalette palette;
@@ -499,7 +517,7 @@ class _EditorServicePanel extends StatefulWidget {
 }
 
 class _EditorServicePanelState extends State<_EditorServicePanel> {
-  _EditorSection _section = _EditorSection.rack;
+  _EditorSection _section = _EditorSection.design;
 
   List<_EditorSection> get _sections {
     if (widget.layoutInherited) {
@@ -511,7 +529,6 @@ class _EditorServicePanelState extends State<_EditorServicePanel> {
     }
     if (widget.selectedId != null) {
       return const <_EditorSection>[
-        _EditorSection.rack,
         _EditorSection.part,
         _EditorSection.look,
         _EditorSection.place,
@@ -519,14 +536,12 @@ class _EditorServicePanelState extends State<_EditorServicePanel> {
     }
     if (widget.selectedModuleId != null) {
       return const <_EditorSection>[
-        _EditorSection.rack,
         _EditorSection.module,
         _EditorSection.look,
         _EditorSection.place,
       ];
     }
     return const <_EditorSection>[
-      _EditorSection.rack,
       _EditorSection.design,
       _EditorSection.look,
       _EditorSection.prism,
@@ -536,7 +551,7 @@ class _EditorServicePanelState extends State<_EditorServicePanel> {
   @override
   void didUpdateWidget(covariant _EditorServicePanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_sections.contains(_section)) _section = _EditorSection.rack;
+    if (!_sections.contains(_section)) _section = _sections.first;
   }
 
   @override
@@ -577,7 +592,6 @@ class _EditorServicePanelState extends State<_EditorServicePanel> {
   );
 
   Widget _sectionBody(_EditorSection section) => switch (section) {
-    _EditorSection.rack => _RackPanel(host: widget),
     _EditorSection.design => _DesignPanel(host: widget),
     _EditorSection.part => _PartPanel(host: widget),
     _EditorSection.module => _ModulePanel(host: widget),
@@ -1041,28 +1055,42 @@ class _PartPanel extends StatelessWidget {
     return PrismPanel(
       palette: host.palette,
       padding: const EdgeInsets.all(9),
-      child: MechanicalPager(
-        pages: <Widget>[
-          _variant(component, type),
-          _module(component),
-          if (component.typeId == ComponentTypes.prismButton)
-            _action(component),
-          ParamEditor(
-            specs: type.paramsFor(component.effectiveVariant),
-            values: component.effectiveParams,
-            palette: host.palette,
+      child: Column(
+        children: <Widget>[
+          Expanded(
+            child: MechanicalPager(
+              pages: <Widget>[
+                _variant(component, type),
+                _module(component),
+                if (component.typeId == ComponentTypes.prismButton)
+                  _action(component),
+                ParamEditor(
+                  specs: type.paramsFor(component.effectiveVariant),
+                  values: component.effectiveParams,
+                  palette: host.palette,
+                  prismStyle: host.dashboard.settings.prismStyle,
+                  soundEnabled: host.soundEnabled,
+                  hapticsEnabled: host.hapticsEnabled,
+                  onChanged: (key, value) =>
+                      host.onComponentChanged(component.withParam(key, value)),
+                ),
+              ],
+              palette: host.palette,
+              prismStyle: host.dashboard.settings.prismStyle,
+              soundEnabled: host.soundEnabled,
+              hapticsEnabled: host.hapticsEnabled,
+              semanticLabel: 'Part controls',
+            ),
+          ),
+          const SizedBox(height: 6),
+          _GuardedRemove(
+            itemName: type.displayName,
             prismStyle: host.dashboard.settings.prismStyle,
             soundEnabled: host.soundEnabled,
             hapticsEnabled: host.hapticsEnabled,
-            onChanged: (key, value) =>
-                host.onComponentChanged(component.withParam(key, value)),
+            onRemove: () => host.onRemoveComponent(component),
           ),
         ],
-        palette: host.palette,
-        prismStyle: host.dashboard.settings.prismStyle,
-        soundEnabled: host.soundEnabled,
-        hapticsEnabled: host.hapticsEnabled,
-        semanticLabel: 'Part controls',
       ),
     );
   }
@@ -1262,10 +1290,103 @@ class _ModulePanel extends StatelessWidget {
               ),
             ),
           ),
+          if (module.id != kMainVfdModuleId) ...<Widget>[
+            const Spacer(),
+            _GuardedRemove(
+              itemName: module.name,
+              prismStyle: host.dashboard.settings.prismStyle,
+              soundEnabled: host.soundEnabled,
+              hapticsEnabled: host.hapticsEnabled,
+              onRemove: () => host.onRemoveModule(module),
+            ),
+          ],
         ],
       ),
     );
   }
+}
+
+class _GuardedRemove extends StatefulWidget {
+  const _GuardedRemove({
+    required this.itemName,
+    required this.prismStyle,
+    required this.soundEnabled,
+    required this.hapticsEnabled,
+    required this.onRemove,
+  });
+
+  final String itemName;
+  final PrismStyle prismStyle;
+  final bool soundEnabled;
+  final bool hapticsEnabled;
+  final VoidCallback onRemove;
+
+  @override
+  State<_GuardedRemove> createState() => _GuardedRemoveState();
+}
+
+class _GuardedRemoveState extends State<_GuardedRemove> {
+  static const _palette = VfdPalette(
+    lit: Color(0xFFFF4A3D),
+    unlit: Color(0xFF783D38),
+  );
+
+  bool _armed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_armed) {
+      return Align(
+        alignment: Alignment.centerRight,
+        child: _button(
+          key: const ValueKey('remove-arm'),
+          label: 'Remove',
+          onPressed: () => setState(() => _armed = true),
+        ),
+      );
+    }
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: VfdLegend(
+            'Remove ${widget.itemName}?',
+            palette: _palette,
+            lit: true,
+            size: 9,
+          ),
+        ),
+        _button(
+          key: const ValueKey('remove-cancel'),
+          label: 'Cancel',
+          onPressed: () => setState(() => _armed = false),
+        ),
+        const SizedBox(width: 5),
+        _button(
+          key: const ValueKey('remove-confirm'),
+          label: 'Remove',
+          lit: true,
+          onPressed: widget.onRemove,
+        ),
+      ],
+    );
+  }
+
+  Widget _button({
+    required Key key,
+    required String label,
+    required VoidCallback onPressed,
+    bool lit = false,
+  }) => PrismButton(
+    key: key,
+    label: label,
+    palette: _palette,
+    lit: lit,
+    role: PrismRole.compact,
+    style: widget.prismStyle,
+    soundEnabled: widget.soundEnabled,
+    hapticsEnabled: widget.hapticsEnabled,
+    onPressed: onPressed,
+  );
 }
 
 class _PlacementPanel extends StatelessWidget {
@@ -1384,13 +1505,13 @@ class _PlacementPanel extends StatelessWidget {
       _dpadRow(
         _move('X-', placement, component, module, dx: -_nudge),
         _button(
-          'In',
+          'Center',
           () => _write(
             component,
             module,
-            bringPlacementIntoFrame(placement, host.frameExtent),
+            placement.copyWith(center: Offset.zero),
           ),
-          key: const ValueKey('placement-bring-in'),
+          key: const ValueKey('placement-center'),
         ),
         _move('X+', placement, component, module, dx: _nudge),
       ),

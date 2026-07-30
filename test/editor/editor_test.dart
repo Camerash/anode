@@ -7,6 +7,7 @@ import 'package:anode/model/dashboard.dart';
 import 'package:anode/model/dev_design.dart';
 import 'package:anode/model/placement.dart';
 import 'package:anode/vfd/prism_widgets.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -27,7 +28,11 @@ void main() {
       ),
     );
 
-    expect(_canvasAspect(tester), closeTo(2.6, 0.001));
+    expect(_canvasAspect(tester), closeTo(1200 / 900, 0.001));
+    expect(
+      _canvasAspect(tester, key: const ValueKey('editor-authored-frame')),
+      closeTo(2.6, 0.001),
+    );
     await tester.tap(find.byKey(const ValueKey('orientation-portrait')));
     await tester.pump();
     // The fallback preview draws the device envelope the runtime would fill,
@@ -112,7 +117,7 @@ void main() {
                 return EditorCanvas(
                   dashboard: dashboard,
                   orientation: DesignOrientation.landscape,
-                  deviceSafeSize: const Size(900, 500),
+                  deviceViewportSize: const Size(900, 500),
                   selectedId: 'speed',
                   snapEnabled: false,
                   onSelect: (_) {},
@@ -146,6 +151,9 @@ void main() {
         componentBefore.placements[DesignOrientation.landscape]!;
     final portraitBefore =
         componentBefore.placements[DesignOrientation.portrait];
+    final designUnitPx = tester
+        .getSize(find.byKey(const ValueKey('editor-authored-frame')))
+        .height;
     await tester.drag(
       find.byKey(const ValueKey('canvas-speed')),
       const Offset(30, -15),
@@ -156,11 +164,11 @@ void main() {
         dashboard.components.first.placements[DesignOrientation.landscape]!;
     expect(
       landscape.center.dx,
-      closeTo(landscapeBefore.center.dx + 0.1, 0.002),
+      closeTo(landscapeBefore.center.dx + 30 / designUnitPx, 0.002),
     );
     expect(
       landscape.center.dy,
-      closeTo(landscapeBefore.center.dy + 0.05, 0.002),
+      closeTo(landscapeBefore.center.dy + 15 / designUnitPx, 0.002),
     );
 
     final resolvedBefore = landscape.size;
@@ -172,7 +180,10 @@ void main() {
     await tester.pump();
     landscape =
         dashboard.components.first.placements[DesignOrientation.landscape]!;
-    expect(landscape.size.width, closeTo(resolvedBefore.width + 0.1, 0.002));
+    expect(
+      landscape.size.width,
+      closeTo(resolvedBefore.width + 30 / designUnitPx, 0.002),
+    );
     expect(
       landscape.center.dx - landscape.size.width / 2,
       closeTo(leftBefore, 0.002),
@@ -202,7 +213,7 @@ void main() {
                 return EditorCanvas(
                   dashboard: dashboard,
                   orientation: DesignOrientation.landscape,
-                  deviceSafeSize: const Size(900, 500),
+                  deviceViewportSize: const Size(900, 500),
                   selectedId: 'speed',
                   snapEnabled: false,
                   onSelect: (_) {},
@@ -230,6 +241,9 @@ void main() {
     final component = dashboard.components.first;
     final placement = component.placements[DesignOrientation.landscape]!;
     final initial = placement.size;
+    final designUnitPx = tester
+        .getSize(find.byKey(const ValueKey('editor-authored-frame')))
+        .height;
     final handle = find.byKey(const ValueKey('resize-width'));
     final gesture = await tester.startGesture(tester.getCenter(handle));
     await gesture.moveBy(const Offset(10, 0));
@@ -242,7 +256,10 @@ void main() {
 
     final resized =
         dashboard.components.first.placements[DesignOrientation.landscape]!;
-    expect(resized.size.width, closeTo(initial.width + 0.1, 0.002));
+    expect(
+      resized.size.width,
+      closeTo(initial.width + 30 / designUnitPx, 0.002),
+    );
   });
 
   testWidgets('component remains draggable through dimmed off-frame area', (
@@ -272,7 +289,7 @@ void main() {
                 return EditorCanvas(
                   dashboard: dashboard,
                   orientation: DesignOrientation.landscape,
-                  deviceSafeSize: const Size(900, 500),
+                  deviceViewportSize: const Size(900, 500),
                   selectedId: component.id,
                   snapEnabled: false,
                   onSelect: (_) {},
@@ -300,19 +317,22 @@ void main() {
       find.byKey(ValueKey('canvas-${component.id}')),
     );
     final frameRect = tester.getRect(
-      find.byKey(const ValueKey('editor-canvas')),
+      find.byKey(const ValueKey('editor-authored-frame')),
     );
     final outsidePoint = Offset(
       math.max(componentRect.left + 8, frameRect.left - 12),
       componentRect.center.dy,
     );
     expect(outsidePoint.dx, lessThan(frameRect.left));
+    final designUnitPx = tester
+        .getSize(find.byKey(const ValueKey('editor-authored-frame')))
+        .height;
 
     await tester.dragFrom(outsidePoint, const Offset(30, 0));
     await tester.pump();
     final moved =
         dashboard.components.first.placements[DesignOrientation.landscape]!;
-    expect(moved.center.dx, closeTo(-0.9, 0.002));
+    expect(moved.center.dx, closeTo(-1 + 30 / designUnitPx, 0.002));
   });
 
   testWidgets('portrait preview contains inherited landscape layout', (
@@ -527,7 +547,7 @@ void main() {
     expect(frame.height, closeTo(viewport.height, 0.001));
   });
 
-  testWidgets('add selector is generated from component registry', (
+  testWidgets('ADD catalogue long-press drag places a registered part', (
     tester,
   ) async {
     await _setViewport(tester, const Size(1200, 900));
@@ -541,12 +561,20 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.tap(find.byKey(const ValueKey('canvas-add')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
-    await tester.tap(find.text('ADD PART'));
+    expect(find.text('SEGMENTED NUMERIC SPEED READOUT.'), findsOneWidget);
+
+    final source = find.byKey(const ValueKey('add-outsideTemp'));
+    final target = tester.getCenter(
+      find.byKey(const ValueKey('editor-authored-frame')),
+    );
+    final drag = await tester.startGesture(tester.getCenter(source));
+    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+    await drag.moveTo(target);
     await tester.pump();
-    await tester.tap(find.text('OUTSIDE TEMPERATURE'));
+    await drag.up();
     await tester.pump();
 
     expect(
@@ -564,7 +592,7 @@ void main() {
         home: EditorCanvas(
           dashboard: dashboard,
           orientation: DesignOrientation.landscape,
-          deviceSafeSize: const Size(900, 500),
+          deviceViewportSize: const Size(900, 500),
           selectedId: null,
           onSelect: (_) {},
           onPlacementChanged: (_, _) {},
@@ -574,6 +602,75 @@ void main() {
 
     expect(find.text('LANDSCAPE · 2.600:1'), findsOneWidget);
     expect(find.byType(CustomPaint), findsWidgets);
+  });
+
+  testWidgets('safe area is a guide and never changes the device envelope', (
+    tester,
+  ) async {
+    final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(900, 500),
+            padding: EdgeInsets.fromLTRB(24, 18, 20, 12),
+          ),
+          child: EditorCanvas(
+            dashboard: dashboard,
+            orientation: DesignOrientation.landscape,
+            deviceViewportSize: const Size(900, 500),
+            deviceSafeInsets: const EdgeInsets.fromLTRB(24, 18, 20, 12),
+            selectedId: null,
+            onSelect: (_) {},
+            onPlacementChanged: (_, _) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('device-safe-guide')), findsOneWidget);
+    expect(_canvasAspect(tester), closeTo(900 / 500, 0.001));
+    expect(
+      _canvasAspect(tester, key: const ValueKey('editor-authored-frame')),
+      closeTo(2.6, 0.001),
+    );
+  });
+
+  testWidgets('selected part uses guarded constant-red removal', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(900, 500));
+    var dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorPage(
+          dashboard: dashboard,
+          onChanged: (value) => dashboard = value,
+        ),
+      ),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('canvas-speed')),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+
+    expect(find.text('RACK'), findsNothing);
+    final arm = find.byKey(const ValueKey('remove-arm'));
+    expect(arm, findsOneWidget);
+    final remove = tester.widget<PrismButton>(arm);
+    expect(remove.palette.lit, const Color(0xFFFF4A3D));
+
+    await tester.tap(arm);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('remove-confirm')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('remove-confirm')));
+    await tester.pump();
+    expect(dashboard.components.where((item) => item.id == 'speed'), isEmpty);
   });
 
   testWidgets('SNAP defaults active and toggle mutates no placement', (
@@ -655,7 +752,7 @@ void main() {
     expect(find.byKey(const ValueKey('placement-W-plus')), findsOneWidget);
     expect(find.byKey(const ValueKey('placement-H-minus')), findsOneWidget);
     expect(find.byKey(const ValueKey('placement-H-plus')), findsOneWidget);
-    expect(find.byKey(const ValueKey('placement-bring-in')), findsOneWidget);
+    expect(find.byKey(const ValueKey('placement-center')), findsOneWidget);
 
     final before =
         dashboard.components.first.placements[DesignOrientation.landscape]!;
@@ -665,6 +762,12 @@ void main() {
         dashboard.components.first.placements[DesignOrientation.landscape]!;
     expect(after.center.dx, closeTo(before.center.dx + 0.005, 1e-12));
     expect(after.center.dy, before.center.dy);
+
+    await tester.tap(find.byKey(const ValueKey('placement-center')));
+    await tester.pump();
+    final centred =
+        dashboard.components.first.placements[DesignOrientation.landscape]!;
+    expect(centred.center, Offset.zero);
   });
 
   testWidgets('drawer edge follows window shape, never preview orientation', (
@@ -781,7 +884,7 @@ Future<_CanvasHarness> _pumpCanvas(
           return EditorCanvas(
             dashboard: harness.dashboard,
             orientation: DesignOrientation.landscape,
-            deviceSafeSize: const Size(900, 500),
+            deviceViewportSize: const Size(900, 500),
             selectedId: selectedId,
             onSelect: (id) => harness.selected = id,
             onPlacementChanged: (id, placement) => rebuild(() {
@@ -810,7 +913,10 @@ Matcher _offsetCloseTo(Offset expected, [double delta = 1e-9]) => isA<Offset>()
     .having((value) => value.dx, 'dx', closeTo(expected.dx, delta))
     .having((value) => value.dy, 'dy', closeTo(expected.dy, delta));
 
-double _canvasAspect(WidgetTester tester) {
-  final size = tester.getSize(find.byKey(const ValueKey('editor-canvas')));
+double _canvasAspect(
+  WidgetTester tester, {
+  Key key = const ValueKey('editor-canvas'),
+}) {
+  final size = tester.getSize(find.byKey(key));
   return size.width / size.height;
 }

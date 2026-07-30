@@ -88,7 +88,7 @@ const Map<DesignOrientation, FrameSpec> kDefaultFrameSpecs =
 /// The extent an explicitly created alternate layout takes, such that the
 /// design renders at exactly the fit scale it already had.
 ///
-/// [deviceSafe] is the device's own safe rect. Its axes are swapped when
+/// [deviceViewport] is the device's full viewport. Its axes are swapped when
 /// [target] disagrees with the device's current orientation, because the
 /// viewport selector is independent of how the phone happens to be held.
 ///
@@ -97,14 +97,14 @@ const Map<DesignOrientation, FrameSpec> kDefaultFrameSpecs =
 /// something a test has to keep honest.
 Size viewportFrameExtent(
   DesignOrientation target,
-  Size deviceSafe,
+  Size deviceViewport,
   FrameSpec primary,
 ) {
   final viewport =
-      (deviceSafe.height >= deviceSafe.width) ==
+      (deviceViewport.height >= deviceViewport.width) ==
           (target == DesignOrientation.portrait)
-      ? deviceSafe
-      : Size(deviceSafe.height, deviceSafe.width);
+      ? deviceViewport
+      : Size(deviceViewport.height, deviceViewport.width);
   final scale = math.min(
     viewport.width / primary.width,
     viewport.height / primary.height,

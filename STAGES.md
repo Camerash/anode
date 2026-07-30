@@ -24,11 +24,13 @@ Commit `444a836`.
 
 - [x] Bezel mask — there was none in `vfd.frag`; nothing to remove.
 - [x] `ClipRRect`, `AspectRatio`, `ListView` workbench removed; cluster is root.
-- [x] Contain-fit of the authored frame inside a safe rect passed as uniforms.
+- [x] Contain-fit of the authored frame inside the available rect passed as
+      uniforms. Stage 4 later expanded that rect from safe area to full viewport.
       Placement only — no mask, no clamp, so halo/sheen/grain still spill past
       the safe rect and off the screen edge.
 - [x] System UI hidden (`immersiveSticky`), screen kept awake (`wakelock_plus`).
-- [x] Content insets to safe area, background does not.
+- [x] App chrome insets to safe area; Stage 4 later allowed authored design
+      content across the full viewport.
 - [x] Stacked `KM/H` / `MPH` legends, stroked from `sdSeg` paths.
 - [x] Runtime controls were initially docked in contain-fit dead space. Stage 4
       later removed the active-dashboard config dock; `SET` now opens Settings
@@ -481,13 +483,15 @@ Mechanical refinement model findings:
 - [x] Add explicit alternate creation/reset. Creation uses current window aspect
       and bakes the contained primary appearance before independent editing.
       Fallback previews remain read-only. *(Superseded by the frame-extent
-      follow-up below: creation now derives a device-safe-rect envelope at the
+      follow-up below, then the full-viewport follow-up: creation now derives a
+      full-device envelope at the
       current fit scale and copies placements verbatim.)*
 - [x] Independent fixed/span placement axes were added, then removed by the
       schema-5 centre/size simplification below.
 - [x] Preserve unknown component types during import/round-trip.
 - [x] Render and hit-test component overlays beyond frame bounds; dim only the
-      portion outside the authored boundary. Add `BRING IN` recovery.
+      portion outside the authored boundary. `BRING IN` recovery was later
+      replaced by explicit `CENTER`.
 - [x] Separate canvas `EDIT` and `NAV` modes. Nav owns 1×–4× pan/zoom; `FIT`
       restores edit mode and identity without writing placement. *(Superseded by
       the frame-extent follow-up below: modes removed in favour of one
@@ -666,7 +670,7 @@ Frame-extent verification:
       and clamps to `0.03` after quantization. Selection border and renderer
       consume the same committed placement.
 - [x] Replace paged anchor/axis placement controls with one PLACE surface:
-      exact X/Y, 3×3 D-pad, containing `BRING IN`, and W/H
+      exact X/Y, 3×3 D-pad, centre `CENTER`, and W/H
       minus/readout/plus. Direct controls always step `0.005`, independent of
       SNAP.
 - [x] Choose service-bay edge from the route window, not preview orientation:
@@ -713,7 +717,7 @@ Verification:
 - `flutter analyze`: clean.
 - `flutter test`: 134 passing, including schema rejection,
   snapped/continuous transform invariants,
-  SNAP no-mutation, one-page PLACE, BRING IN, shape-driven drawer edge,
+  SNAP no-mutation, one-page PLACE, CENTER, shape-driven drawer edge,
   lever input/accessibility, icon-only effects, inheritance, unknown effects,
   and responsive overflow.
 - `integration_test/halo_compounding_test.dart`: four tests passing on iPhone
@@ -854,6 +858,40 @@ Verification:
   cleanly.
 - No persisted schema, texture dimensions, uniform indices, optical tuned
   constants, component limit or shipped preset changed.
+
+#### Stage 4 full-viewport and editor-IA follow-up — DONE
+
+- [x] Fit authored frames against the complete device viewport instead of the
+      safe rect. Runtime renderer and interactive design hit regions share that
+      full rect; `SET`, editor rail, and service chrome remain safe.
+- [x] Make the editor outer boundary the runtime device envelope and contain the
+      fixed authored frame inside it. `FULL` uses zero frame inset. Safe-area
+      padding paints a dim guide only and never changes CREATE, fit scale,
+      placement, or render uniforms.
+- [x] Remove RACK from visible editor navigation. Canvas remains the selection
+      and inventory surface; UP, DOWN, VISIBLE, and the duplicate item list have
+      no visible call sites. Implicit list order remains sufficient.
+- [x] Add canvas `ADD`. It opens a dedicated fixed-page PARTS/MODULES catalogue.
+      Rows expose registry name/description metadata and require long-press drag
+      onto the authored canvas. Drop position becomes the new absolute centre.
+- [x] Replace `BRING IN` with D-pad `CENTER`, which writes `Offset.zero` and
+      preserves size.
+- [x] Add two-stage inline removal to PART and non-main MODULE panels. REMOVE
+      always uses a constant red phosphor palette, independent of dashboard
+      phosphor.
+- [x] Replace the direction-changing triangle with a permanent `PANEL` Prism
+      latch. Illumination alone reports open state, and drawer transition emits
+      one configured feedback event.
+
+Findings:
+
+1. Full-viewport geometry makes device cutout authoring possible, but Flutter's
+   safe padding describes only a rectangular exclusion. Exact Dynamic Island,
+   camera-hole, fold, and hinge guides need future device-profile metadata.
+2. Per-row live catalogue shaders would multiply fragment passes and animation
+   controllers. A single selected-item preview cradle is the Stage 4B contract.
+3. RACK confirmed no need for explicit z-order, visibility, or inventory UI.
+   Reintroduce layer management only after a real overlapping design needs it.
 
 ---
 

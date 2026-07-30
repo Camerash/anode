@@ -111,20 +111,4 @@ void main() {
       closeTo(placement.center.dy + placement.size.height / 2, 1e-12),
     );
   });
-
-  test('bring in contains each recoverable axis without resizing', () {
-    const placement = Placement(center: Offset(-2, 0.8), size: Size(0.5, 0.2));
-    final recovered = bringPlacementIntoFrame(placement, const Size(2.6, 1));
-
-    expect(recovered.center, const Offset(-1.05, 0.4));
-    expect(recovered.size, placement.size);
-  });
-
-  test('bring in centres an axis wider than its frame', () {
-    const placement = Placement(center: Offset(2, -0.2), size: Size(3, 0.2));
-    final recovered = bringPlacementIntoFrame(placement, const Size(2.6, 1));
-
-    expect(recovered.center.dx, 0);
-    expect(recovered.center.dy, -0.2);
-  });
 }

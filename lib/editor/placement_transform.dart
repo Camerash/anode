@@ -54,20 +54,3 @@ Placement resizePlacementFromEdges({
 Placement nudgePlacement(Placement placement, {double dx = 0, double dy = 0}) {
   return placement.copyWith(center: placement.center + Offset(dx, dy));
 }
-
-/// Recovers an off-frame item without changing its size. Oversized axes centre
-/// because no centre can place that axis wholly inside the authored frame.
-Placement bringPlacementIntoFrame(Placement placement, Size frame) {
-  double containedCenter(double center, double itemExtent, double frameExtent) {
-    final travel = (frameExtent - itemExtent) / 2;
-    if (travel <= 0) return 0;
-    return center.clamp(-travel, travel);
-  }
-
-  return placement.copyWith(
-    center: Offset(
-      containedCenter(placement.center.dx, placement.size.width, frame.width),
-      containedCenter(placement.center.dy, placement.size.height, frame.height),
-    ),
-  );
-}

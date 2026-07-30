@@ -17,11 +17,13 @@ class ComponentTypeSpec {
     required this.capabilities,
     required this.params,
     required this.defaultSize,
+    this.description = '',
     this.variants = const <ComponentVariantSpec>[],
   });
 
   final String id;
   final String displayName;
+  final String description;
   final Set<Capability> capabilities;
   final List<ParamSpec> params;
   final List<ComponentVariantSpec> variants;
@@ -112,6 +114,7 @@ abstract final class ComponentTypes {
     ComponentTypeSpec(
       id: speedDigits,
       displayName: 'Speed digits',
+      description: 'Segmented numeric speed readout.',
       capabilities: <Capability>{Capability.gps},
       // Width is digit advance * default digit count; height is the glyph's
       // 1.4-unit local extent at the tuned digit scale. These reproduce the
@@ -145,6 +148,7 @@ abstract final class ComponentTypes {
     ComponentTypeSpec(
       id: speedBar,
       displayName: 'Speed bar',
+      description: 'Cell bar showing speed against a chosen maximum.',
       capabilities: <Capability>{Capability.gps},
       defaultSize: Size(1.96, 0.084),
       params: <ParamSpec>[
@@ -172,6 +176,7 @@ abstract final class ComponentTypes {
     ComponentTypeSpec(
       id: unitLegend,
       displayName: 'Unit legend',
+      description: 'KM/H and MPH annunciator.',
       capabilities: <Capability>{},
       // Encloses both stacked lines: one cap height plus the line separation.
       defaultSize: Size(0.203, 0.242),
@@ -187,6 +192,7 @@ abstract final class ComponentTypes {
     ComponentTypeSpec(
       id: outsideTemp,
       displayName: 'Outside temperature',
+      description: 'External air-temperature readout.',
       capabilities: <Capability>{Capability.gps, Capability.network},
       defaultSize: Size(0.55, 0.22),
       params: <ParamSpec>[
@@ -202,6 +208,7 @@ abstract final class ComponentTypes {
     ComponentTypeSpec(
       id: phoneBattery,
       displayName: 'Battery gauge',
+      description: 'Phone battery-level indicator.',
       capabilities: <Capability>{Capability.battery},
       defaultSize: Size(0.62, 0.12),
       params: <ParamSpec>[
@@ -218,6 +225,7 @@ abstract final class ComponentTypes {
     ComponentTypeSpec(
       id: altitude,
       displayName: 'Altitude',
+      description: 'Barometric altitude readout.',
       capabilities: <Capability>{Capability.barometer},
       defaultSize: Size(0.62, 0.22),
       params: <ParamSpec>[
@@ -233,6 +241,7 @@ abstract final class ComponentTypes {
     ComponentTypeSpec(
       id: prismButton,
       displayName: 'Prism button',
+      description: 'Interactive smoked-acrylic switch.',
       capabilities: <Capability>{},
       defaultSize: Size(0.42, 0.18),
       params: <ParamSpec>[

@@ -191,7 +191,7 @@ class _ClusterPageState extends State<ClusterPage>
                 child: VfdCluster(
                   renderAssets: widget.renderAssets,
                   controller: _controller,
-                  safeInsets: windowPadding,
+                  safeInsets: EdgeInsets.zero,
                 ),
               );
             },
@@ -201,7 +201,7 @@ class _ClusterPageState extends State<ClusterPage>
             orientation: _controller.orientation,
             controller: _controller,
             registry: _actions,
-            safeInsets: windowPadding,
+            safeInsets: EdgeInsets.zero,
           ),
           // Content insets to the safe area; the background does not.
           Padding(
