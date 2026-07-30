@@ -111,7 +111,7 @@ class _DebugWorkbenchPageState extends State<DebugWorkbenchPage>
                 child: Row(
                   children: <Widget>[
                     PrismButton(
-                      label: _running ? 'Run' : 'Hold',
+                      label: 'Run',
                       palette: palette,
                       lit: _running,
                       role: PrismRole.standard,
@@ -138,12 +138,21 @@ class _DebugWorkbenchPageState extends State<DebugWorkbenchPage>
                     ),
                     const SizedBox(width: 8),
                     PrismButton(
-                      label: _controller.unit == SpeedUnit.kph ? 'KM/H' : 'MPH',
+                      label: 'KM/H',
                       palette: palette,
-                      lit: true,
-                      role: PrismRole.standard,
+                      lit: _controller.unit == SpeedUnit.kph,
+                      role: PrismRole.compact,
                       style: style,
-                      onPressed: _toggleUnit,
+                      onPressed: () => _setUnit('kph'),
+                    ),
+                    const SizedBox(width: 4),
+                    PrismButton(
+                      label: 'MPH',
+                      palette: palette,
+                      lit: _controller.unit == SpeedUnit.mph,
+                      role: PrismRole.compact,
+                      style: style,
+                      onPressed: () => _setUnit('mph'),
                     ),
                   ],
                 ),
@@ -169,8 +178,10 @@ class _DebugWorkbenchPageState extends State<DebugWorkbenchPage>
     _ => throw StateError('Unsupported design'),
   };
 
-  void _toggleUnit() {
-    final nextUnit = _controller.unit == SpeedUnit.kph ? 'mph' : 'kph';
+  void _setUnit(String nextUnit) {
+    if ((_controller.unit == SpeedUnit.kph ? 'kph' : 'mph') == nextUnit) {
+      return;
+    }
     var next = _design;
     for (final component in _design.components) {
       if (component.typeId == ComponentTypes.speedDigits) {

@@ -41,12 +41,16 @@ class SegmentBank {
   final Float32List _target;
   final Float32List brightness;
   int _lastValue = -1;
+  bool? _lastBlankLeadingZeros;
 
   void setValue(int value, {bool blankLeadingZeros = true}) {
     final ceiling = math.pow(10, digits).toInt() - 1;
     final clamped = value.clamp(0, ceiling);
-    if (clamped == _lastValue) return;
+    if (clamped == _lastValue && blankLeadingZeros == _lastBlankLeadingZeros) {
+      return;
+    }
     _lastValue = clamped;
+    _lastBlankLeadingZeros = blankLeadingZeros;
     final text = clamped.toString().padLeft(
       digits,
       blankLeadingZeros ? ' ' : '0',
@@ -96,6 +100,8 @@ class VfdController extends ChangeNotifier {
     if (next == _orientation) return;
     _orientation = next;
     _banks.clear();
+    _authoredRevision++;
+    _rebuild(0);
   }
 
   /// The authored frame extent in design units. Geometry resolves against
@@ -121,8 +127,16 @@ class VfdController extends ChangeNotifier {
     if (identical(value, _design)) return;
     _design = value;
     _orientation = value.layoutForViewport(_viewportOrientation);
-    _banks.clear();
+    // Placement editing may update faster than the animation ticker. Rebuild
+    // authored data now so shader geometry and Flutter selection chrome commit
+    // in the same widget frame. Segment banks survive geometry-only edits;
+    // `_rebuild` replaces a bank if its digit topology changed.
+    _authoredRevision++;
+    _rebuild(0);
   }
+
+  int _authoredRevision = 0;
+  int get authoredRevision => _authoredRevision;
 
   /// One segment bank per digit component, so two digit gauges decay
   /// independently.
@@ -175,6 +189,7 @@ class VfdController extends ChangeNotifier {
 
   void _rebuild(double dt) {
     final frames = <ComponentFrame>[];
+    final activeBankIds = <String>{};
     final litUnit = unit;
 
     for (final c in _design.componentsIn(orientation)) {
@@ -193,14 +208,15 @@ class VfdController extends ChangeNotifier {
 
       switch (c.typeId) {
         case ComponentTypes.speedDigits:
+          activeBankIds.add(c.id);
           final digits = (params['digits'] as num?)?.toInt() ?? 3;
           final componentUnit = params['unit'] == 'mph'
               ? SpeedUnit.mph
               : SpeedUnit.kph;
-          final bank = _banks.putIfAbsent(
-            c.id,
-            () => SegmentBank(digits: digits),
-          );
+          final existingBank = _banks[c.id];
+          final bank = existingBank == null || existingBank.digits != digits
+              ? (_banks[c.id] = SegmentBank(digits: digits))
+              : existingBank;
           bank.setValue(
             componentUnit.convert(speedKph).round(),
             blankLeadingZeros: params['blankLeadingZeros'] as bool? ?? true,
@@ -271,6 +287,7 @@ class VfdController extends ChangeNotifier {
       }
     }
 
+    _banks.removeWhere((id, _) => !activeBankIds.contains(id));
     componentCount = frames.length;
 
     // Only re-upload when something actually moved. Digits change once or twice
@@ -379,11 +396,13 @@ class VfdPainter extends CustomPainter {
     required this.prismGlyphAtlas,
     required this.controller,
     required this.safeRect,
+    required this.authoredRevision,
   }) : super(repaint: controller);
 
   final ui.FragmentShader shader;
   final ui.Image prismGlyphAtlas;
   final VfdController controller;
+  final int authoredRevision;
 
   /// Where content is laid out, in Flutter's y-down logical pixels. The render
   /// still covers the full bounds — this only positions the authored frame.
@@ -445,7 +464,8 @@ class VfdPainter extends CustomPainter {
       old.shader != shader ||
       old.prismGlyphAtlas != prismGlyphAtlas ||
       old.controller != controller ||
-      old.safeRect != safeRect;
+      old.safeRect != safeRect ||
+      old.authoredRevision != authoredRevision;
 }
 
 class VfdCluster extends StatefulWidget {
@@ -497,6 +517,7 @@ class _VfdClusterState extends State<VfdCluster> {
               prismGlyphAtlas: widget.renderAssets.prismGlyphAtlas,
               controller: widget.controller,
               safeRect: safeRect,
+              authoredRevision: widget.controller.authoredRevision,
             ),
             size: Size.infinite,
           );

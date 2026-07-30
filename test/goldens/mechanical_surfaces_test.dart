@@ -96,6 +96,37 @@ void main() {
     );
   });
 
+  testWidgets('LOOK service shutter travel baseline', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(700, 500));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final profile = OpticalProfile();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RepaintBoundary(
+          key: const ValueKey('surface'),
+          child: EffectPanel(
+            title: 'Design effects',
+            dashboardProfile: profile,
+            baseProfile: profile,
+            scope: EffectScope.dashboard,
+            prismStyle: const PrismStyle(),
+            soundEnabled: false,
+            hapticsEnabled: false,
+            onProfileChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('look-tune')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 75));
+    await expectLater(
+      find.byKey(const ValueKey('surface')),
+      matchesGoldenFile('baselines/effect_transition.png'),
+    );
+  });
+
   testWidgets('automotive lever state baselines', (tester) async {
     await tester.binding.setSurfaceSize(const Size(520, 420));
     addTearDown(() => tester.binding.setSurfaceSize(null));

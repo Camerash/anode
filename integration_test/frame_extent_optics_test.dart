@@ -229,6 +229,49 @@ void main() {
           'halo shoulder was \$beforeShoulder px and became \$afterShoulder px',
     );
   });
+
+  testWidgets('authored geometry refreshes before the next animation tick', (
+    tester,
+  ) async {
+    final key = GlobalKey<_HarnessState>();
+    final initial = landscapeDesign();
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: SizedBox(
+          width: 780,
+          height: 300,
+          child: _Harness(
+            key: key,
+            renderAssets: renderAssets,
+            dashboard: initial,
+            orientation: DesignOrientation.landscape,
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 16));
+
+    final controller = key.currentState!._controller;
+    final beforeRevision = controller.authoredRevision;
+    final beforeImage = controller.dataImage;
+    final component = initial.components.single;
+    final placement = component.placements[DesignOrientation.landscape]!;
+    final resized = initial.withComponent(
+      component.withPlacement(
+        DesignOrientation.landscape,
+        placement.copyWith(
+          size: Size(placement.size.width + 0.0173, placement.size.height),
+        ),
+      ),
+    );
+
+    controller.design = resized;
+
+    expect(controller.authoredRevision, beforeRevision + 1);
+    expect(controller.dataImage, isNotNull);
+    expect(controller.dataImage, isNot(same(beforeImage)));
+  });
 }
 
 /// Distance in pixels from the outermost lit edge to where the halo has fallen
@@ -251,6 +294,7 @@ int _shoulderPx(List<double> profile) {
 
 class _Harness extends StatefulWidget {
   const _Harness({
+    super.key,
     required this.renderAssets,
     required this.dashboard,
     required this.orientation,
@@ -271,6 +315,14 @@ class _HarnessState extends State<_Harness>
     design: widget.dashboard,
     orientation: widget.orientation,
   )..speedKph = 100;
+
+  @override
+  void didUpdateWidget(covariant _Harness oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _controller
+      ..design = widget.dashboard
+      ..orientation = widget.orientation;
+  }
 
   @override
   void dispose() {

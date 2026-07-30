@@ -234,7 +234,7 @@ class _EffectPanelState extends State<EffectPanel> {
                     const SizedBox(width: 3),
                     _serviceButton(
                       key: ValueKey('effect-override-${spec.id}'),
-                      label: overridden ? 'Override' : 'Inherit',
+                      label: 'Override',
                       lit: overridden,
                       enabled: widget.editable,
                       onPressed: () => _toggleOverride(spec, overridden),

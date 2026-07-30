@@ -802,7 +802,7 @@ class _RackPanelState extends State<_RackPanel> {
           const SizedBox(width: 4),
         ],
         _action(
-          visible ? 'Visible' : 'Hidden',
+          'Visible',
           component != null
               ? () => host.onVisibilityChanged(component, !visible)
               : () => _toggleModuleVisibility(module!, visible),

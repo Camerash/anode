@@ -500,6 +500,12 @@ does, and these surfaces sit directly on top of the render.
   `HOLD` read more period-correct than a play triangle. Flutter and shader
   renderers share a 24-glyph ASCII visual contract; unsupported characters
   degrade to `?` without rewriting persisted text.
+- A physical Prism cap has one immutable legend. A binary control names the
+  asserted state (`FULL`, `OVERRIDE`, `VISIBLE`, `RUN`); illumination says
+  whether that state is active. It never swaps to `EXIT`, `INHERIT`, `HIDDEN`,
+  or `HOLD` when dark. Multi-choice state uses separate fixed-label keys, such
+  as `KM/H` and `MPH`, rather than one cap whose print changes. Momentary
+  commands retain one fixed action verb.
 - Flutter control widths are physical one-, two-, or three-unit spans. Text
   never invents an arbitrary cap width. Selection and keyboard focus use
   external locator ticks so neither can masquerade as the active lamp.
@@ -535,9 +541,12 @@ decisions only: the current phosphor colour and a `TUNE` latch. Tapping the
 colour hard-cuts to the three labelled phosphor choices; local scopes also
 offer `USE DESIGN` to clear the phosphor override.
 
-`TUNE` flips the fascia about its top hinge and reveals a fixed-footprint
-service face. The surrounding service bay and canvas do not change size. The
-service face shows one effect at a time: previous and next Prism keys with hard
+`TUNE` retracts the fascia vertically behind a fixed lower service lip and
+reveals a fixed-footprint service face. The surrounding service bay and canvas
+do not change size. The shutter releases for 20ms, travels at constant rate for
+110ms, and hard-seats for 20ms. It never rotates, scales, eases, or collapses in
+perspective; a narrow moving edge and shadow provide its only simulated depth.
+The service face shows one effect at a time: previous and next Prism keys with hard
 stops, an indexed position readout, the effect's name and physical description,
 a small secondary pictogram, inheritance control where local, exact value, and
 one recessed automotive lever. No effect overview grid, pager or scrolling
@@ -589,8 +598,9 @@ The whole app is switchgear, not a Material app wearing a VFD theme:
   configured click/haptic.
 - Hidden service surfaces move as mechanisms. A drawer releases its latch for
   20ms, travels linearly for 130ms, and hard-seats for 30ms. The LOOK service
-  fascia flips about its top hinge in 150ms between two faces occupying the
-  exact same footprint; it never expands the panel or moves the canvas.
+  shutter releases for 20ms, retracts linearly behind a fixed lip for 110ms,
+  and hard-seats for 20ms. Both faces occupy the exact same footprint; the
+  shutter never expands the panel, moves the canvas, scales, or uses perspective.
   Reduced-motion resolves moving mechanisms immediately.
 - Continuous direct manipulation remains for component drag/resize, levers,
   and segmented value bars. This is not content navigation and must not acquire
@@ -684,7 +694,10 @@ switches. It affects component and module drag/resize only. A gesture quantizes
 its total design-space delta to `0.005` relative to the pointer-down placement,
 so toggling SNAP never mutates existing off-grid geometry. With SNAP dark,
 movement and resize are fully continuous. Selection chrome always derives from
-the same committed placement sent to the renderer.
+the same committed placement sent to the renderer. Authored geometry refreshes
+synchronously with the editor rebuild rather than waiting for the optical
+animation ticker, so the border and shader commit the same placement in the
+same widget frame. Optical flicker, decay, and tilt remain ticker-driven.
 
 The canvas drives the camera itself from a single `Listener` rather than nesting
 an `InteractiveViewer`. Its scale recogniser is an arena member that wins over

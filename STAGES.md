@@ -761,6 +761,49 @@ Verification:
   as a hands-on check.
 - No persisted schema, shader source, tuned constant, or shipped preset changed.
 
+#### Stage 4 geometry-sync and service-shutter follow-up — DONE
+
+- [x] Refresh authored component data synchronously when a design or orientation
+      changes. Selection chrome and shader geometry now commit the same
+      placement during the same widget rebuild instead of the shader waiting
+      for the next animation tick.
+- [x] Preserve segment-bank state across placement-only design changes; replace
+      a bank only when its digit topology changes. Optical animation remains
+      ticker-driven and `CustomPainter(repaint: controller)` remains intact.
+- [x] Keep SNAP active by default. Snapped and continuous gestures still share
+      the same placement transform; the synchronization fix makes both the
+      border and rendered geometry visibly follow that result.
+- [x] Make binary Prism legends immutable assertions: `FULL`, `OVERRIDE`,
+      `VISIBLE`, `RUN`, and generic positive boolean labels. Illumination alone
+      communicates state. Replace the debug unit-changing cap with separate
+      fixed `KM/H` and `MPH` keys.
+- [x] Replace the edge-on top-hinge collapse with a retracting service shutter:
+      20ms release, 110ms constant-rate vertical travel behind a fixed lower
+      lip, and 20ms hard seat. No scale, perspective, easing, or footprint
+      change; reduced motion still seats immediately.
+- [x] Add headless motion/state regressions and an Impeller geometry-refresh
+      regression. No persisted schema, shader source, tuned constant, or
+      shipped preset changed.
+
+Verification:
+
+- `flutter analyze`: clean.
+- `flutter test`: 140 passing, including immutable `FULL` / `OVERRIDE`
+  legends, shutter phase geometry, reduced motion, fixed footprint, and a
+  midpoint shutter golden.
+- `integration_test/halo_compounding_test.dart`: four tests passing on iPhone
+  17 Pro simulator, iOS 26.3, Impeller. Original seam/halo assertions remain
+  unchanged.
+- `integration_test/frame_extent_optics_test.dart`: two tests passing on the
+  same simulator and renderer. Its existing optical comparison now updates the
+  retained harness controller when inputs change; the new test proves authored
+  geometry rebuilds synchronously before another animation tick.
+- Fresh debug launch followed an explicit termination attempt. Runtime
+  screenshot rendered cleanly. The closed, midpoint, and open shutter states
+  were visually inspected through deterministic goldens; simulator UI
+  automation was unavailable, so direct editor drag feel is not claimed.
+- No persisted schema, shader source, tuned constant, or shipped preset changed.
+
 ---
 
 ## Stage 5 — speed estimation — NOT STARTED

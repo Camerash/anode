@@ -319,7 +319,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
           const SizedBox(width: 5),
           PrismButton(
             key: const ValueKey('canvas-full'),
-            label: widget.fullScreen ? 'Exit' : 'Full',
+            label: 'Full',
             palette: palette,
             lit: widget.fullScreen,
             role: PrismRole.compact,

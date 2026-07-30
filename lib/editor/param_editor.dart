@@ -88,22 +88,16 @@ class _ParamControl extends StatelessWidget {
     ParamType.text => _text(),
   };
 
-  Widget _boolean() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: <Widget>[
-      VfdLegend(spec.label, palette: palette, lit: true, size: 11),
-      const SizedBox(height: 10),
-      PrismButton(
-        label: value as bool ? 'On' : 'Off',
-        palette: palette,
-        lit: value as bool,
-        selected: value as bool,
-        style: prismStyle,
-        soundEnabled: soundEnabled,
-        hapticsEnabled: hapticsEnabled,
-        onPressed: () => onChanged(!(value as bool)),
-      ),
-    ],
+  Widget _boolean() => PrismButton(
+    label: spec.label,
+    palette: palette,
+    lit: value as bool,
+    selected: value as bool,
+    span: PrismSpan.two,
+    style: prismStyle,
+    soundEnabled: soundEnabled,
+    hapticsEnabled: hapticsEnabled,
+    onPressed: () => onChanged(!(value as bool)),
   );
 
   Widget _options() => Column(

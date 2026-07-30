@@ -556,6 +556,14 @@ void main() {
           .isEnabled,
       Tristate.isFalse,
     );
+    expect(
+      tester
+          .widget<PrismButton>(
+            find.byKey(const ValueKey('effect-override-bloom')),
+          )
+          .label,
+      'Override',
+    );
     await tester.tap(find.byKey(const ValueKey('effect-override-bloom')));
     await tester.pump();
 

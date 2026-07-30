@@ -6,6 +6,7 @@ import 'package:anode/editor/editor_page.dart';
 import 'package:anode/model/dashboard.dart';
 import 'package:anode/model/dev_design.dart';
 import 'package:anode/model/placement.dart';
+import 'package:anode/vfd/prism_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -601,6 +602,12 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('canvas-full')));
     await tester.pump();
+    expect(
+      tester
+          .widget<PrismButton>(find.byKey(const ValueKey('canvas-full')))
+          .label,
+      'Full',
+    );
     expect(
       tester.getSemantics(snap).flagsCollection.isToggled,
       Tristate.isFalse,
