@@ -57,12 +57,16 @@ void main() {
 
   test('nudge changes only requested axes', () {
     const placement = Placement(center: Offset(0.1, 0.2), size: Size(0.5, 0.2));
-    final x = nudgePlacement(placement, dx: 0.005).center;
-    final y = nudgePlacement(placement, dy: -0.005).center;
+    final x = nudgePlacement(placement, dx: editorFineStep).center;
+    final y = nudgePlacement(placement, dy: -editorFineStep).center;
     expect(x.dx, closeTo(0.105, 1e-12));
     expect(x.dy, 0.2);
     expect(y.dx, 0.1);
     expect(y.dy, closeTo(0.195, 1e-12));
+  });
+
+  test('one drag detent contains five fine-control steps', () {
+    expect(editorSnapStep, editorFineStep * 5);
   });
 
   test('continuous movement preserves exact deltas', () {
@@ -83,20 +87,21 @@ void main() {
     );
     final moved = movePlacementBy(
       placement,
-      dx: 0.0072,
-      dy: -0.0031,
+      dx: 0.0372,
+      dy: -0.0131,
       snapStep: editorSnapStep,
     );
     final resized = resizePlacementFromEdges(
       placement: placement,
-      widthDelta: 0.0072,
-      heightDelta: -0.0031,
+      widthDelta: 0.0372,
+      heightDelta: -0.0131,
       snapStep: editorSnapStep,
     );
 
-    expect(moved.center, const Offset(0.108, -0.212));
-    expect(resized.size.width, closeTo(0.508, 1e-12));
-    expect(resized.size.height, closeTo(0.198, 1e-12));
+    expect(moved.center.dx, closeTo(0.128, 1e-12));
+    expect(moved.center.dy, closeTo(-0.232, 1e-12));
+    expect(resized.size.width, closeTo(0.528, 1e-12));
+    expect(resized.size.height, closeTo(0.178, 1e-12));
     expect(
       resized.center.dx - resized.size.width / 2,
       closeTo(placement.center.dx - placement.size.width / 2, 1e-12),

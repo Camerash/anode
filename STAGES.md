@@ -659,7 +659,7 @@ Frame-extent verification:
 - [x] Alternate creation copies component and module placements verbatim into
       the expanded frame extent.
 - [x] Add editor-wide session-only `SNAP` beside `FIT`: active by default,
-      `0.005` design-unit delta quantization relative to pointer-down geometry,
+      `0.025` design-unit delta quantization relative to pointer-down geometry,
       continuous when dark, and no mutation on toggle.
 - [x] Make move/resize pure transforms shared by components and modules.
       Snapped resize quantizes the applied delta, keeps the opposite edge fixed,
@@ -829,9 +829,11 @@ Verification:
       the two spare RGB lanes in each digit payload; Prism rows use lanes after
       the maximum 24 glyphs. Texture remains 22×16 with sixteen component rows,
       two samplers, the same float-uniform map and one shared fragment pass.
-- [x] Preserve SNAP semantics. SNAP still quantizes authored gesture deltas to
-      0.005 units; smooth mode writes continuous doubles. Both modes now reach
-      renderer geometry below one physical pixel of packing error.
+- [x] Restore a perceptible mechanical SNAP after removing renderer
+      quantization: drag/resize uses fixed 0.025-unit detents (`1 / 40` of the
+      reference tube height), while PLACE retains 0.005-unit fine controls.
+      One coarse detent equals five fine steps. Neither grid depends on viewport
+      pixels or camera zoom; smooth mode still writes continuous doubles.
 - [x] Update the authoritative texture map and add packing regressions for
       signed component/module positions, non-Prism payload lanes and Prism
       payload lanes.
@@ -839,7 +841,8 @@ Verification:
 Verification:
 
 - `flutter analyze`: clean.
-- `flutter test`: 141 passing.
+- `flutter test`: 142 passing, including the five-fine-steps-per-detent
+  invariant and off-grid pointer-down quantization.
 - `integration_test/halo_compounding_test.dart`: four tests passing on iPhone
   17 Pro simulator, iOS 26.3, Impeller. Original seam/halo assertions remain
   unchanged.

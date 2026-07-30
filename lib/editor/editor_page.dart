@@ -1272,7 +1272,7 @@ class _PlacementPanel extends StatelessWidget {
   const _PlacementPanel({required this.host});
 
   final _EditorServicePanel host;
-  static const _nudge = editorSnapStep;
+  static const _nudge = editorFineStep;
 
   @override
   Widget build(BuildContext context) {

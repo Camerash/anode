@@ -5,7 +5,8 @@ import 'package:flutter/widgets.dart';
 import '../model/placement.dart';
 
 const double minimumAuthoredSize = 0.03;
-const double editorSnapStep = 0.005;
+const double editorSnapStep = 0.025;
+const double editorFineStep = 0.005;
 
 double snapDesignDelta(double value, double? step) {
   if (step == null || step <= 0) return value;
