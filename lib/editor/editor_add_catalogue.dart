@@ -31,6 +31,10 @@ class EditorAddRequest {
   String get label => componentType?.displayName ?? 'VFD module';
 }
 
+Size editorAddDropSize(EditorAddRequest request) =>
+    request.componentType?.legacyVariantSpec.recommendedSize ??
+    const Size(1, 0.5);
+
 class EditorAddCatalogue extends StatefulWidget {
   const EditorAddCatalogue({
     super.key,
@@ -41,6 +45,8 @@ class EditorAddCatalogue extends StatefulWidget {
     required this.onClose,
     required this.dashboard,
     this.renderAssets,
+    this.onDragEnded,
+    this.onDragUpdated,
   });
 
   final VfdPalette palette;
@@ -50,6 +56,9 @@ class EditorAddCatalogue extends StatefulWidget {
   final VoidCallback onClose;
   final Dashboard dashboard;
   final VfdRenderAssets? renderAssets;
+  final VoidCallback? onDragEnded;
+  final void Function(EditorAddRequest request, Offset globalPosition)?
+  onDragUpdated;
 
   @override
   State<EditorAddCatalogue> createState() => _EditorAddCatalogueState();
@@ -182,6 +191,12 @@ class _EditorAddCatalogueState extends State<EditorAddCatalogue> {
                       items[index].componentType?.id ==
                           _currentSelection.componentType?.id,
                   onSelected: () => setState(() => _selected = items[index]),
+                  onDragStarted: () => setState(() => _selected = items[index]),
+                  onDragEnded: () {
+                    widget.onDragEnded?.call();
+                  },
+                  onDragUpdated: (request, globalPosition) =>
+                      widget.onDragUpdated?.call(request, globalPosition),
                 ),
               ),
               if (index + 1 < end) const SizedBox(height: 4),
@@ -202,6 +217,9 @@ class _CatalogueRow extends StatelessWidget {
     required this.hapticsEnabled,
     required this.selected,
     required this.onSelected,
+    required this.onDragStarted,
+    required this.onDragEnded,
+    required this.onDragUpdated,
   });
 
   final EditorAddRequest request;
@@ -210,6 +228,10 @@ class _CatalogueRow extends StatelessWidget {
   final bool hapticsEnabled;
   final bool selected;
   final VoidCallback onSelected;
+  final VoidCallback onDragStarted;
+  final VoidCallback onDragEnded;
+  final void Function(EditorAddRequest request, Offset globalPosition)
+  onDragUpdated;
 
   @override
   Widget build(BuildContext context) {
@@ -220,23 +242,34 @@ class _CatalogueRow extends StatelessWidget {
       description: description,
       palette: palette,
     );
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onSelected,
-      child: Semantics(
-        label: request.label,
-        selected: selected,
-        hint: 'Tap to preview. Long press, then drag onto the design',
-        child: LongPressDraggable<EditorAddRequest>(
-          key: ValueKey('add-${request.componentType?.id ?? 'module'}'),
-          data: request,
-          hapticFeedbackOnStart: false,
-          onDragStarted: () => actuateMechanicalFeedback(
+    return Semantics(
+      label: request.label,
+      selected: selected,
+      hint: 'Tap to select or drag onto the design',
+      child: Draggable<EditorAddRequest>(
+        key: ValueKey('add-${request.componentType?.id ?? 'module'}'),
+        data: request,
+        rootOverlay: true,
+        // DragTargetDetails.offset is the drag avatar position. The default
+        // child anchor subtracts the source-row touch offset, while the ghost
+        // follows DragUpdateDetails.globalPosition. Anchor at the pointer so
+        // the committed design centre and visible ghost use the same point.
+        dragAnchorStrategy: pointerDragAnchorStrategy,
+        onDragStarted: () {
+          onDragStarted();
+          actuateMechanicalFeedback(
             soundEnabled: soundEnabled,
             hapticsEnabled: hapticsEnabled,
-          ),
-          feedback: SizedBox(width: 240, height: 58, child: face),
-          childWhenDragging: Opacity(opacity: 0.32, child: face),
+          );
+        },
+        onDragUpdate: (details) =>
+            onDragUpdated(request, details.globalPosition),
+        onDragEnd: (_) => onDragEnded(),
+        feedback: const SizedBox.shrink(),
+        childWhenDragging: Opacity(opacity: 0.24, child: face),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onSelected,
           child: _CatalogueFace(
             request: request,
             description: description,
@@ -351,12 +384,7 @@ class _CataloguePreview extends StatelessWidget {
     final type =
         request.componentType ??
         ComponentTypes.byId(ComponentTypes.speedDigits)!;
-    final recommended =
-        type.variant(type.legacyVariant)?.recommendedSize ?? type.defaultSize;
-    final scale = (1.7 / recommended.width)
-        .clamp(0.0, 1.0)
-        .clamp(0.0, (0.62 / recommended.height).clamp(0.0, 1.0));
-    final size = Size(recommended.width * scale, recommended.height * scale);
+    final size = _previewSize(type);
     const previewModuleId = 'catalogue.preview.module';
     final moduleRequest = request.kind == EditorAddKind.modules;
     return Dashboard(
@@ -391,6 +419,14 @@ class _CataloguePreview extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  Size _previewSize(ComponentTypeSpec type) {
+    final recommended = type.legacyVariantSpec.recommendedSize;
+    final scale = (1.7 / recommended.width)
+        .clamp(0.0, 1.0)
+        .clamp(0.0, (0.62 / recommended.height).clamp(0.0, 1.0));
+    return Size(recommended.width * scale, recommended.height * scale);
   }
 }
 

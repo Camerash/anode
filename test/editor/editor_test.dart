@@ -7,7 +7,6 @@ import 'package:anode/model/dashboard.dart';
 import 'package:anode/model/dev_design.dart';
 import 'package:anode/model/placement.dart';
 import 'package:anode/vfd/prism_widgets.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -547,7 +546,7 @@ void main() {
     expect(frame.height, closeTo(viewport.height, 0.001));
   });
 
-  testWidgets('ADD catalogue long-press drag places a registered part', (
+  testWidgets('ADD catalogue direct drag shows ghost and places a part', (
     tester,
   ) async {
     await _setViewport(tester, const Size(1200, 900));
@@ -574,26 +573,49 @@ void main() {
       find.byKey(const ValueKey('editor-authored-frame')),
     );
     final drag = await tester.startGesture(tester.getCenter(source));
-    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
     await drag.moveTo(target);
     await tester.pump();
+    expect(find.byKey(const ValueKey('add-drop-ghost')), findsOneWidget);
+    final panelPosition = tester.getCenter(source);
+    await drag.moveTo(panelPosition);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('add-drop-ghost')), findsOneWidget);
+    final ghostCenter = tester.getCenter(
+      find.byKey(const ValueKey('add-drop-ghost')),
+    );
+    expect(ghostCenter.dx, closeTo(panelPosition.dx, 0.01));
+    expect(ghostCenter.dy, closeTo(panelPosition.dy, 0.01));
+    await drag.moveTo(target);
     await drag.up();
     await tester.pump();
+    expect(find.byKey(const ValueKey('add-drop-ghost')), findsNothing);
 
-    expect(
-      dashboard.components.where((value) => value.typeId == 'outsideTemp'),
-      hasLength(1),
+    final added = dashboard.components
+        .where((value) => value.typeId == 'outsideTemp')
+        .single;
+
+    final committedRect = tester.getRect(
+      find.byKey(ValueKey('canvas-${added.id}')),
     );
+    expect(committedRect.center.dx, closeTo(target.dx, 0.01));
+    expect(committedRect.center.dy, closeTo(target.dy, 0.01));
+
+    final center = added.placements[DesignOrientation.landscape]!.center;
+    expect(center.dx / 0.1, closeTo((center.dx / 0.1).round(), 1e-9));
+    expect(center.dy / 0.1, closeTo((center.dy / 0.1).round(), 1e-9));
   });
 
-  testWidgets('PART opens with indexed register before focused control', (
+  testWidgets('PART exposes scalar controls inline and variant in panel', (
     tester,
   ) async {
     await _setViewport(tester, const Size(900, 500));
-    final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    var dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
     await tester.pumpWidget(
       MaterialApp(
-        home: EditorPage(dashboard: dashboard, onChanged: (_) {}),
+        home: EditorPage(
+          dashboard: dashboard,
+          onChanged: (value) => dashboard = value,
+        ),
       ),
     );
 
@@ -612,10 +634,36 @@ void main() {
       find.byKey(const ValueKey('part-control-param:digits')),
       findsOneWidget,
     );
+    expect(find.byKey(const ValueKey('param-digits-cell-strip')), findsNothing);
+    expect(find.text('SPEED DIGITS'), findsWidgets);
+    expect(find.byKey(const ValueKey('part-control-back')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('param-digits-decrement')));
+    await tester.pump();
+    expect(
+      dashboard.components
+          .where((component) => component.id == 'speed')
+          .single
+          .effectiveParams['digits'],
+      2,
+    );
+    expect(find.byKey(const ValueKey('part-control-back')), findsNothing);
+
     await tester.tap(find.byKey(const ValueKey('part-control-variant')));
     await tester.pump();
     expect(find.byKey(const ValueKey('part-control-back')), findsOneWidget);
     expect(find.text('VARIANT'), findsWidgets);
+
+    await tester.tap(find.byKey(const ValueKey('part-control-back')));
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey('canvas-bar')),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('param-cells-cell-strip')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('authored frame exposes registration and exact aspect readout', (
@@ -637,6 +685,27 @@ void main() {
 
     expect(find.text('LANDSCAPE · 2.600:1'), findsOneWidget);
     expect(find.byType(CustomPaint), findsWidgets);
+  });
+
+  testWidgets('selection frame keeps component name out of canvas chrome', (
+    tester,
+  ) async {
+    final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorCanvas(
+          dashboard: dashboard,
+          orientation: DesignOrientation.landscape,
+          deviceViewportSize: const Size(900, 500),
+          selectedId: 'speed',
+          onSelect: (_) {},
+          onPlacementChanged: (_, _) {},
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('canvas-speed')), findsOneWidget);
+    expect(find.text('SPEED DIGITS'), findsNothing);
   });
 
   testWidgets('safe area is a guide and never changes the device envelope', (
@@ -671,7 +740,75 @@ void main() {
     );
   });
 
-  testWidgets('selected part uses guarded constant-red removal', (
+  testWidgets(
+    'selected part removal is immediate and editor undo/redo restores it',
+    (tester) async {
+      await _setViewport(tester, const Size(900, 500));
+      var dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+      await tester.pumpWidget(
+        MaterialApp(
+          home: EditorPage(
+            dashboard: dashboard,
+            onChanged: (value) => dashboard = value,
+          ),
+        ),
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('canvas-speed')),
+        warnIfMissed: false,
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 180));
+
+      expect(find.text('RACK'), findsNothing);
+      final arm = find.byKey(const ValueKey('remove-arm'));
+      expect(arm, findsOneWidget);
+      final remove = tester.widget<PrismButton>(arm);
+      expect(remove.palette.lit, const Color(0xFFFF4A3D));
+      expect(remove.lit, isTrue);
+
+      final undo = find.byKey(const ValueKey('canvas-undo'));
+      final redo = find.byKey(const ValueKey('canvas-redo'));
+      expect(tester.widget<PrismButton>(undo).symbol, PrismSymbol.undo);
+      expect(tester.widget<PrismButton>(redo).symbol, PrismSymbol.redo);
+      expect(tester.widget<PrismButton>(undo).enabled, isFalse);
+      expect(tester.widget<PrismButton>(redo).enabled, isFalse);
+
+      await tester.tap(arm);
+      await tester.pump();
+      expect(dashboard.components.where((item) => item.id == 'speed'), isEmpty);
+      expect(tester.widget<PrismButton>(undo).enabled, isTrue);
+
+      await tester.tap(undo);
+      await tester.pump();
+      expect(
+        dashboard.components.where((item) => item.id == 'speed'),
+        hasLength(1),
+      );
+      expect(tester.widget<PrismButton>(redo).enabled, isTrue);
+      expect(redo.hitTestable(), findsOneWidget);
+
+      await tester.tap(redo);
+      await tester.pump();
+      expect(dashboard.components.where((item) => item.id == 'speed'), isEmpty);
+
+      await tester.tap(undo);
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('canvas-speed')),
+        warnIfMissed: false,
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('remove-arm')));
+      await tester.pump();
+      expect(tester.widget<PrismButton>(redo).enabled, isFalse);
+    },
+  );
+
+  testWidgets('one move gesture creates one undo history entry', (
     tester,
   ) async {
     await _setViewport(tester, const Size(900, 500));
@@ -685,27 +822,40 @@ void main() {
       ),
     );
 
-    await tester.tap(
-      find.byKey(const ValueKey('canvas-speed')),
-      warnIfMissed: false,
-    );
+    final speed = find.byKey(const ValueKey('canvas-speed'));
+    await tester.tap(speed, warnIfMissed: false);
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 180));
+    final before = dashboard.components
+        .where((item) => item.id == 'speed')
+        .single
+        .placements[DesignOrientation.landscape]!;
 
-    expect(find.text('RACK'), findsNothing);
-    final arm = find.byKey(const ValueKey('remove-arm'));
-    expect(arm, findsOneWidget);
-    final remove = tester.widget<PrismButton>(arm);
-    expect(remove.palette.lit, const Color(0xFFFF4A3D));
+    final drag = await tester.startGesture(tester.getCenter(speed));
+    await drag.moveBy(const Offset(18, 0));
+    await tester.pump();
+    await drag.moveBy(const Offset(18, 0));
+    await tester.pump();
+    await drag.moveBy(const Offset(18, 0));
+    await tester.pump();
+    await drag.up();
+    await tester.pump();
 
-    await tester.tap(arm);
+    final moved = dashboard.components
+        .where((item) => item.id == 'speed')
+        .single
+        .placements[DesignOrientation.landscape]!;
+    expect(moved.center, isNot(before.center));
+
+    final undo = find.byKey(const ValueKey('canvas-undo'));
+    expect(tester.widget<PrismButton>(undo).enabled, isTrue);
+    await tester.tap(undo);
     await tester.pump();
-    expect(find.byKey(const ValueKey('remove-confirm')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('remove-confirm')));
-    await tester.pump();
-    expect(dashboard.components.where((item) => item.id == 'speed'), isEmpty);
+    final restored = dashboard.components
+        .where((item) => item.id == 'speed')
+        .single
+        .placements[DesignOrientation.landscape]!;
+    expect(restored.center, before.center);
+    expect(restored.size, before.size);
   });
 
   testWidgets('SNAP defaults active and toggle mutates no placement', (

@@ -35,6 +35,60 @@ void main() {
     );
   });
 
+  test('Prism redo geometry mirrors undo exactly', () {
+    const size = Size(24, 18);
+    final undo = PrismSymbolGeometry.path(PrismSymbol.undo, size);
+    final redo = PrismSymbolGeometry.path(PrismSymbol.redo, size);
+
+    for (var row = 0; row < 36; row++) {
+      for (var column = 0; column < 48; column++) {
+        final point = Offset(
+          (column + 0.5) * size.width / 48,
+          (row + 0.5) * size.height / 36,
+        );
+        final mirrored = Offset(size.width - point.dx, point.dy);
+        expect(redo.contains(mirrored), undo.contains(point));
+      }
+    }
+  });
+
+  testWidgets('Prism symbols hide text and retain command semantics', (
+    tester,
+  ) async {
+    var activations = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: PrismButton(
+            key: const ValueKey('symbol-button'),
+            label: 'Undo',
+            symbol: PrismSymbol.undo,
+            palette: palette,
+            soundEnabled: false,
+            hapticsEnabled: false,
+            onPressed: () => activations++,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('prism-symbol-undo')), findsOneWidget);
+    expect(find.text('Undo'), findsNothing);
+    expect(find.text('UNDO'), findsNothing);
+    final semantics = tester.getSemantics(
+      find.byKey(const ValueKey('symbol-button')),
+    );
+    expect(semantics.label, 'Undo');
+    expect(semantics.flagsCollection.isEnabled, Tristate.isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('symbol-button')));
+    expect(activations, 2);
+  });
+
   testWidgets('Prism button exposes toggle semantics and depth press', (
     tester,
   ) async {

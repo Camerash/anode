@@ -285,39 +285,94 @@ void main() {
     expect(tester.getSemantics(bar).flagsCollection.isSlider, isTrue);
   });
 
-  testWidgets('channel drum exposes neighbours and hard indexed steps', (
+  testWidgets(
+    'channel carousel linearly rotates and fades between hard steps',
+    (tester) async {
+      var index = 1;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StatefulBuilder(
+            builder: (context, rebuild) => MechanicalChannelDrum(
+              labels: const <String>['EMISSION', 'BLOOM', 'GRID'],
+              index: index,
+              palette: palette,
+              prismStyle: const PrismStyle(),
+              soundEnabled: false,
+              hapticsEnabled: false,
+              onChanged: (value) => rebuild(() => index = value),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('EMISSION'), findsOneWidget);
+      expect(find.text('BLOOM'), findsOneWidget);
+      expect(find.text('GRID'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('service-effect-next')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 90));
+      expect(index, 2);
+      final outgoing = tester.widget<Opacity>(
+        find.byKey(const ValueKey('mechanical-carousel-item-1')),
+      );
+      final incoming = tester.widget<Opacity>(
+        find.byKey(const ValueKey('mechanical-carousel-item-2')),
+      );
+      expect(outgoing.opacity, inExclusiveRange(0.32, 1));
+      expect(incoming.opacity, inExclusiveRange(0.32, 1));
+      await tester.pump(const Duration(milliseconds: 90));
+      expect(
+        tester
+            .widget<Opacity>(
+              find.byKey(const ValueKey('mechanical-carousel-item-2')),
+            )
+            .opacity,
+        1,
+      );
+      expect(
+        tester
+            .widget<PrismButton>(
+              find.byKey(const ValueKey('service-effect-next')),
+            )
+            .enabled,
+        isFalse,
+      );
+    },
+  );
+
+  testWidgets('channel carousel resolves immediately for reduced motion', (
     tester,
   ) async {
-    var index = 1;
+    var index = 0;
     await tester.pumpWidget(
       MaterialApp(
-        home: StatefulBuilder(
-          builder: (context, rebuild) => MechanicalChannelDrum(
-            labels: const <String>['EMISSION', 'BLOOM', 'GRID'],
-            index: index,
-            palette: palette,
-            prismStyle: const PrismStyle(),
-            soundEnabled: false,
-            hapticsEnabled: false,
-            onChanged: (value) => rebuild(() => index = value),
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: StatefulBuilder(
+            builder: (context, rebuild) => MechanicalChannelDrum(
+              labels: const <String>['EMISSION', 'BLOOM'],
+              index: index,
+              palette: palette,
+              prismStyle: const PrismStyle(),
+              soundEnabled: false,
+              hapticsEnabled: false,
+              onChanged: (value) => rebuild(() => index = value),
+            ),
           ),
         ),
       ),
     );
 
-    expect(find.text('EMISSION'), findsOneWidget);
-    expect(find.text('BLOOM'), findsOneWidget);
-    expect(find.text('GRID'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('service-effect-next')));
     await tester.pump();
-    expect(index, 2);
+    expect(index, 1);
     expect(
       tester
-          .widget<PrismButton>(
-            find.byKey(const ValueKey('service-effect-next')),
+          .widget<Opacity>(
+            find.byKey(const ValueKey('mechanical-carousel-item-1')),
           )
-          .enabled,
-      isFalse,
+          .opacity,
+      1,
     );
   });
 }

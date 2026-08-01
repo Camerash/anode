@@ -159,6 +159,7 @@ abstract final class ComponentTypes {
           defaultValue: 20,
           min: 4,
           max: 40,
+          editorHint: ParamEditorHint.cellStrip,
         ),
         ParamSpec(
           key: 'maxKph',

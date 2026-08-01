@@ -1,5 +1,40 @@
 part of 'prism_widgets.dart';
 
+class _PrismSymbolPainter extends CustomPainter {
+  const _PrismSymbolPainter({
+    required this.symbol,
+    required this.color,
+    required this.glowColor,
+    required this.glow,
+  });
+
+  final PrismSymbol symbol;
+  final Color color;
+  final Color glowColor;
+  final double glow;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = PrismSymbolGeometry.path(symbol, size);
+    if (glow > 0) {
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = glowColor.withValues(alpha: 0.44 * glow)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+      );
+    }
+    canvas.drawPath(path, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PrismSymbolPainter oldDelegate) =>
+      oldDelegate.symbol != symbol ||
+      oldDelegate.color != color ||
+      oldDelegate.glowColor != glowColor ||
+      oldDelegate.glow != glow;
+}
+
 class _PrismHousingPainter extends CustomPainter {
   const _PrismHousingPainter({
     required this.palette,

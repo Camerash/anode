@@ -12,6 +12,7 @@ class VfdEditableField extends StatefulWidget {
     required this.onChanged,
     this.onSubmitted,
     this.keyboardType = TextInputType.text,
+    this.showLabel = true,
   });
 
   final String label;
@@ -20,6 +21,7 @@ class VfdEditableField extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final ValueChanged<String>? onSubmitted;
   final TextInputType keyboardType;
+  final bool showLabel;
 
   @override
   State<VfdEditableField> createState() => _VfdEditableFieldState();
@@ -76,8 +78,10 @@ class _VfdEditableFieldState extends State<VfdEditableField> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            VfdLegend(widget.label, palette: widget.palette, size: 9),
-            const SizedBox(height: 4),
+            if (widget.showLabel) ...<Widget>[
+              VfdLegend(widget.label, palette: widget.palette, size: 9),
+              const SizedBox(height: 4),
+            ],
             EditableText(
               controller: _controller,
               focusNode: _focusNode,

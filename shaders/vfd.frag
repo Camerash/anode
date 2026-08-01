@@ -17,6 +17,7 @@ layout(location = 7)  uniform vec2  uSafeMax;
 layout(location = 8)  uniform vec2  uFrame;
 layout(location = 9)  uniform float uCount;
 layout(location = 10) uniform vec2  uDataSize;
+layout(location = 11) uniform float uPreviewOnly;
 
 // Per-component parameters. Four gauges would exhaust the uniform budget, so
 // component data is packed into a small texture instead. Sampled at exact texel
@@ -391,6 +392,7 @@ void main() {
   float prismOcclusion = 0.0;
   float filamentMask = 0.0;
   float grainStrength = uGrain * (1.0 - step(0.5, uCount));
+  float previewCoverage = 0.0;
 
   for (int i = 0; i < MAX_COMPONENTS; i++) {
     if (float(i) >= uCount) continue;
@@ -448,6 +450,11 @@ void main() {
         glow, core, prismSurface, prismSurfaceMask, prismOcclusion
       );
     }
+
+    previewCoverage = max(previewCoverage, core);
+    previewCoverage = max(previewCoverage, dim * 0.38);
+    previewCoverage = max(previewCoverage, min(1.0, glow * 0.42));
+    previewCoverage = max(previewCoverage, prismSurfaceMask * 0.22);
 
     float mesh = (0.55 + 0.45 * sin(q.x * 560.0)) * (0.55 + 0.45 * sin(q.y * 560.0));
     float meshF = mix(1.0, 0.70 + 0.30 * mesh, clamp(opticalB.x, 0.0, 1.0));
@@ -521,6 +528,15 @@ void main() {
 
   col = col / (1.0 + col * 0.55);
   col = pow(max(col, 0.0), vec3(0.86));
+
+  if (uPreviewOnly > 0.5) {
+    vec3 preview = emission + prismEmission;
+    preview = preview / (1.0 + preview * 0.55);
+    preview = pow(max(preview, 0.0), vec3(0.86));
+    float alpha = clamp(previewCoverage, 0.0, 1.0);
+    fragColor = vec4(preview * alpha, alpha);
+    return;
+  }
 
   fragColor = vec4(col, 1.0);
 }

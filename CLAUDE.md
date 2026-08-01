@@ -511,6 +511,9 @@ does, and these surfaces sit directly on top of the render.
   `HOLD` read more period-correct than a play triangle. Flutter and shader
   renderers share a 24-glyph ASCII visual contract; unsupported characters
   degrade to `?` without rewriting persisted text.
+- Reserve stamped symbols for universally understood spatial or history
+  commands. Draw them with first-party Prism geometry and keep their word
+  labels as accessibility names. Current symbol set: undo and redo.
 - A physical Prism cap has one immutable legend. A binary control names the
   asserted state (`FULL`, `OVERRIDE`, `VISIBLE`, `RUN`); illumination says
   whether that state is active. It never swaps to `EXIT`, `INHERIT`, `HIDDEN`,
@@ -559,7 +562,11 @@ do not change size. The shutter releases for 20ms, travels at constant rate for
 perspective; a narrow moving edge and shadow provide its only simulated depth.
 The service face shows one effect at a time through an indexed channel drum.
 Previous, current, and next labels remain visible; fixed previous/next Prism
-keys move exactly one hard step. A dedicated line carries the physical
+keys move exactly one hard step. Detent travel uses the reusable mechanical
+carousel: labels translate between indexed positions with linear interpolation,
+the outgoing label fades with distance from centre, and the selected label
+remains fully lit. Reduced motion resolves directly to the target detent. A
+dedicated line carries the physical
 description, small secondary pictogram, and local inheritance control. Exact
 value and one full-width recessed automotive lever sit below. No effect
 overview grid, pager, or scrolling exists. The last selected service channel
@@ -673,9 +680,11 @@ selectable, draggable, and resizable.
 
 The editor uses one live, shared render of the whole design plus non-painting
 selection/drag/resize overlays. It does not embed component shaders or create
-per-component raster surfaces. Selection chrome may be lifted above the canvas
-so handles remain reachable; this does not change component list order or
-runtime z-order.
+per-component raster surfaces. ADD is the single exception: one temporary
+transparent component shader may be lifted above the workspace while a drag is
+active. It never enters dashboard state or survives drag end.
+Selection chrome may be lifted above the canvas so handles remain reachable;
+this does not change component list order or runtime z-order.
 
 The 48px top rail contains only `BACK`, dashboard identity, and orientation.
 Every other control lives in one manually latched service bay. Its edge follows
@@ -703,14 +712,18 @@ write placement.
 
 Canvas controls are `ADD`, `SNAP`, `FIT`, and `FULL`. `ADD` opens a dedicated
 catalogue, outside the contextual inspector. Catalogue rows come from component
-registry metadata and use fixed mechanical pages, never kinetic scrolling.
-One selected-item cradle owns the catalogue's only live VFD renderer; tapping a
-row changes that preview without adding anything. Never create one fragment
-pass or animation controller per row.
-Long-pressing a row and dragging it onto the authored canvas creates the part at
-the dropped design-space centre; dropping a module creates an independently
-placeable tube region. The drag target remains disabled for inherited read-only
-layouts.
+registry metadata and use fixed mechanical pages, never kinetic scrolling. The
+catalogue has one selected-item cradle with its only live VFD preview; tapping a
+row changes that preview without adding anything. Dragging a row directly onto
+the authored canvas creates the part at the dropped design-space centre; no
+long-press delay exists and no pointer-attached feedback is drawn. During a
+drag, one transient target-scale VFD ghost stays centred at the pointer anywhere
+over the workspace, including the canvas and the service bay. It is not clamped
+to the canvas. Releasing commits only when the canvas drag target accepts the
+drop; release elsewhere clears the ghost without changing the dashboard. The
+ghost never enters dashboard state and disappears on drop, cancel, or drag end.
+Dropping a module creates an independently placeable tube region. The drag
+target remains disabled for inherited read-only layouts.
 
 `SNAP` is illuminated and active
 by default, lives only for the editor session, and survives preview/full-screen
@@ -734,7 +747,8 @@ headlessly. Do not reintroduce nested gesture recognisers here.
 Selection chrome and resize handles live in screen space, above the camera
 transform, so a handle stays a constant 44px at any zoom and the hit test never
 has to undo the transform. The overlay paints and carries semantics; it does not
-consume pointer events.
+consume pointer events. It never prints the selected element's name inside the
+frame; PART owns that identity label.
 
 `FULL` hides the rail and the service bay and gives the canvas the whole route,
 so the render is at exactly runtime scale. Selection, drag, resize and camera all
@@ -763,14 +777,22 @@ or camera zoom, so imported geometry edits remain deterministic across devices.
 The canvas is the only inventory and selection surface. There is no RACK,
 duplicate element list, visibility key, or reorder key. Z-order remains implicit
 list order until overlap proves a real need. Selected PART and non-main MODULE
-panels expose a constant-red `REMOVE` key; first actuation arms an inline
-confirmation face and a second red `REMOVE` commits.
+panels expose one always-lit red `REMOVE` key and remove immediately. The canvas
+top-right carries editor-local `UNDO` and `REDO` keys for authored dashboard
+changes. A move or resize emits live placement updates but commits exactly one
+history entry when its pointer lifts. Drawer, selection, camera, SNAP, and
+other editor-session state stay outside this history.
 
-PART opens on an indexed register showing every available control and its
-current value: variant, module, optional action, then generic component params.
-Selecting one register key opens its focused control; `BACK` returns to the
-register. Overflow may use fixed complete pages, but must never hide control
-identity behind an unlabeled step position.
+PART shows the selected component name followed by list-like control rows:
+variant, module, optional action, then generic component params. Boolean,
+option, integer, number, and text params expose their useful controls directly
+in the row. A presentation hint may add truthful metadata-driven feedback such
+as the speed bar's cell strip; component ids must not select bespoke widgets.
+Variant, module, and action choices may open focused selector panels because
+their option sets are not compact scalar controls. Variant selection applies
+live and its panel includes a preview. Overflow uses fixed complete-row pages,
+never kinetic scrolling, and never hides control identity behind an unlabeled
+step position.
 
 ### Model findings from the developer editor
 

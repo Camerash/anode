@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+import 'dart:ui' show lerpDouble;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
@@ -5,10 +8,232 @@ import '../model/optical_profile.dart';
 import '../vfd/prism_widgets.dart';
 import '../vfd/vfd_widgets.dart';
 
-/// Indexed automotive channel selector.
-///
-/// Previous and next labels remain visible around the active channel so a
-/// service control is discoverable without a grid or kinetic scrolling.
+typedef MechanicalCarouselLabel<T> = String Function(T item);
+
+/// Reusable indexed mechanical carousel with visible neighbouring detents.
+class MechanicalCarousel<T> extends StatefulWidget {
+  const MechanicalCarousel({
+    super.key,
+    required this.items,
+    required this.index,
+    required this.labelFor,
+    required this.palette,
+    required this.prismStyle,
+    required this.onChanged,
+    this.soundEnabled = true,
+    this.hapticsEnabled = true,
+    this.semanticLabel = 'Carousel selector',
+    this.duration = const Duration(milliseconds: 180),
+    this.previousKey = const ValueKey('mechanical-carousel-previous'),
+    this.nextKey = const ValueKey('mechanical-carousel-next'),
+  }) : assert(items.length > 0),
+       assert(index >= 0),
+       assert(index < items.length);
+
+  final List<T> items;
+  final int index;
+  final MechanicalCarouselLabel<T> labelFor;
+  final VfdPalette palette;
+  final PrismStyle prismStyle;
+  final ValueChanged<int> onChanged;
+  final bool soundEnabled;
+  final bool hapticsEnabled;
+  final String semanticLabel;
+  final Duration duration;
+  final Key previousKey;
+  final Key nextKey;
+
+  @override
+  State<MechanicalCarousel<T>> createState() => _MechanicalCarouselState<T>();
+}
+
+class _MechanicalCarouselState<T> extends State<MechanicalCarousel<T>>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: widget.duration,
+    value: 1,
+  )..addListener(_tick);
+
+  late double _from = widget.index.toDouble();
+  late double _to = widget.index.toDouble();
+
+  bool get _canPrevious => widget.index > 0;
+  bool get _canNext => widget.index + 1 < widget.items.length;
+
+  double get _position => lerpDouble(_from, _to, _controller.value) ?? _to;
+
+  @override
+  void didUpdateWidget(covariant MechanicalCarousel<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.duration != widget.duration) {
+      _controller.duration = widget.duration;
+    }
+    if (oldWidget.index != widget.index) {
+      _from = _position;
+      _to = widget.index.toDouble();
+      if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
+        _controller.value = 1;
+      } else {
+        _controller.forward(from: 0);
+      }
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if ((MediaQuery.maybeDisableAnimationsOf(context) ?? false) &&
+        _controller.value != 1) {
+      _controller.value = 1;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller
+      ..removeListener(_tick)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: widget.semanticLabel,
+    value:
+        '${widget.index + 1} of ${widget.items.length}, '
+        '${widget.labelFor(widget.items[widget.index])}',
+    increasedValue: _canNext
+        ? widget.labelFor(widget.items[widget.index + 1])
+        : null,
+    decreasedValue: _canPrevious
+        ? widget.labelFor(widget.items[widget.index - 1])
+        : null,
+    onIncrease: _canNext ? () => widget.onChanged(widget.index + 1) : null,
+    onDecrease: _canPrevious ? () => widget.onChanged(widget.index - 1) : null,
+    child: FocusableActionDetector(
+      actions: <Type, Action<Intent>>{
+        DirectionalFocusIntent: CallbackAction<DirectionalFocusIntent>(
+          onInvoke: (intent) {
+            if (intent.direction == TraversalDirection.left ||
+                intent.direction == TraversalDirection.up) {
+              if (_canPrevious) widget.onChanged(widget.index - 1);
+            } else if (intent.direction == TraversalDirection.right ||
+                intent.direction == TraversalDirection.down) {
+              if (_canNext) widget.onChanged(widget.index + 1);
+            }
+            return null;
+          },
+        ),
+      },
+      child: Listener(
+        onPointerSignal: (event) {
+          if (event is! PointerScrollEvent) return;
+          if (event.scrollDelta.dy > 0 && _canNext) {
+            widget.onChanged(widget.index + 1);
+          } else if (event.scrollDelta.dy < 0 && _canPrevious) {
+            widget.onChanged(widget.index - 1);
+          }
+        },
+        child: SizedBox(
+          height: 76,
+          child: Row(
+            children: <Widget>[
+              _stepButton(
+                key: widget.previousKey,
+                label: 'Previous',
+                enabled: _canPrevious,
+                onPressed: () => widget.onChanged(widget.index - 1),
+              ),
+              const SizedBox(width: 5),
+              Expanded(child: _face()),
+              const SizedBox(width: 5),
+              _stepButton(
+                key: widget.nextKey,
+                label: 'Next',
+                enabled: _canNext,
+                onPressed: () => widget.onChanged(widget.index + 1),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _face() => DecoratedBox(
+    decoration: BoxDecoration(
+      color: const Color(0xFF030504),
+      border: Border.all(color: widget.palette.unlit.withValues(alpha: 0.52)),
+    ),
+    child: Stack(
+      children: <Widget>[
+        Positioned.fill(
+          child: CustomPaint(
+            painter: _CarouselFacePainter(palette: widget.palette),
+          ),
+        ),
+        Positioned.fill(
+          child: ClipRect(
+            child: Stack(
+              fit: StackFit.expand,
+              children: <Widget>[
+                for (var index = 0; index < widget.items.length; index++)
+                  if ((index - _position).abs() < 1.8) _carouselLabel(index),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _carouselLabel(int index) {
+    final distance = index - _position;
+    final absolute = distance.abs();
+    final opacity = (1 - absolute * 0.68).clamp(0.0, 1.0);
+    final size = lerpDouble(13, 8, math.min(1, absolute))!;
+    return Align(
+      alignment: Alignment.center,
+      child: Transform.translate(
+        offset: Offset(0, distance * 22),
+        child: Opacity(
+          key: ValueKey('mechanical-carousel-item-$index'),
+          opacity: opacity,
+          child: VfdLegend(
+            widget.labelFor(widget.items[index]),
+            palette: widget.palette,
+            lit: index == widget.index,
+            size: size,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _stepButton({
+    required Key key,
+    required String label,
+    required bool enabled,
+    required VoidCallback onPressed,
+  }) => PrismButton(
+    key: key,
+    label: label,
+    palette: widget.palette,
+    enabled: enabled,
+    role: PrismRole.compact,
+    style: widget.prismStyle,
+    soundEnabled: widget.soundEnabled,
+    hapticsEnabled: widget.hapticsEnabled,
+    onPressed: enabled ? onPressed : null,
+  );
+
+  void _tick() {
+    if (mounted) setState(() {});
+  }
+}
+
+/// Effect-channel compatibility surface with stable test and semantics keys.
 class MechanicalChannelDrum extends StatelessWidget {
   const MechanicalChannelDrum({
     super.key,
@@ -33,124 +258,24 @@ class MechanicalChannelDrum extends StatelessWidget {
   final bool hapticsEnabled;
   final String semanticLabel;
 
-  bool get _canPrevious => index > 0;
-  bool get _canNext => index + 1 < labels.length;
-
   @override
-  Widget build(BuildContext context) => Semantics(
-    label: semanticLabel,
-    value: '${index + 1} of ${labels.length}, ${labels[index]}',
-    increasedValue: _canNext ? labels[index + 1] : null,
-    decreasedValue: _canPrevious ? labels[index - 1] : null,
-    onIncrease: _canNext ? () => onChanged(index + 1) : null,
-    onDecrease: _canPrevious ? () => onChanged(index - 1) : null,
-    child: FocusableActionDetector(
-      actions: <Type, Action<Intent>>{
-        DirectionalFocusIntent: CallbackAction<DirectionalFocusIntent>(
-          onInvoke: (intent) {
-            if (intent.direction == TraversalDirection.left ||
-                intent.direction == TraversalDirection.up) {
-              if (_canPrevious) onChanged(index - 1);
-            } else if (intent.direction == TraversalDirection.right ||
-                intent.direction == TraversalDirection.down) {
-              if (_canNext) onChanged(index + 1);
-            }
-            return null;
-          },
-        ),
-      },
-      child: Listener(
-        onPointerSignal: (event) {
-          if (event is! PointerScrollEvent) return;
-          if (event.scrollDelta.dy > 0 && _canNext) {
-            onChanged(index + 1);
-          } else if (event.scrollDelta.dy < 0 && _canPrevious) {
-            onChanged(index - 1);
-          }
-        },
-        child: SizedBox(
-          height: 76,
-          child: Row(
-            children: <Widget>[
-              _stepButton(
-                key: const ValueKey('service-effect-previous'),
-                label: 'Previous',
-                enabled: _canPrevious,
-                onPressed: () => onChanged(index - 1),
-              ),
-              const SizedBox(width: 5),
-              Expanded(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF030504),
-                    border: Border.all(
-                      color: palette.unlit.withValues(alpha: 0.52),
-                    ),
-                  ),
-                  child: Stack(
-                    children: <Widget>[
-                      Positioned.fill(
-                        child: CustomPaint(
-                          painter: _DrumFacePainter(palette: palette),
-                        ),
-                      ),
-                      Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            _label(index - 1, size: 8),
-                            const SizedBox(height: 2),
-                            _label(index, lit: true, size: 13),
-                            const SizedBox(height: 2),
-                            _label(index + 1, size: 8),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 5),
-              _stepButton(
-                key: const ValueKey('service-effect-next'),
-                label: 'Next',
-                enabled: _canNext,
-                onPressed: () => onChanged(index + 1),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-
-  Widget _label(int labelIndex, {bool lit = false, required double size}) {
-    final text = labelIndex >= 0 && labelIndex < labels.length
-        ? labels[labelIndex]
-        : '—';
-    return VfdLegend(text, palette: palette, lit: lit, size: size);
-  }
-
-  Widget _stepButton({
-    required Key key,
-    required String label,
-    required bool enabled,
-    required VoidCallback onPressed,
-  }) => PrismButton(
-    key: key,
-    label: label,
+  Widget build(BuildContext context) => MechanicalCarousel<String>(
+    items: labels,
+    index: index,
+    labelFor: (label) => label,
     palette: palette,
-    enabled: enabled,
-    role: PrismRole.compact,
-    style: prismStyle,
+    prismStyle: prismStyle,
     soundEnabled: soundEnabled,
     hapticsEnabled: hapticsEnabled,
-    onPressed: enabled ? onPressed : null,
+    semanticLabel: semanticLabel,
+    previousKey: const ValueKey('service-effect-previous'),
+    nextKey: const ValueKey('service-effect-next'),
+    onChanged: onChanged,
   );
 }
 
-class _DrumFacePainter extends CustomPainter {
-  const _DrumFacePainter({required this.palette});
+class _CarouselFacePainter extends CustomPainter {
+  const _CarouselFacePainter({required this.palette});
 
   final VfdPalette palette;
 
@@ -186,6 +311,6 @@ class _DrumFacePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _DrumFacePainter oldDelegate) =>
+  bool shouldRepaint(covariant _CarouselFacePainter oldDelegate) =>
       oldDelegate.palette != palette;
 }

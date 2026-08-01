@@ -388,7 +388,7 @@ class VfdController extends ChangeNotifier {
 
 /// Flat floats consumed by `vfd.frag`, counting a `vec2` as two. See the index
 /// map in `STAGES.md`.
-const int _floatUniformCount = 21;
+const int _floatUniformCount = 22;
 
 class VfdPainter extends CustomPainter {
   VfdPainter({
@@ -397,12 +397,14 @@ class VfdPainter extends CustomPainter {
     required this.controller,
     required this.safeRect,
     required this.authoredRevision,
+    required this.transparentBackground,
   }) : super(repaint: controller);
 
   final ui.FragmentShader shader;
   final ui.Image prismGlyphAtlas;
   final VfdController controller;
   final int authoredRevision;
+  final bool transparentBackground;
 
   /// Where content is laid out, in Flutter's y-down logical pixels. The render
   /// still covers the full bounds — this only positions the authored frame.
@@ -440,6 +442,7 @@ class VfdPainter extends CustomPainter {
       ..setFloat(18, controller.componentCount.toDouble())
       ..setFloat(19, ComponentData.texelsPerComponent.toDouble())
       ..setFloat(20, ComponentData.maxComponents.toDouble())
+      ..setFloat(21, transparentBackground ? 1 : 0)
       ..setImageSampler(0, data)
       ..setImageSampler(1, prismGlyphAtlas);
 
@@ -465,7 +468,8 @@ class VfdPainter extends CustomPainter {
       old.prismGlyphAtlas != prismGlyphAtlas ||
       old.controller != controller ||
       old.safeRect != safeRect ||
-      old.authoredRevision != authoredRevision;
+      old.authoredRevision != authoredRevision ||
+      old.transparentBackground != transparentBackground;
 }
 
 class VfdCluster extends StatefulWidget {
@@ -474,6 +478,7 @@ class VfdCluster extends StatefulWidget {
     required this.renderAssets,
     required this.controller,
     this.safeInsets,
+    this.transparentBackground = false,
   });
 
   final VfdRenderAssets renderAssets;
@@ -482,6 +487,7 @@ class VfdCluster extends StatefulWidget {
   /// Where content may be laid out inside this widget. Defaults to the window
   /// padding, which is only correct when the cluster fills the window.
   final EdgeInsets? safeInsets;
+  final bool transparentBackground;
 
   @override
   State<VfdCluster> createState() => _VfdClusterState();
@@ -518,6 +524,7 @@ class _VfdClusterState extends State<VfdCluster> {
               controller: widget.controller,
               safeRect: safeRect,
               authoredRevision: widget.controller.authoredRevision,
+              transparentBackground: widget.transparentBackground,
             ),
             size: Size.infinite,
           );

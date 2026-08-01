@@ -11,6 +11,31 @@ enum PrismRole { compact, standard, primary }
 
 enum PrismSpan { one, two, three }
 
+enum PrismSymbol { undo, redo }
+
+/// Normalized stamped geometry shared by every Prism symbol renderer.
+abstract final class PrismSymbolGeometry {
+  static Path path(PrismSymbol symbol, Size size) {
+    double x(double value) =>
+        size.width * (symbol == PrismSymbol.undo ? value : 1 - value);
+    double y(double value) => size.height * value;
+
+    return Path()
+      ..moveTo(x(0.08), y(0.45))
+      ..lineTo(x(0.37), y(0.08))
+      ..lineTo(x(0.37), y(0.29))
+      ..lineTo(x(0.61), y(0.29))
+      ..lineTo(x(0.86), y(0.51))
+      ..lineTo(x(0.86), y(0.91))
+      ..lineTo(x(0.69), y(0.91))
+      ..lineTo(x(0.69), y(0.58))
+      ..lineTo(x(0.57), y(0.48))
+      ..lineTo(x(0.37), y(0.48))
+      ..lineTo(x(0.37), y(0.68))
+      ..close();
+  }
+}
+
 abstract final class PrismMetrics {
   static double height(PrismRole role) => switch (role) {
     PrismRole.compact => 44,
@@ -32,6 +57,7 @@ class PrismButton extends StatefulWidget {
     required this.onPressed,
     this.value,
     this.face,
+    this.symbol,
     this.lit = false,
     this.selected = false,
     this.enabled = true,
@@ -40,11 +66,12 @@ class PrismButton extends StatefulWidget {
     this.style = const PrismStyle(),
     this.soundEnabled = true,
     this.hapticsEnabled = true,
-  });
+  }) : assert(face == null || symbol == null);
 
   final String label;
   final String? value;
   final Widget? face;
+  final PrismSymbol? symbol;
   final VfdPalette palette;
   final VoidCallback? onPressed;
   final bool lit;
@@ -142,7 +169,7 @@ class _PrismButtonState extends State<PrismButton> {
                             widget.role == PrismRole.compact ? 8 : 10,
                             12,
                           ),
-                          child: widget.face ?? _label(enabled),
+                          child: _face(enabled),
                         ),
                       ),
                     ),
@@ -154,6 +181,22 @@ class _PrismButtonState extends State<PrismButton> {
         ),
       ),
     );
+  }
+
+  Widget _face(bool enabled) {
+    if (widget.face case final face?) return face;
+    if (widget.symbol case final symbol?) {
+      return PrismSymbolFace(
+        symbol: symbol,
+        palette: widget.palette,
+        lit: widget.lit,
+        enabled: enabled,
+        role: widget.role,
+        inactiveLuminosity: widget.style.inactiveLuminosity,
+        activeLuminosity: widget.style.activeLuminosity,
+      );
+    }
+    return _label(enabled);
   }
 
   Widget _label(bool enabled) => FittedBox(
@@ -209,6 +252,53 @@ class _PrismButtonState extends State<PrismButton> {
   }
 }
 
+class PrismSymbolFace extends StatelessWidget {
+  const PrismSymbolFace({
+    super.key,
+    required this.symbol,
+    required this.palette,
+    required this.lit,
+    required this.enabled,
+    required this.role,
+    required this.inactiveLuminosity,
+    required this.activeLuminosity,
+  });
+
+  final PrismSymbol symbol;
+  final VfdPalette palette;
+  final bool lit;
+  final bool enabled;
+  final PrismRole role;
+  final double inactiveLuminosity;
+  final double activeLuminosity;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = switch (role) {
+      PrismRole.compact => const Size(21, 16),
+      PrismRole.standard => const Size(24, 18),
+      PrismRole.primary => const Size(28, 21),
+    };
+    return Center(
+      child: CustomPaint(
+        key: ValueKey('prism-symbol-${symbol.name}'),
+        size: size,
+        painter: _PrismSymbolPainter(
+          symbol: symbol,
+          color: _prismFaceColor(
+            palette: palette,
+            lit: lit,
+            enabled: enabled,
+            inactiveLuminosity: inactiveLuminosity,
+          ),
+          glowColor: palette.lit,
+          glow: lit ? activeLuminosity : 0,
+        ),
+      ),
+    );
+  }
+}
+
 class PrismLegend extends StatelessWidget {
   const PrismLegend(
     this.text, {
@@ -230,11 +320,12 @@ class PrismLegend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = palette.lit;
-    final neutral = Color.lerp(const Color(0xFFAEB6B1), palette.unlit, 0.12)!;
-    final inactiveAlpha = (0.24 + inactiveLuminosity * 0.9).clamp(0.18, 0.68);
-    final color = lit
-        ? active.withValues(alpha: enabled ? 1 : 0.48)
-        : neutral.withValues(alpha: enabled ? inactiveAlpha : 0.24);
+    final color = _prismFaceColor(
+      palette: palette,
+      lit: lit,
+      enabled: enabled,
+      inactiveLuminosity: inactiveLuminosity,
+    );
 
     return Text(
       PrismGlyphs.displayText(text),
@@ -259,6 +350,19 @@ class PrismLegend extends StatelessWidget {
       ),
     );
   }
+}
+
+Color _prismFaceColor({
+  required VfdPalette palette,
+  required bool lit,
+  required bool enabled,
+  required double inactiveLuminosity,
+}) {
+  final neutral = Color.lerp(const Color(0xFFAEB6B1), palette.unlit, 0.12)!;
+  final inactiveAlpha = (0.24 + inactiveLuminosity * 0.9).clamp(0.18, 0.68);
+  return lit
+      ? palette.lit.withValues(alpha: enabled ? 1 : 0.48)
+      : neutral.withValues(alpha: enabled ? inactiveAlpha : 0.24);
 }
 
 class PrismPanel extends StatelessWidget {

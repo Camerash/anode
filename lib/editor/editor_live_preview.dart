@@ -16,12 +16,14 @@ class EditorLiveVfdPreview extends StatefulWidget {
     required this.dashboard,
     required this.orientation,
     this.safeInsets = EdgeInsets.zero,
+    this.transparentBackground = false,
   });
 
   final VfdRenderAssets renderAssets;
   final Dashboard dashboard;
   final DesignOrientation orientation;
   final EdgeInsets safeInsets;
+  final bool transparentBackground;
 
   @override
   State<EditorLiveVfdPreview> createState() => _EditorLiveVfdPreviewState();
@@ -54,5 +56,6 @@ class _EditorLiveVfdPreviewState extends State<EditorLiveVfdPreview>
     renderAssets: widget.renderAssets,
     controller: _controller,
     safeInsets: widget.safeInsets,
+    transparentBackground: widget.transparentBackground,
   );
 }

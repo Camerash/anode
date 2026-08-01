@@ -189,10 +189,11 @@ end and renumber both sides together.
 | 16, 17 | `uFrame` — authored frame extent in design units |
 | 18 | `uCount` |
 | 19, 20 | `uDataSize` |
+| 21 | `uPreviewOnly` — transparent transient editor drop preview |
 
 Sampler 0 is `uData`, sampler 1 is `uPrismGlyphs`.
 
-`VfdPainter.paint` asserts that `setFloat(21, …)` throws. If it ever succeeds,
+`VfdPainter.paint` asserts that `setFloat(22, …)` throws. If it ever succeeds,
 `vfd.frag` declares a uniform nothing writes — which renders plausibly and
 wrongly rather than erroring, exactly like the three texture traps above.
 

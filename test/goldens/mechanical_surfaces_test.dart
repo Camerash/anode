@@ -5,6 +5,7 @@ import 'package:anode/data/design_repository.dart';
 import 'package:anode/editor/editor_page.dart';
 import 'package:anode/editor/effect_panel.dart';
 import 'package:anode/library/library_page.dart';
+import 'package:anode/mechanical/mechanical_channel_drum.dart';
 import 'package:anode/mechanical/mechanical_pager.dart';
 import 'package:anode/mechanical/mechanical_lever.dart';
 import 'package:anode/model/dashboard.dart';
@@ -53,9 +54,21 @@ void main() {
       find.byKey(const ValueKey('surface')),
       matchesGoldenFile('baselines/editor_open.png'),
     );
+
+    await tester.tap(
+      find.byKey(const ValueKey('canvas-speed')),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('remove-arm')));
+    await tester.pump();
+    await expectLater(
+      find.byKey(const ValueKey('surface')),
+      matchesGoldenFile('baselines/editor_history_available.png'),
+    );
   });
 
-  testWidgets('editor PART register and ADD catalogue baselines', (
+  testWidgets('editor PART controls and ADD catalogue baselines', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(874, 402));
@@ -161,6 +174,41 @@ void main() {
     await expectLater(
       find.byKey(const ValueKey('surface')),
       matchesGoldenFile('baselines/effect_transition.png'),
+    );
+  });
+
+  testWidgets('mechanical carousel midpoint baseline', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(520, 110));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var index = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ColoredBox(
+          color: const Color(0xFF050807),
+          child: RepaintBoundary(
+            key: const ValueKey('surface'),
+            child: StatefulBuilder(
+              builder: (context, rebuild) => MechanicalChannelDrum(
+                labels: const <String>['EMISSION', 'BLOOM', 'GRID'],
+                index: index,
+                palette: palette,
+                prismStyle: const PrismStyle(),
+                soundEnabled: false,
+                hapticsEnabled: false,
+                onChanged: (value) => rebuild(() => index = value),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('service-effect-next')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+    await expectLater(
+      find.byKey(const ValueKey('surface')),
+      matchesGoldenFile('baselines/carousel_midpoint.png'),
     );
   });
 

@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 
 enum ParamType { boolean, integer, number, option, text }
 
+enum ParamEditorHint { automatic, cellStrip }
+
 /// Declares one tunable on a component type.
 ///
 /// [min] and [max] are not cosmetic. They are the ranges the editor builds its
@@ -21,6 +23,7 @@ class ParamSpec {
     this.unitSuffix,
     this.options = const <String>[],
     this.optionLabels = const <String, String>{},
+    this.editorHint = ParamEditorHint.automatic,
   });
 
   final String key;
@@ -34,6 +37,7 @@ class ParamSpec {
   final String? unitSuffix;
   final List<String> options;
   final Map<String, String> optionLabels;
+  final ParamEditorHint editorHint;
 
   String labelForOption(String option) => optionLabels[option] ?? option;
 

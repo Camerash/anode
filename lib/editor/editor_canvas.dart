@@ -23,6 +23,8 @@ class EditorCanvas extends StatefulWidget {
     required this.selectedId,
     required this.onSelect,
     required this.onPlacementChanged,
+    this.onPlacementGestureStarted,
+    this.onPlacementGestureEnded,
     required this.deviceViewportSize,
     this.deviceSafeInsets = EdgeInsets.zero,
     this.selectedModuleId,
@@ -35,6 +37,11 @@ class EditorCanvas extends StatefulWidget {
     this.onToggleFullScreen,
     this.onAddRequested,
     this.onAddDropped,
+    this.previewController,
+    this.canUndo = false,
+    this.canRedo = false,
+    this.onUndo,
+    this.onRedo,
     this.snapEnabled = true,
     this.onToggleSnap,
     this.soundEnabled = true,
@@ -47,6 +54,8 @@ class EditorCanvas extends StatefulWidget {
   final ValueChanged<String?> onSelect;
   final void Function(String componentId, Placement placement)
   onPlacementChanged;
+  final VoidCallback? onPlacementGestureStarted;
+  final ValueChanged<bool>? onPlacementGestureEnded;
 
   /// Full device viewport. Unsafe regions remain authorable; [deviceSafeInsets]
   /// paint a non-rendering guide only.
@@ -63,6 +72,11 @@ class EditorCanvas extends StatefulWidget {
   final VoidCallback? onToggleFullScreen;
   final VoidCallback? onAddRequested;
   final void Function(EditorAddRequest request, Offset center)? onAddDropped;
+  final EditorCanvasPreviewController? previewController;
+  final bool canUndo;
+  final bool canRedo;
+  final VoidCallback? onUndo;
+  final VoidCallback? onRedo;
   final bool snapEnabled;
   final VoidCallback? onToggleSnap;
   final bool soundEnabled;
@@ -70,6 +84,86 @@ class EditorCanvas extends StatefulWidget {
 
   @override
   State<EditorCanvas> createState() => _EditorCanvasState();
+}
+
+/// Maps global drag positions to target-scale preview bounds without making the
+/// catalogue depend on canvas layout internals.
+class EditorCanvasPreviewController {
+  _EditorCanvasState? _state;
+
+  Rect? previewRect(EditorAddRequest request, Offset globalPosition) =>
+      _state?._unboundedPreviewRect(request, globalPosition);
+
+  void _attach(_EditorCanvasState state) => _state = state;
+
+  void _detach(_EditorCanvasState state) {
+    if (_state == state) _state = null;
+  }
+}
+
+/// Target-scale VFD ghost, rendered in page space so it can cross the service
+/// drawer without painting a second substrate over it.
+class EditorCanvasDropPreview extends StatelessWidget {
+  const EditorCanvasDropPreview({
+    super.key,
+    required this.dashboard,
+    required this.orientation,
+    required this.request,
+    required this.renderAssets,
+  });
+
+  final Dashboard dashboard;
+  final DesignOrientation orientation;
+  final EditorAddRequest request;
+  final VfdRenderAssets? renderAssets;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = VfdPalette.of(dashboard.settings.opticalProfile.phosphor);
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        if (renderAssets != null && request.componentType != null)
+          EditorLiveVfdPreview(
+            renderAssets: renderAssets!,
+            dashboard: _previewDashboard(),
+            orientation: orientation,
+            transparentBackground: true,
+          ),
+        DecoratedBox(
+          key: const ValueKey('add-drop-ghost'),
+          decoration: BoxDecoration(
+            color: palette.lit.withValues(alpha: 0.05),
+            border: Border.all(color: palette.lit.withValues(alpha: 0.8)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Dashboard _previewDashboard() {
+    final type = request.componentType!;
+    final size = editorAddDropSize(request);
+    return Dashboard(
+      id: 'editor.add.canvas-preview',
+      name: request.label,
+      primaryOrientation: orientation,
+      frameSpecs: <DesignOrientation, FrameSpec>{
+        orientation: FrameSpec(width: size.width, height: size.height),
+      },
+      settings: dashboard.settings,
+      components: <ComponentInstance>[
+        ComponentInstance(
+          id: 'editor.add.canvas-preview.component',
+          typeId: type.id,
+          params: type.defaults,
+          placements: <DesignOrientation, Placement>{
+            orientation: Placement(center: Offset.zero, size: size),
+          },
+        ),
+      ],
+    );
+  }
 }
 
 /// What a pointer landed on, resolved once at pointer-down against screen-space
@@ -108,13 +202,19 @@ class _EditorCanvasState extends State<EditorCanvas> {
   Offset _grabOrigin = Offset.zero;
   bool _dragging = false;
   bool _cameraGesture = false;
+  bool _placementGestureActive = false;
   Placement? _initialPlacement;
   double _initialDesignScale = 1;
-
   double _cameraScaleAtStart = 1;
   Offset _cameraOriginAtStart = Offset.zero;
   Offset _gestureAnchor = Offset.zero;
   double _gestureSpread = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.previewController?._attach(this);
+  }
 
   @override
   void didUpdateWidget(covariant EditorCanvas oldWidget) {
@@ -124,6 +224,16 @@ class _EditorCanvasState extends State<EditorCanvas> {
         oldWidget.dashboard.id != widget.dashboard.id) {
       _fit();
     }
+    if (oldWidget.previewController != widget.previewController) {
+      oldWidget.previewController?._detach(this);
+      widget.previewController?._attach(this);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.previewController?._detach(this);
+    super.dispose();
   }
 
   @override
@@ -212,6 +322,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
                       ),
                     ),
                   ),
+                _historyControls(palette),
                 _controls(palette),
               ],
             ),
@@ -307,7 +418,6 @@ class _EditorCanvasState extends State<EditorCanvas> {
             label: item.label,
             onTap: item.isModule ? null : () => widget.onSelect(item.id),
             child: _SelectionBox(
-              label: item.label,
               selected: item.selected,
               livePreview: widget.renderAssets != null,
               showHandles: item.selected && widget.editable,
@@ -375,6 +485,43 @@ class _EditorCanvasState extends State<EditorCanvas> {
             onPressed: widget.onToggleFullScreen,
           ),
         ],
+      ],
+    ),
+  );
+
+  Widget _historyControls(VfdPalette palette) => Positioned(
+    top: 8,
+    // MechanicalPushDrawer's 52px PANEL latch occupies the content edge while
+    // open. Keep history controls in the top-right canvas gutter, clear of it.
+    right: 64,
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        PrismButton(
+          key: const ValueKey('canvas-undo'),
+          label: 'Undo',
+          symbol: PrismSymbol.undo,
+          palette: palette,
+          role: PrismRole.compact,
+          style: widget.dashboard.settings.prismStyle,
+          soundEnabled: widget.soundEnabled,
+          hapticsEnabled: widget.hapticsEnabled,
+          enabled: widget.canUndo,
+          onPressed: widget.canUndo ? widget.onUndo : null,
+        ),
+        const SizedBox(width: 5),
+        PrismButton(
+          key: const ValueKey('canvas-redo'),
+          label: 'Redo',
+          symbol: PrismSymbol.redo,
+          palette: palette,
+          role: PrismRole.compact,
+          style: widget.dashboard.settings.prismStyle,
+          soundEnabled: widget.soundEnabled,
+          hapticsEnabled: widget.hapticsEnabled,
+          enabled: widget.canRedo,
+          onPressed: widget.canRedo ? widget.onRedo : null,
+        ),
       ],
     ),
   );
@@ -500,14 +647,33 @@ class _EditorCanvasState extends State<EditorCanvas> {
     Rect content,
     DragTargetDetails<EditorAddRequest> details,
   ) {
+    final center = _dropCenter(context, content, details.offset);
+    widget.onAddDropped?.call(details.data, center);
+  }
+
+  Offset _dropCenter(BuildContext context, Rect content, Offset global) {
     final box = context.findRenderObject()! as RenderBox;
-    final local = box.globalToLocal(details.offset);
+    final local = box.globalToLocal(global);
     final scene = (local - _cameraOrigin) / _cameraScale;
-    final center = Offset(
+    final raw = Offset(
       (scene.dx - content.center.dx) / _designScale,
       -(scene.dy - content.center.dy) / _designScale,
     );
-    widget.onAddDropped?.call(details.data, center);
+    if (!widget.snapEnabled) return raw;
+    return Offset(
+      (raw.dx / editorSnapStep).round() * editorSnapStep,
+      (raw.dy / editorSnapStep).round() * editorSnapStep,
+    );
+  }
+
+  Rect? _unboundedPreviewRect(EditorAddRequest request, Offset globalPosition) {
+    if (!mounted || _designScale <= 0) return null;
+    final size = editorAddDropSize(request) * (_designScale * _cameraScale);
+    return Rect.fromCenter(
+      center: globalPosition,
+      width: size.width,
+      height: size.height,
+    );
   }
 
   // --- interaction ----------------------------------------------------------
@@ -587,6 +753,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
           !(_grab.kind == _GrabKind.body && _grab.item!.selected)) {
         _cameraGesture = true;
         _grab = _Grab.none;
+      } else {
+        _placementGestureActive = true;
+        widget.onPlacementGestureStarted?.call();
       }
     }
     if (_cameraGesture) {
@@ -610,6 +779,10 @@ class _EditorCanvasState extends State<EditorCanvas> {
       } else if (!item.isModule) {
         widget.onSelect(item.id);
       }
+    }
+    if (_placementGestureActive) {
+      widget.onPlacementGestureEnded?.call(tap);
+      _placementGestureActive = false;
     }
     _grab = _Grab.none;
     _dragging = false;
@@ -763,7 +936,6 @@ class _CanvasItem {
 /// without their touch regions needing to live in the same widget.
 class _SelectionBox extends StatelessWidget {
   const _SelectionBox({
-    required this.label,
     required this.selected,
     required this.livePreview,
     required this.showHandles,
@@ -771,7 +943,6 @@ class _SelectionBox extends StatelessWidget {
     required this.handleExtent,
   });
 
-  final String label;
   final bool selected;
   final bool livePreview;
   final bool showHandles;
@@ -799,15 +970,6 @@ class _SelectionBox extends StatelessWidget {
                 ),
                 width: selected ? 2 : 1,
               ),
-            ),
-            child: Center(
-              child: livePreview && !selected
-                  ? null
-                  : Text(
-                      label,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: color, fontSize: 11),
-                    ),
             ),
           ),
         ),
