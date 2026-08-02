@@ -37,18 +37,24 @@ class VfdLegend extends StatelessWidget {
     required this.palette,
     this.lit = false,
     this.size = 11,
+    this.maxLines,
+    this.overflow,
   });
 
   final String text;
   final VfdPalette palette;
   final bool lit;
   final double size;
+  final int? maxLines;
+  final TextOverflow? overflow;
 
   @override
   Widget build(BuildContext context) {
     final color = palette.state(lit);
     return Text(
       text.toUpperCase(),
+      maxLines: maxLines,
+      overflow: overflow,
       style: TextStyle(
         color: color,
         fontFamily: 'Barlow Condensed',

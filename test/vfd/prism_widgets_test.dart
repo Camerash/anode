@@ -185,6 +185,25 @@ void main() {
     expect(widths[1], lessThan(widths[2]));
   });
 
+  testWidgets('Prism panels remain opaque unless explicitly tuned', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: PrismPanel(
+          palette: palette,
+          child: SizedBox(width: 20, height: 20),
+        ),
+      ),
+    );
+
+    final panel = tester.widget<PrismPanel>(find.byType(PrismPanel));
+    expect(panel.surfaceOpacity, 1);
+    final decorated = tester.widget<DecoratedBox>(find.byType(DecoratedBox));
+    final decoration = decorated.decoration as BoxDecoration;
+    expect(decoration.color!.a, 1);
+  });
+
   testWidgets('Smoke density controls real substrate transmission', (
     tester,
   ) async {

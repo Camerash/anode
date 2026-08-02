@@ -125,16 +125,15 @@ class _EditorPageState extends State<EditorPage> {
             top: 0,
             right: 0,
             height: headerExtent,
-            child: _topRail(context, safeInsets),
+            child: _topChrome(context, safeInsets),
           ),
         ],
       ),
     );
   }
 
-  Widget _topRail(BuildContext context, EdgeInsets safeInsets) => PrismPanel(
-    key: const ValueKey('editor-header-surface'),
-    palette: _palette,
+  Widget _topChrome(BuildContext context, EdgeInsets safeInsets) => Padding(
+    key: const ValueKey('editor-header-layer'),
     padding: EdgeInsets.fromLTRB(
       safeInsets.left + 4,
       safeInsets.top + 2,
@@ -143,47 +142,78 @@ class _EditorPageState extends State<EditorPage> {
     ),
     child: Row(
       children: <Widget>[
-        PrismButton(
-          key: const ValueKey('editor-back'),
-          label: 'Back',
-          palette: _palette,
-          role: PrismRole.compact,
-          style: _dashboard.settings.prismStyle,
-          soundEnabled: widget.soundEnabled,
-          hapticsEnabled: widget.hapticsEnabled,
-          onPressed: () => Navigator.of(context).maybePop(),
-        ),
-        const SizedBox(width: 7),
-        Expanded(
-          child: KeyedSubtree(
-            key: const ValueKey('editor-title'),
-            child: VfdLegend(
-              _dashboard.name,
+        Flexible(
+          fit: FlexFit.loose,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 240),
+            child: PrismPanel(
+              key: const ValueKey('editor-header-left-housing'),
               palette: _palette,
-              lit: true,
-              size: 12,
+              surfaceOpacity: 0.88,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  PrismButton(
+                    key: const ValueKey('editor-back'),
+                    label: 'Back',
+                    palette: _palette,
+                    role: PrismRole.compact,
+                    style: _dashboard.settings.prismStyle,
+                    soundEnabled: widget.soundEnabled,
+                    hapticsEnabled: widget.hapticsEnabled,
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  ),
+                  const SizedBox(width: 7),
+                  Flexible(
+                    child: KeyedSubtree(
+                      key: const ValueKey('editor-title'),
+                      child: VfdLegend(
+                        _dashboard.name,
+                        palette: _palette,
+                        lit: true,
+                        size: 12,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-        for (final value in DesignOrientation.values) ...<Widget>[
-          PrismButton(
-            key: ValueKey('orientation-${value.name}'),
-            label: value.name,
-            palette: _palette,
-            lit: value == _orientation,
-            selected: value == _orientation,
-            role: PrismRole.compact,
-            style: _dashboard.settings.prismStyle,
-            soundEnabled: widget.soundEnabled,
-            hapticsEnabled: widget.hapticsEnabled,
-            onPressed: () => setState(() {
-              _orientation = value;
-              _selectedId = null;
-              _selectedModuleId = null;
-            }),
+        const Spacer(),
+        PrismPanel(
+          key: const ValueKey('editor-header-right-housing'),
+          palette: _palette,
+          surfaceOpacity: 0.88,
+          padding: const EdgeInsets.only(left: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              for (final value in DesignOrientation.values) ...<Widget>[
+                PrismButton(
+                  key: ValueKey('orientation-${value.name}'),
+                  label: value.name,
+                  palette: _palette,
+                  lit: value == _orientation,
+                  selected: value == _orientation,
+                  role: PrismRole.compact,
+                  style: _dashboard.settings.prismStyle,
+                  soundEnabled: widget.soundEnabled,
+                  hapticsEnabled: widget.hapticsEnabled,
+                  onPressed: () => setState(() {
+                    _orientation = value;
+                    _selectedId = null;
+                    _selectedModuleId = null;
+                  }),
+                ),
+                const SizedBox(width: 4),
+              ],
+            ],
           ),
-          const SizedBox(width: 4),
-        ],
+        ),
       ],
     ),
   );

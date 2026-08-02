@@ -398,16 +398,20 @@ class PrismPanel extends StatelessWidget {
     required this.palette,
     required this.child,
     this.padding = const EdgeInsets.all(14),
-  });
+    this.surfaceOpacity = 1,
+  }) : assert(surfaceOpacity >= 0 && surfaceOpacity <= 1);
 
   final VfdPalette palette;
   final Widget child;
   final EdgeInsets padding;
 
+  /// Alpha applied to the panel substrate. Borders remain mechanically crisp.
+  final double surfaceOpacity;
+
   @override
   Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(
-      color: const Color(0xFF090D0C),
+      color: const Color(0xFF090D0C).withValues(alpha: surfaceOpacity),
       border: Border.all(color: palette.unlit.withValues(alpha: 0.28)),
     ),
     child: Padding(padding: padding, child: child),

@@ -8,6 +8,7 @@ import 'package:anode/model/dev_design.dart';
 import 'package:anode/model/placement.dart';
 import 'package:anode/platform/physical_interface_orientation.dart';
 import 'package:anode/vfd/prism_widgets.dart';
+import 'package:anode/vfd/vfd_widgets.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -557,6 +558,59 @@ void main() {
     expect(frame.size, viewport);
   });
 
+  testWidgets('floating header leaves center open to canvas gestures', (
+    tester,
+  ) async {
+    const viewport = Size(874, 402);
+    await _setViewport(tester, viewport);
+    final dashboard = Dashboard.forkFrom(
+      developmentPreset(),
+      id: 'long-header',
+      name: 'A dashboard name long enough to require truncation',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorPage(dashboard: dashboard, onChanged: (_) {}),
+      ),
+    );
+
+    final layer = tester.getRect(
+      find.byKey(const ValueKey('editor-header-layer')),
+    );
+    final leftHousing = find.byKey(
+      const ValueKey('editor-header-left-housing'),
+    );
+    final rightHousing = find.byKey(
+      const ValueKey('editor-header-right-housing'),
+    );
+    expect(layer, const Rect.fromLTWH(0, 0, 874, 48));
+    expect(tester.getRect(leftHousing).right, lessThan(viewport.width / 2));
+    expect(tester.getRect(rightHousing).left, greaterThan(viewport.width / 2));
+    expect(tester.widget<PrismPanel>(leftHousing).surfaceOpacity, 0.88);
+    expect(tester.widget<PrismPanel>(rightHousing).surfaceOpacity, 0.88);
+
+    final title = tester.widget<VfdLegend>(
+      find.descendant(
+        of: find.byKey(const ValueKey('editor-title')),
+        matching: find.byType(VfdLegend),
+      ),
+    );
+    expect(title.maxLines, 1);
+    expect(title.overflow, TextOverflow.ellipsis);
+
+    final frame = find.byKey(const ValueKey('editor-canvas'));
+    final before = tester.getRect(frame);
+    final gesture = await tester.startGesture(
+      Offset(viewport.width / 2, layer.center.dy),
+    );
+    await gesture.moveBy(const Offset(30, 20));
+    await gesture.up();
+    await tester.pump();
+    final after = tester.getRect(frame);
+    expect(after.left, closeTo(before.left + 30, 0.001));
+    expect(after.top, closeTo(before.top + 20, 0.001));
+  });
+
   testWidgets('portrait editor surfaces bleed while chrome stays safe', (
     tester,
   ) async {
@@ -578,7 +632,7 @@ void main() {
     );
 
     final header = tester.getRect(
-      find.byKey(const ValueKey('editor-header-surface')),
+      find.byKey(const ValueKey('editor-header-layer')),
     );
     final environment = tester.getRect(
       find.byKey(const ValueKey('editor-canvas-environment')),
@@ -647,7 +701,7 @@ void main() {
     );
 
     expect(
-      tester.getRect(find.byKey(const ValueKey('editor-header-surface'))),
+      tester.getRect(find.byKey(const ValueKey('editor-header-layer'))),
       const Rect.fromLTWH(0, 0, 874, 48),
     );
     expect(
@@ -710,7 +764,7 @@ void main() {
       find.byKey(const ValueKey('mechanical-drawer-safe-content')),
     );
     final header = tester.getRect(
-      find.byKey(const ValueKey('editor-header-surface')),
+      find.byKey(const ValueKey('editor-header-layer')),
     );
     expect(drawerEnvironment.right, viewport.width);
     expect(drawerEnvironment.bottom, viewport.height);
