@@ -539,7 +539,9 @@ void main() {
     });
   });
 
-  testWidgets('editor starts with full viewport runtime fit', (tester) async {
+  testWidgets('editor fits runtime frame below the fixed header', (
+    tester,
+  ) async {
     const viewport = Size(393, 852);
     await _setViewport(tester, viewport);
     final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
@@ -551,10 +553,30 @@ void main() {
 
     expect(find.byKey(const ValueKey('editor-workspace')), findsOneWidget);
     expect(find.byKey(const ValueKey('canvas-full')), findsNothing);
+    final header = tester.getRect(
+      find.byKey(const ValueKey('editor-header-surface')),
+    );
     final frame = tester.getRect(find.byKey(const ValueKey('editor-canvas')));
-    expect(frame.left, closeTo(0, 0.001));
-    expect(frame.top, closeTo(0, 0.001));
-    expect(frame.size, viewport);
+    expect(frame.top, closeTo(header.bottom, 0.001));
+    expect(frame.bottom, closeTo(viewport.height, 0.001));
+    expect(frame.center.dx, closeTo(viewport.width / 2, 0.001));
+    expect(frame.width / frame.height, closeTo(viewport.aspectRatio, 0.001));
+
+    final expectedViewport = Rect.fromLTRB(
+      0,
+      header.bottom,
+      viewport.width,
+      viewport.height,
+    );
+    for (final key in <ValueKey<String>>[
+      const ValueKey('editor-camera'),
+      const ValueKey('editor-selection-viewport'),
+      const ValueKey('editor-gesture-viewport'),
+    ]) {
+      final finder = find.byKey(key);
+      final clip = tester.widget<ClipRect>(finder);
+      expect(clip.clipper!.getClip(tester.getSize(finder)), expectedViewport);
+    }
   });
 
   testWidgets('portrait editor surfaces bleed while chrome stays safe', (
@@ -604,9 +626,9 @@ void main() {
     );
 
     final frame = tester.getRect(find.byKey(const ValueKey('editor-canvas')));
-    expect(frame.left, closeTo(0, 0.001));
-    expect(frame.top, closeTo(0, 0.001));
-    expect(frame.size, viewport);
+    expect(frame.top, closeTo(header.bottom, 0.001));
+    expect(frame.bottom, closeTo(viewport.height, 0.001));
+    expect(frame.center.dx, closeTo(viewport.width / 2, 0.001));
     expect(
       tester.getRect(find.byKey(const ValueKey('canvas-undo'))).top,
       greaterThanOrEqualTo(header.bottom),
@@ -676,9 +698,15 @@ void main() {
     final closedLeftBoundary = tester.getRect(
       find.byKey(const ValueKey('editor-canvas')),
     );
-    expect(closedLeftBoundary.left, closeTo(0, 0.001));
-    expect(closedLeftBoundary.top, closeTo(0, 0.001));
-    expect(closedLeftBoundary.size, viewport);
+    final closedHeader = tester.getRect(
+      find.byKey(const ValueKey('editor-header-surface')),
+    );
+    expect(closedLeftBoundary.top, greaterThanOrEqualTo(closedHeader.bottom));
+    expect(closedLeftBoundary.bottom, lessThanOrEqualTo(viewport.height));
+    expect(
+      closedLeftBoundary.width / closedLeftBoundary.height,
+      closeTo(viewport.aspectRatio, 0.001),
+    );
     final closedLeftFrame = tester.getRect(
       find.byKey(const ValueKey('editor-authored-frame')),
     );
@@ -826,7 +854,7 @@ void main() {
           dashboard: dashboard,
           orientation: DesignOrientation.landscape,
           deviceViewportSize: const Size(900, 500),
-          frameInset: EdgeInsets.zero,
+          cameraViewportInsets: EdgeInsets.zero,
           chromeSafeInsets: safeInsets,
           selectedId: 'speed',
           onSelect: (_) {},
@@ -873,6 +901,20 @@ void main() {
     final target = tester.getCenter(
       find.byKey(const ValueKey('editor-authored-frame')),
     );
+    final headerTarget = tester.getCenter(
+      find.byKey(const ValueKey('editor-header-surface')),
+    );
+    final rejectedDrag = await tester.startGesture(tester.getCenter(source));
+    await rejectedDrag.moveTo(headerTarget);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('add-drop-ghost')), findsOneWidget);
+    await rejectedDrag.up();
+    await tester.pump();
+    expect(
+      dashboard.components.where((value) => value.typeId == 'outsideTemp'),
+      isEmpty,
+    );
+
     final drag = await tester.startGesture(tester.getCenter(source));
     await drag.moveTo(target);
     await tester.pump();

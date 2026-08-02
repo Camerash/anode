@@ -189,7 +189,7 @@ class _EditorPageState extends State<EditorPage> {
   );
 
   Widget _canvas({
-    EdgeInsets frameInset = EdgeInsets.zero,
+    EdgeInsets cameraViewportInsets = EdgeInsets.zero,
     EdgeInsets chromeSafeInsets = EdgeInsets.zero,
   }) => EditorCanvas(
     dashboard: _dashboard,
@@ -205,7 +205,7 @@ class _EditorPageState extends State<EditorPage> {
     onPlacementGestureEnded: _finishPlacementHistory,
     onModulePlacementChanged: _setModulePlacement,
     renderAssets: widget.renderAssets,
-    frameInset: frameInset,
+    cameraViewportInsets: cameraViewportInsets,
     chromeSafeInsets: chromeSafeInsets,
     onAddRequested: _layoutInherited ? null : _openAddCatalogue,
     onAddDropped: _layoutInherited ? null : _addDropped,
@@ -252,7 +252,7 @@ class _EditorPageState extends State<EditorPage> {
               drawerProgress: progress,
             );
             return _canvas(
-              frameInset: safeLayout.frameInset,
+              cameraViewportInsets: safeLayout.cameraViewportInsets,
               chromeSafeInsets: safeLayout.canvasChromeInsets,
             );
           },
@@ -656,11 +656,11 @@ class _WorkspaceLayout {
 /// screen-space controls change while the service drawer travels.
 class _EditorSafeLayout {
   const _EditorSafeLayout({
-    required this.frameInset,
+    required this.cameraViewportInsets,
     required this.canvasChromeInsets,
   });
 
-  final EdgeInsets frameInset;
+  final EdgeInsets cameraViewportInsets;
   final EdgeInsets canvasChromeInsets;
 
   static _EditorSafeLayout resolve({
@@ -683,7 +683,10 @@ class _EditorSafeLayout {
         : chromeInsets.bottom;
 
     return _EditorSafeLayout(
-      frameInset: EdgeInsets.only(left: frameLeft),
+      cameraViewportInsets: EdgeInsets.only(
+        left: frameLeft,
+        top: chromeInsets.top,
+      ),
       canvasChromeInsets: EdgeInsets.fromLTRB(
         chromeInsets.left,
         chromeInsets.top,

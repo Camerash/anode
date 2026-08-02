@@ -31,7 +31,7 @@ class EditorCanvas extends StatefulWidget {
     this.renderAssets,
     this.previewOrientation,
     this.editable = true,
-    this.frameInset = EdgeInsets.zero,
+    this.cameraViewportInsets = EdgeInsets.zero,
     this.chromeSafeInsets = EdgeInsets.zero,
     this.onAddRequested,
     this.onAddDropped,
@@ -63,7 +63,10 @@ class EditorCanvas extends StatefulWidget {
   final VfdRenderAssets? renderAssets;
   final DesignOrientation? previewOrientation;
   final bool editable;
-  final EdgeInsets frameInset;
+
+  /// Occlusions removed from the camera's visible editing viewport. The
+  /// substrate still paints through these regions.
+  final EdgeInsets cameraViewportInsets;
 
   /// Insets editor chrome only. Authored content and interaction geometry
   /// remain resolved against the complete device viewport.
@@ -263,31 +266,38 @@ class _EditorCanvasState extends State<EditorCanvas> {
             widget.dashboard.frameSpec(widget.orientation),
           );
 
-          final bounds = widget.frameInset.deflateRect(Offset.zero & sceneSize);
-          final boundary = _containRect(
-            Rect.fromLTWH(
-              bounds.left,
-              bounds.top,
-              math.max(1, bounds.width),
-              math.max(1, bounds.height),
-            ),
-            boundaryExtent,
-          );
+          final cameraViewport = _cameraViewport(sceneSize);
+          final boundary = _containRect(cameraViewport, boundaryExtent);
           final content = _containRect(boundary, layoutExtent);
           _layoutExtent = layoutExtent;
           _designScale = content.height / layoutExtent.height;
           _items = _buildItems(content);
 
           return DragTarget<EditorAddRequest>(
-            onWillAcceptWithDetails: (_) =>
-                widget.editable && widget.onAddDropped != null,
-            onAcceptWithDetails: (details) =>
-                _acceptDrop(context, content, details),
+            onWillAcceptWithDetails: (details) =>
+                widget.editable &&
+                widget.onAddDropped != null &&
+                _cameraViewportContainsGlobal(
+                  context,
+                  cameraViewport,
+                  details.offset,
+                ),
+            onAcceptWithDetails: (details) {
+              if (!_cameraViewportContainsGlobal(
+                context,
+                cameraViewport,
+                details.offset,
+              )) {
+                return;
+              }
+              _acceptDrop(context, content, details);
+            },
             builder: (context, candidates, rejected) => Stack(
               fit: StackFit.expand,
               children: <Widget>[
                 ClipRect(
                   key: const ValueKey('editor-camera'),
+                  clipper: _CameraViewportClipper(cameraViewport),
                   child: Transform(
                     transform: _cameraTransform(),
                     alignment: Alignment.topLeft,
@@ -302,15 +312,24 @@ class _EditorCanvasState extends State<EditorCanvas> {
                 // Selection chrome lives in screen space so handles stay a
                 // constant 44px at any zoom, and so the hit test never has to
                 // undo the camera transform.
-                _overlay(),
-                Listener(
-                  behavior: HitTestBehavior.opaque,
-                  onPointerDown: _onPointerDown,
-                  onPointerMove: _onPointerMove,
-                  onPointerUp: (event) => _endPointer(event.pointer, tap: true),
-                  onPointerCancel: (event) =>
-                      _endPointer(event.pointer, tap: false),
-                  onPointerSignal: _onPointerSignal,
+                ClipRect(
+                  key: const ValueKey('editor-selection-viewport'),
+                  clipper: _CameraViewportClipper(cameraViewport),
+                  child: _overlay(),
+                ),
+                ClipRect(
+                  key: const ValueKey('editor-gesture-viewport'),
+                  clipper: _CameraViewportClipper(cameraViewport),
+                  child: Listener(
+                    behavior: HitTestBehavior.opaque,
+                    onPointerDown: _onPointerDown,
+                    onPointerMove: _onPointerMove,
+                    onPointerUp: (event) =>
+                        _endPointer(event.pointer, tap: true),
+                    onPointerCancel: (event) =>
+                        _endPointer(event.pointer, tap: false),
+                    onPointerSignal: _onPointerSignal,
+                  ),
                 ),
                 if (candidates.isNotEmpty)
                   IgnorePointer(
@@ -334,6 +353,26 @@ class _EditorCanvasState extends State<EditorCanvas> {
   Matrix4 _cameraTransform() => Matrix4.identity()
     ..translateByDouble(_cameraOrigin.dx, _cameraOrigin.dy, 0, 1)
     ..scaleByDouble(_cameraScale, _cameraScale, 1, 1);
+
+  Rect _cameraViewport(Size sceneSize) {
+    final scene = Offset.zero & sceneSize;
+    final raw = widget.cameraViewportInsets.deflateRect(scene);
+    final left = raw.left.clamp(scene.left, scene.right - 1).toDouble();
+    final top = raw.top.clamp(scene.top, scene.bottom - 1).toDouble();
+    final right = raw.right.clamp(left + 1, scene.right).toDouble();
+    final bottom = raw.bottom.clamp(top + 1, scene.bottom).toDouble();
+    return Rect.fromLTRB(left, top, right, bottom);
+  }
+
+  bool _cameraViewportContainsGlobal(
+    BuildContext context,
+    Rect cameraViewport,
+    Offset globalPosition,
+  ) {
+    final renderObject = context.findRenderObject();
+    return renderObject is RenderBox &&
+        cameraViewport.contains(renderObject.globalToLocal(globalPosition));
+  }
 
   Widget _buildScene({
     required Size sceneSize,
@@ -955,6 +994,19 @@ class _SelectionBox extends StatelessWidget {
       child: Center(child: Container(width: 10, height: 10, color: color)),
     );
   }
+}
+
+class _CameraViewportClipper extends CustomClipper<Rect> {
+  const _CameraViewportClipper(this.viewport);
+
+  final Rect viewport;
+
+  @override
+  Rect getClip(Size size) => viewport;
+
+  @override
+  bool shouldReclip(covariant _CameraViewportClipper oldClipper) =>
+      oldClipper.viewport != viewport;
 }
 
 class _AuthoredFramePainter extends CustomPainter {
