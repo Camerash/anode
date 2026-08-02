@@ -246,12 +246,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
     final palette = VfdPalette.of(
       widget.dashboard.settings.opticalProfile.phosphor,
     );
-    return CustomPaint(
-      key: const ValueKey('editor-canvas-test-texture'),
-      // TEST ONLY: colored substrate for evaluating Prism face transparency.
-      // Remove this painter and restore a ColoredBox using _workspaceMatte
-      // after the optical check is complete.
-      painter: const _CanvasTestTexturePainter(background: _workspaceMatte),
+    return ColoredBox(
+      key: const ValueKey('editor-canvas-background'),
+      color: _workspaceMatte,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final sceneSize = Size(
@@ -897,67 +894,6 @@ class _CanvasItem {
   final Size resolvedSize;
   final bool selected;
   final Rect sceneRect;
-}
-
-/// Temporary powder-coated test bench beneath canvas Prism controls.
-///
-/// Broad color changes reveal face opacity; fine hatch reveals blur or excess
-/// diffusion. Pattern is deterministic so golden tests stay stable.
-class _CanvasTestTexturePainter extends CustomPainter {
-  const _CanvasTestTexturePainter({required this.background});
-
-  final Color background;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final bounds = Offset.zero & size;
-    canvas.drawRect(bounds, Paint()..color = background);
-    canvas.drawRect(
-      bounds,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[
-            Color(0xFF173B36),
-            Color(0xFF513429),
-            Color(0xFF26384A),
-          ],
-          stops: <double>[0, 0.54, 1],
-        ).createShader(bounds),
-    );
-
-    const panelWidth = 96.0;
-    final seamPaint = Paint()
-      ..color = const Color(0x6B060A09)
-      ..strokeWidth = 2;
-    for (double x = panelWidth; x < size.width; x += panelWidth) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), seamPaint);
-    }
-
-    final hatchPaint = Paint()
-      ..color = const Color(0x1FFFFFFF)
-      ..strokeWidth = 1;
-    for (double x = -size.height; x < size.width; x += 18) {
-      canvas.drawLine(
-        Offset(x, size.height),
-        Offset(x + size.height, 0),
-        hatchPaint,
-      );
-    }
-
-    final grainPaint = Paint()..color = const Color(0x18000000);
-    for (double y = 3; y < size.height; y += 7) {
-      final phase = (y * 37) % 53;
-      for (double x = phase; x < size.width; x += 53) {
-        canvas.drawCircle(Offset(x, y), 0.8, grainPaint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _CanvasTestTexturePainter oldDelegate) =>
-      oldDelegate.background != background;
 }
 
 /// Purely presentational. All interaction is resolved centrally, so this paints
