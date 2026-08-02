@@ -8,6 +8,7 @@ import 'package:anode/model/dev_design.dart';
 import 'package:anode/model/placement.dart';
 import 'package:anode/platform/physical_interface_orientation.dart';
 import 'package:anode/vfd/prism_widgets.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -451,19 +452,33 @@ void main() {
       expect(after.top, closeTo(before.top + 25, 0.001));
     });
 
-    testWidgets('FIT restores camera identity without writing placement', (
+    testWidgets('FIT restores camera identity after pan and zoom-out', (
       tester,
     ) async {
       final harness = await _pumpCanvas(tester, selectedId: null);
       final frame = find.byKey(const ValueKey('editor-canvas'));
       final before = tester.getRect(frame);
 
+      await tester.sendEventToBinding(
+        PointerScrollEvent(
+          position: before.center,
+          scrollDelta: const Offset(0, 300),
+        ),
+      );
+      await tester.pump();
+      expect(tester.getRect(frame).width, closeTo(before.width * 0.5, 0.001));
+
       await tester.dragFrom(const Offset(140, 20), const Offset(40, 30));
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('canvas-fit')));
       await tester.pump();
 
-      expect(tester.getRect(frame).left, closeTo(before.left, 0.001));
+      expect(tester.getRect(frame), before);
+      expect(find.byKey(const ValueKey('prism-symbol-fit')), findsOneWidget);
+      expect(
+        tester.getSemantics(find.byKey(const ValueKey('canvas-fit'))).label,
+        'Fit view',
+      );
       expect(harness.placementOf('speed'), same(harness.initialSpeedPlacement));
     });
 
@@ -524,9 +539,7 @@ void main() {
     });
   });
 
-  testWidgets('full screen renders the frame at the runtime fit', (
-    tester,
-  ) async {
+  testWidgets('editor starts with full viewport runtime fit', (tester) async {
     const viewport = Size(393, 852);
     await _setViewport(tester, viewport);
     final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
@@ -536,15 +549,12 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('canvas-full')));
-    await tester.pump();
-
-    // No rail, no bay: the boundary is the whole route, so the render inside it
-    // is at exactly the scale the cluster route would use.
-    expect(find.byKey(const ValueKey('editor-workspace')), findsNothing);
+    expect(find.byKey(const ValueKey('editor-workspace')), findsOneWidget);
+    expect(find.byKey(const ValueKey('canvas-full')), findsNothing);
     final frame = tester.getRect(find.byKey(const ValueKey('editor-canvas')));
-    expect(frame.width, closeTo(viewport.width, 0.001));
-    expect(frame.height, closeTo(viewport.height, 0.001));
+    expect(frame.left, closeTo(0, 0.001));
+    expect(frame.top, closeTo(0, 0.001));
+    expect(frame.size, viewport);
   });
 
   testWidgets('portrait editor surfaces bleed while chrome stays safe', (
@@ -579,10 +589,11 @@ void main() {
       greaterThanOrEqualTo(safeInsets.top),
     );
     expect(environment.left, 0);
+    expect(environment.top, 0);
     expect(environment.right, viewport.width);
     expect(environment.bottom, viewport.height);
     expect(
-      tester.getRect(find.byKey(const ValueKey('canvas-full'))).bottom,
+      tester.getRect(find.byKey(const ValueKey('canvas-fit'))).bottom,
       lessThanOrEqualTo(viewport.height - safeInsets.bottom),
     );
     expect(
@@ -592,22 +603,19 @@ void main() {
       lessThanOrEqualTo(viewport.height - safeInsets.bottom),
     );
 
-    await tester.tap(find.byKey(const ValueKey('canvas-full')));
-    await tester.pump();
-
     final frame = tester.getRect(find.byKey(const ValueKey('editor-canvas')));
     expect(frame.left, closeTo(0, 0.001));
     expect(frame.top, closeTo(0, 0.001));
-    expect(frame.width, closeTo(viewport.width, 0.001));
-    expect(frame.height, closeTo(viewport.height, 0.001));
+    expect(frame.size, viewport);
     expect(
       tester.getRect(find.byKey(const ValueKey('canvas-undo'))).top,
-      greaterThanOrEqualTo(safeInsets.top),
+      greaterThanOrEqualTo(header.bottom),
     );
     expect(
-      tester.getRect(find.byKey(const ValueKey('canvas-full'))).bottom,
+      tester.getRect(find.byKey(const ValueKey('canvas-fit'))).bottom,
       lessThanOrEqualTo(viewport.height - safeInsets.bottom),
     );
+    expect(find.byKey(const ValueKey('canvas-full')), findsNothing);
   });
 
   testWidgets('landscape editor assigns safe space to the physical pane', (
@@ -655,7 +663,7 @@ void main() {
       greaterThanOrEqualTo(safeInsets.left),
     );
     expect(
-      tester.getRect(find.byKey(const ValueKey('canvas-full'))).right,
+      tester.getRect(find.byKey(const ValueKey('canvas-fit'))).right,
       lessThanOrEqualTo(viewport.width - safeInsets.right),
     );
     expect(
@@ -665,6 +673,12 @@ void main() {
       lessThanOrEqualTo(viewport.width - safeInsets.right),
     );
 
+    final closedLeftBoundary = tester.getRect(
+      find.byKey(const ValueKey('editor-canvas')),
+    );
+    expect(closedLeftBoundary.left, closeTo(0, 0.001));
+    expect(closedLeftBoundary.top, closeTo(0, 0.001));
+    expect(closedLeftBoundary.size, viewport);
     final closedLeftFrame = tester.getRect(
       find.byKey(const ValueKey('editor-authored-frame')),
     );
@@ -681,8 +695,13 @@ void main() {
     final openLeftFrame = tester.getRect(
       find.byKey(const ValueKey('editor-authored-frame')),
     );
+    final openLeftBoundary = tester.getRect(
+      find.byKey(const ValueKey('editor-canvas')),
+    );
     expect(openLeftFrame.width, lessThan(travellingLeftFrame.width));
     expect(openLeftFrame.left, greaterThanOrEqualTo(safeInsets.left));
+    expect(openLeftBoundary.left, greaterThanOrEqualTo(safeInsets.left));
+    expect(openLeftBoundary.right, lessThan(viewport.width));
 
     final drawerEnvironment = tester.getRect(
       find.byKey(const ValueKey('mechanical-push-drawer')),
@@ -690,8 +709,12 @@ void main() {
     final drawerContent = tester.getRect(
       find.byKey(const ValueKey('mechanical-drawer-safe-content')),
     );
+    final header = tester.getRect(
+      find.byKey(const ValueKey('editor-header-surface')),
+    );
     expect(drawerEnvironment.right, viewport.width);
     expect(drawerEnvironment.bottom, viewport.height);
+    expect(drawerContent.top, greaterThanOrEqualTo(header.bottom));
     expect(
       drawerContent.right,
       lessThanOrEqualTo(viewport.width - safeInsets.right),
@@ -744,6 +767,10 @@ void main() {
       find.byKey(const ValueKey('editor-authored-frame')),
     );
     expect(closedRightFrame, closedLeftFrame);
+    expect(
+      tester.getRect(find.byKey(const ValueKey('editor-canvas'))),
+      closedLeftBoundary,
+    );
 
     await tester.tap(latch);
     await tester.pump();
@@ -1157,13 +1184,12 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('orientation-portrait')));
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('canvas-full')));
-    await tester.pump();
+    expect(find.byKey(const ValueKey('canvas-full')), findsNothing);
     expect(
       tester
-          .widget<PrismButton>(find.byKey(const ValueKey('canvas-full')))
+          .widget<PrismButton>(find.byKey(const ValueKey('canvas-fit')))
           .label,
-      'Full',
+      'Fit view',
     );
     expect(
       tester.getSemantics(snap).flagsCollection.isToggled,

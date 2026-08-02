@@ -16,7 +16,8 @@ typedef MechanicalDrawerContentBuilder =
 ///
 /// The child canvas receives the remaining constraints. Drawer contents retain
 /// their full layout extent behind a clipping aperture during travel. Its
-/// surface stays full-bleed; [workspaceSafeInsets] only protect readable chrome.
+/// surface stays full-bleed; [chromeInsets] protect readable controls from
+/// physical unsafe edges and persistent overlay bands.
 class MechanicalPushDrawer extends StatefulWidget {
   const MechanicalPushDrawer({
     super.key,
@@ -28,7 +29,7 @@ class MechanicalPushDrawer extends StatefulWidget {
     required this.onOpenChanged,
     required this.contentBuilder,
     required this.drawer,
-    this.workspaceSafeInsets = EdgeInsets.zero,
+    this.chromeInsets = EdgeInsets.zero,
     this.soundEnabled = true,
     this.hapticsEnabled = true,
   });
@@ -42,9 +43,8 @@ class MechanicalPushDrawer extends StatefulWidget {
   final MechanicalDrawerContentBuilder contentBuilder;
   final Widget drawer;
 
-  /// Physical insets in workspace-local coordinates. A parent header may have
-  /// already consumed the top inset before this drawer is laid out.
-  final EdgeInsets workspaceSafeInsets;
+  /// Workspace-local bounds reserved for safe, readable chrome.
+  final EdgeInsets chromeInsets;
   final bool soundEnabled;
   final bool hapticsEnabled;
 
@@ -188,28 +188,25 @@ class _MechanicalPushDrawerState extends State<MechanicalPushDrawer>
 
   EdgeInsets get _drawerSafePadding => switch (widget.edge) {
     MechanicalDrawerEdge.right => EdgeInsets.only(
-      right: widget.workspaceSafeInsets.right,
-      bottom: widget.workspaceSafeInsets.bottom,
+      top: widget.chromeInsets.top,
+      right: widget.chromeInsets.right,
+      bottom: widget.chromeInsets.bottom,
     ),
     MechanicalDrawerEdge.bottom => EdgeInsets.fromLTRB(
-      widget.workspaceSafeInsets.left,
+      widget.chromeInsets.left,
       0,
-      widget.workspaceSafeInsets.right,
-      widget.workspaceSafeInsets.bottom,
+      widget.chromeInsets.right,
+      widget.chromeInsets.bottom,
     ),
   };
 
   Widget _latch(double reserved) {
     final right = widget.edge == MechanicalDrawerEdge.right;
     return Positioned(
-      left: right ? null : widget.workspaceSafeInsets.left + 8,
-      right: right
-          ? math.max(reserved, widget.workspaceSafeInsets.right)
-          : null,
-      bottom: right
-          ? null
-          : math.max(reserved, widget.workspaceSafeInsets.bottom),
-      top: right ? widget.workspaceSafeInsets.top + 22 : null,
+      left: right ? null : widget.chromeInsets.left + 8,
+      right: right ? math.max(reserved, widget.chromeInsets.right) : null,
+      bottom: right ? null : math.max(reserved, widget.chromeInsets.bottom),
+      top: right ? widget.chromeInsets.top + 22 : null,
       width: 52,
       height: 44,
       child: PrismButton(

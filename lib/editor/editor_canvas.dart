@@ -31,10 +31,8 @@ class EditorCanvas extends StatefulWidget {
     this.renderAssets,
     this.previewOrientation,
     this.editable = true,
-    this.frameInset = const EdgeInsets.all(24),
+    this.frameInset = EdgeInsets.zero,
     this.chromeSafeInsets = EdgeInsets.zero,
-    this.fullScreen = false,
-    this.onToggleFullScreen,
     this.onAddRequested,
     this.onAddDropped,
     this.previewController,
@@ -70,8 +68,6 @@ class EditorCanvas extends StatefulWidget {
   /// Insets editor chrome only. Authored content and interaction geometry
   /// remain resolved against the complete device viewport.
   final EdgeInsets chromeSafeInsets;
-  final bool fullScreen;
-  final VoidCallback? onToggleFullScreen;
   final VoidCallback? onAddRequested;
   final void Function(EditorAddRequest request, Offset center)? onAddDropped;
   final EditorCanvasPreviewController? previewController;
@@ -186,7 +182,7 @@ class _Grab {
 
 class _EditorCanvasState extends State<EditorCanvas> {
   static const double _handleExtent = 44;
-  static const double _minCameraScale = 1;
+  static const double _minCameraScale = 0.5;
   static const double _maxCameraScale = 4;
   // Matches the former VFD substrate plus exterior matte composite, so a
   // fitted canvas keeps its existing visual while a panned canvas stays flat.
@@ -455,7 +451,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
         const SizedBox(width: 5),
         PrismButton(
           key: const ValueKey('canvas-fit'),
-          label: 'Fit',
+          label: 'Fit view',
+          symbol: PrismSymbol.fit,
           palette: palette,
           role: PrismRole.compact,
           style: widget.dashboard.settings.prismStyle,
@@ -463,20 +460,6 @@ class _EditorCanvasState extends State<EditorCanvas> {
           hapticsEnabled: widget.hapticsEnabled,
           onPressed: _fit,
         ),
-        if (widget.onToggleFullScreen != null) ...<Widget>[
-          const SizedBox(width: 5),
-          PrismButton(
-            key: const ValueKey('canvas-full'),
-            label: 'Full',
-            palette: palette,
-            lit: widget.fullScreen,
-            role: PrismRole.compact,
-            style: widget.dashboard.settings.prismStyle,
-            soundEnabled: widget.soundEnabled,
-            hapticsEnabled: widget.hapticsEnabled,
-            onPressed: widget.onToggleFullScreen,
-          ),
-        ],
       ],
     ),
   );

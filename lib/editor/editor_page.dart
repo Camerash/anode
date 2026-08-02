@@ -62,7 +62,6 @@ class _EditorPageState extends State<EditorPage> {
   String? _selectedModuleId;
   bool _drawerOpen = false;
   bool _addCatalogueOpen = false;
-  bool _fullScreen = false;
   bool _snapEnabled = true;
   final List<Dashboard> _undoStack = <Dashboard>[];
   final List<Dashboard> _redoStack = <Dashboard>[];
@@ -96,41 +95,37 @@ class _EditorPageState extends State<EditorPage> {
 
   EdgeInsets get _deviceSafeInsets => MediaQuery.viewPaddingOf(context);
 
-  EdgeInsets get _workspaceChromeInsets => EdgeInsets.fromLTRB(
-    _deviceSafeInsets.left,
-    0,
-    _deviceSafeInsets.right,
-    _deviceSafeInsets.bottom,
-  );
-
   @override
   Widget build(BuildContext context) {
-    if (_fullScreen) {
-      return ColoredBox(
-        color: const Color(0xFF050807),
-        child: _canvas(
-          frameInset: EdgeInsets.zero,
-          chromeSafeInsets: _deviceSafeInsets,
-        ),
-      );
-    }
     final safeInsets = _deviceSafeInsets;
+    final headerExtent = safeInsets.top + 48;
+    final workspaceChromeInsets = EdgeInsets.fromLTRB(
+      safeInsets.left,
+      headerExtent,
+      safeInsets.right,
+      safeInsets.bottom,
+    );
     return ColoredBox(
       color: const Color(0xFF050807),
-      child: Column(
+      child: Stack(
+        fit: StackFit.expand,
         children: <Widget>[
-          SizedBox(
-            height: safeInsets.top + 48,
-            child: _topRail(context, safeInsets),
-          ),
-          Expanded(
-            child: ColoredBox(
-              key: const ValueKey('editor-canvas-environment'),
-              color: const Color(0xFF050807),
-              child: LayoutBuilder(
-                builder: (context, constraints) => _workspace(constraints),
+          ColoredBox(
+            key: const ValueKey('editor-canvas-environment'),
+            color: const Color(0xFF050807),
+            child: LayoutBuilder(
+              builder: (context, constraints) => _workspace(
+                constraints,
+                workspaceChromeInsets: workspaceChromeInsets,
               ),
             ),
+          ),
+          Positioned(
+            left: 0,
+            top: 0,
+            right: 0,
+            height: headerExtent,
+            child: _topRail(context, safeInsets),
           ),
         ],
       ),
@@ -194,7 +189,7 @@ class _EditorPageState extends State<EditorPage> {
   );
 
   Widget _canvas({
-    EdgeInsets frameInset = const EdgeInsets.all(24),
+    EdgeInsets frameInset = EdgeInsets.zero,
     EdgeInsets chromeSafeInsets = EdgeInsets.zero,
   }) => EditorCanvas(
     dashboard: _dashboard,
@@ -212,8 +207,6 @@ class _EditorPageState extends State<EditorPage> {
     renderAssets: widget.renderAssets,
     frameInset: frameInset,
     chromeSafeInsets: chromeSafeInsets,
-    fullScreen: _fullScreen,
-    onToggleFullScreen: () => setState(() => _fullScreen = !_fullScreen),
     onAddRequested: _layoutInherited ? null : _openAddCatalogue,
     onAddDropped: _layoutInherited ? null : _addDropped,
     previewController: _canvasPreviewController,
@@ -227,12 +220,14 @@ class _EditorPageState extends State<EditorPage> {
     hapticsEnabled: widget.hapticsEnabled,
   );
 
-  Widget _workspace(BoxConstraints constraints) {
+  Widget _workspace(
+    BoxConstraints constraints, {
+    required EdgeInsets workspaceChromeInsets,
+  }) {
     final layout = _WorkspaceLayout.resolve(
       windowSize: MediaQuery.sizeOf(context),
       constraints: constraints,
     );
-    final workspaceSafeInsets = _workspaceChromeInsets;
     return Stack(
       key: _workspaceKey,
       fit: StackFit.expand,
@@ -245,23 +240,20 @@ class _EditorPageState extends State<EditorPage> {
           extent: layout.drawerExtent,
           palette: _palette,
           prismStyle: _dashboard.settings.prismStyle,
-          workspaceSafeInsets: workspaceSafeInsets,
+          chromeInsets: workspaceChromeInsets,
           soundEnabled: widget.soundEnabled,
           hapticsEnabled: widget.hapticsEnabled,
           onOpenChanged: (open) => setState(() => _drawerOpen = open),
           contentBuilder: (context, progress) {
             final safeLayout = _EditorSafeLayout.resolve(
-              workspaceSafeInsets: workspaceSafeInsets,
+              chromeInsets: workspaceChromeInsets,
               interfaceOrientation: widget.interfaceOrientation,
               drawerEdge: layout.edge,
               drawerProgress: progress,
             );
-            return Padding(
-              padding: const EdgeInsets.all(4),
-              child: _canvas(
-                frameInset: safeLayout.frameInset,
-                chromeSafeInsets: safeLayout.canvasChromeInsets,
-              ),
+            return _canvas(
+              frameInset: safeLayout.frameInset,
+              chromeSafeInsets: safeLayout.canvasChromeInsets,
             );
           },
           drawer: _addCatalogueOpen
@@ -668,13 +660,11 @@ class _EditorSafeLayout {
     required this.canvasChromeInsets,
   });
 
-  static const double _frameMargin = 24;
-
   final EdgeInsets frameInset;
   final EdgeInsets canvasChromeInsets;
 
   static _EditorSafeLayout resolve({
-    required EdgeInsets workspaceSafeInsets,
+    required EdgeInsets chromeInsets,
     required PhysicalInterfaceOrientation interfaceOrientation,
     required MechanicalDrawerEdge drawerEdge,
     required double drawerProgress,
@@ -683,25 +673,20 @@ class _EditorSafeLayout {
     final frameLeft =
         drawerEdge == MechanicalDrawerEdge.right &&
             interfaceOrientation == PhysicalInterfaceOrientation.landscapeLeft
-        ? workspaceSafeInsets.left * progress
+        ? chromeInsets.left * progress
         : 0.0;
     final canvasRight = drawerEdge == MechanicalDrawerEdge.right
-        ? workspaceSafeInsets.right * (1 - progress)
-        : workspaceSafeInsets.right;
+        ? chromeInsets.right * (1 - progress)
+        : chromeInsets.right;
     final canvasBottom = drawerEdge == MechanicalDrawerEdge.bottom
-        ? workspaceSafeInsets.bottom * (1 - progress)
-        : workspaceSafeInsets.bottom;
+        ? chromeInsets.bottom * (1 - progress)
+        : chromeInsets.bottom;
 
     return _EditorSafeLayout(
-      frameInset: EdgeInsets.fromLTRB(
-        _frameMargin + frameLeft,
-        _frameMargin,
-        _frameMargin,
-        _frameMargin,
-      ),
+      frameInset: EdgeInsets.only(left: frameLeft),
       canvasChromeInsets: EdgeInsets.fromLTRB(
-        workspaceSafeInsets.left,
-        workspaceSafeInsets.top,
+        chromeInsets.left,
+        chromeInsets.top,
         canvasRight,
         canvasBottom,
       ),

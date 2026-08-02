@@ -11,11 +11,13 @@ enum PrismRole { compact, standard, primary }
 
 enum PrismSpan { one, two, three }
 
-enum PrismSymbol { undo, redo }
+enum PrismSymbol { undo, redo, fit }
 
 /// Normalized stamped geometry shared by every Prism symbol renderer.
 abstract final class PrismSymbolGeometry {
   static Path path(PrismSymbol symbol, Size size) {
+    if (symbol == PrismSymbol.fit) return _fitPath(size);
+
     double x(double value) =>
         size.width * (symbol == PrismSymbol.undo ? value : 1 - value);
     double y(double value) => size.height * value;
@@ -33,6 +35,26 @@ abstract final class PrismSymbolGeometry {
       ..lineTo(x(0.37), y(0.48))
       ..lineTo(x(0.37), y(0.68))
       ..close();
+  }
+
+  static Path _fitPath(Size size) {
+    Rect rect(double left, double top, double right, double bottom) =>
+        Rect.fromLTRB(
+          size.width * left,
+          size.height * top,
+          size.width * right,
+          size.height * bottom,
+        );
+
+    return Path()
+      ..addRect(rect(0.08, 0.08, 0.39, 0.19))
+      ..addRect(rect(0.08, 0.08, 0.17, 0.41))
+      ..addRect(rect(0.61, 0.08, 0.92, 0.19))
+      ..addRect(rect(0.83, 0.08, 0.92, 0.41))
+      ..addRect(rect(0.08, 0.81, 0.39, 0.92))
+      ..addRect(rect(0.08, 0.59, 0.17, 0.92))
+      ..addRect(rect(0.61, 0.81, 0.92, 0.92))
+      ..addRect(rect(0.83, 0.59, 0.92, 0.92));
   }
 }
 
