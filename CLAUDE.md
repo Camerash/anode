@@ -143,8 +143,15 @@ the near-black substrate blends into the device bezel so the tube appears to
 continue past the glass. Any vignette is a gentle falloff, never an edge.
 
 Authored design content uses the complete device viewport, including unsafe
-regions. App chrome such as `SET`, editor rails, and service controls remains
-inside the safe area. System UI is hidden.
+regions. Editor and Library header, canvas, drawer, prompt, and substrate
+surfaces also extend to physical edges; only their interactive/readable chrome
+is inset. App chrome such as `SET`, library controls, editor rails, and service
+controls remains inside the safe area.
+Safe insets never constrain persisted placement or selection handles. With the
+service panel open, the editor may contain-fit its preview inside the
+unobscured canvas pane; closing the panel restores the full-viewport preview.
+This presentation-only fit never mutates authored frame extent or component
+coordinates. System UI is hidden.
 
 Every design owns a primary fixed `FrameSpec` and may own one explicit
 opposite-orientation alternate. A `FrameSpec` stores an **extent** — width and

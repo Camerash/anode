@@ -19,31 +19,31 @@ class DesignActionOverlay extends StatelessWidget {
     required this.orientation,
     required this.controller,
     required this.registry,
-    required this.safeInsets,
+    this.frameInsets = EdgeInsets.zero,
   });
 
   final Design design;
   final DesignOrientation orientation;
   final VfdController controller;
   final ActionRegistry registry;
-  final EdgeInsets safeInsets;
+  final EdgeInsets frameInsets;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final size = constraints.biggest;
-      final safeRect = Rect.fromLTRB(
-        safeInsets.left,
-        safeInsets.top,
-        size.width - safeInsets.right,
-        size.height - safeInsets.bottom,
+      final frameRect = Rect.fromLTRB(
+        frameInsets.left,
+        frameInsets.top,
+        size.width - frameInsets.right,
+        size.height - frameInsets.bottom,
       );
       final frame = design.frameExtent(orientation);
       final fitScale = math.min(
-        safeRect.width / frame.width,
-        safeRect.height / frame.height,
+        frameRect.width / frame.width,
+        frameRect.height / frame.height,
       );
-      final frameCenter = safeRect.center;
+      final frameCenter = frameRect.center;
       return Stack(
         children: <Widget>[
           for (final component in design.componentsIn(orientation))

@@ -13,6 +13,7 @@ import '../model/dashboard.dart';
 import '../model/design.dart';
 import '../model/design_preset.dart';
 import '../model/optical_profile.dart';
+import '../platform/physical_interface_orientation.dart';
 import '../vfd/prism_widgets.dart';
 import '../vfd/vfd_render_assets.dart';
 import '../vfd/vfd_widgets.dart';
@@ -45,39 +46,69 @@ class _LibraryPageState extends State<LibraryPage> {
   @override
   Widget build(BuildContext context) => ColoredBox(
     color: const Color(0xFF000000),
-    child: SafeArea(
-      child: ListenableBuilder(
-        listenable: widget.state,
-        builder: (context, _) => Column(
+    child: ListenableBuilder(
+      listenable: widget.state,
+      builder: (context, _) {
+        final safeInsets = MediaQuery.viewPaddingOf(context);
+        return Column(
           children: <Widget>[
-            SizedBox(height: 48, child: _topRail(context)),
+            SizedBox(
+              height: safeInsets.top + 48,
+              child: _topRail(context, safeInsets),
+            ),
             Padding(
-              padding: const EdgeInsets.all(8),
-              child: PrismSelectorBank<LibrarySection>(
-                choices: <PrismSelectorChoice<LibrarySection>>[
-                  for (final section in LibrarySection.values)
-                    PrismSelectorChoice<LibrarySection>(
-                      value: section,
-                      label: section.name,
-                      lit: section == _section,
-                    ),
-                ],
-                selected: _section,
-                palette: _palette,
-                prismStyle: widget.state.activeDesign.renderSettings.prismStyle,
-                rows: 1,
-                columns: 3,
-                role: PrismRole.compact,
-                soundEnabled: widget.state.globalSettings.soundEnabled,
-                hapticsEnabled: widget.state.globalSettings.hapticsEnabled,
-                semanticLabel: 'Library section',
-                onSelected: (value) => setState(() => _section = value),
+              padding: EdgeInsets.fromLTRB(
+                safeInsets.left + 8,
+                8,
+                safeInsets.right + 8,
+                8,
+              ),
+              child: KeyedSubtree(
+                key: const ValueKey('library-section-selector'),
+                child: PrismSelectorBank<LibrarySection>(
+                  choices: <PrismSelectorChoice<LibrarySection>>[
+                    for (final section in LibrarySection.values)
+                      PrismSelectorChoice<LibrarySection>(
+                        value: section,
+                        label: section.name,
+                        lit: section == _section,
+                      ),
+                  ],
+                  selected: _section,
+                  palette: _palette,
+                  prismStyle:
+                      widget.state.activeDesign.renderSettings.prismStyle,
+                  rows: 1,
+                  columns: 3,
+                  role: PrismRole.compact,
+                  soundEnabled: widget.state.globalSettings.soundEnabled,
+                  hapticsEnabled: widget.state.globalSettings.hapticsEnabled,
+                  semanticLabel: 'Library section',
+                  onSelected: (value) => setState(() => _section = value),
+                ),
               ),
             ),
-            Expanded(child: _sectionBody()),
+            Expanded(
+              child: ColoredBox(
+                key: const ValueKey('library-content-environment'),
+                color: const Color(0xFF000000),
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    safeInsets.left,
+                    0,
+                    safeInsets.right,
+                    safeInsets.bottom,
+                  ),
+                  child: KeyedSubtree(
+                    key: const ValueKey('library-safe-content'),
+                    child: _sectionBody(),
+                  ),
+                ),
+              ),
+            ),
           ],
-        ),
-      ),
+        );
+      },
     ),
   );
 
@@ -107,12 +138,19 @@ class _LibraryPageState extends State<LibraryPage> {
     ),
   };
 
-  Widget _topRail(BuildContext context) => PrismPanel(
+  Widget _topRail(BuildContext context, EdgeInsets safeInsets) => PrismPanel(
+    key: const ValueKey('library-header-surface'),
     palette: _palette,
-    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+    padding: EdgeInsets.fromLTRB(
+      safeInsets.left + 4,
+      safeInsets.top + 2,
+      safeInsets.right + 4,
+      2,
+    ),
     child: Row(
       children: <Widget>[
         PrismButton(
+          key: const ValueKey('library-back'),
           label: 'Back',
           palette: _palette,
           role: PrismRole.compact,
@@ -161,12 +199,15 @@ class _LibraryPageState extends State<LibraryPage> {
   void _openEditor(Dashboard dashboard) {
     Navigator.of(context).push<void>(
       hardCutRoute<void>(
-        (_) => EditorPage(
-          dashboard: dashboard,
-          renderAssets: widget.renderAssets,
-          soundEnabled: widget.state.globalSettings.soundEnabled,
-          hapticsEnabled: widget.state.globalSettings.hapticsEnabled,
-          onChanged: widget.state.updateDashboard,
+        (_) => PhysicalInterfaceOrientationReader(
+          builder: (context, interfaceOrientation) => EditorPage(
+            dashboard: dashboard,
+            interfaceOrientation: interfaceOrientation,
+            renderAssets: widget.renderAssets,
+            soundEnabled: widget.state.globalSettings.soundEnabled,
+            hapticsEnabled: widget.state.globalSettings.hapticsEnabled,
+            onChanged: widget.state.updateDashboard,
+          ),
         ),
       ),
     );
@@ -409,46 +450,51 @@ class _ClonePromptPageState extends State<_ClonePromptPage> {
 
   @override
   Widget build(BuildContext context) => ColoredBox(
+    key: const ValueKey('clone-prompt-environment'),
     color: const Color(0xFF020403),
-    child: SafeArea(
+    child: Padding(
+      padding: MediaQuery.viewPaddingOf(context) + const EdgeInsets.all(12),
       child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: PrismPanel(
-            palette: widget.palette,
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                VfdLegend(
-                  'Clone ${widget.sourceName}?',
-                  palette: widget.palette,
-                  lit: true,
-                  size: 16,
-                ),
-                const SizedBox(height: 14),
-                VfdEditableField(
-                  label: 'New design name',
-                  value: _name,
-                  palette: widget.palette,
-                  onChanged: (value) => _name = value,
-                  onSubmitted: (value) => Navigator.of(context).pop(value),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: <Widget>[
-                    _button('Cancel', () => Navigator.of(context).pop()),
-                    const SizedBox(width: 8),
-                    _button(
-                      'Clone',
-                      () => Navigator.of(context).pop(_name),
-                      lit: true,
-                    ),
-                  ],
-                ),
-              ],
+        child: KeyedSubtree(
+          key: const ValueKey('clone-prompt-safe-content'),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: PrismPanel(
+              palette: widget.palette,
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  VfdLegend(
+                    'Clone ${widget.sourceName}?',
+                    palette: widget.palette,
+                    lit: true,
+                    size: 16,
+                  ),
+                  const SizedBox(height: 14),
+                  VfdEditableField(
+                    label: 'New design name',
+                    value: _name,
+                    palette: widget.palette,
+                    onChanged: (value) => _name = value,
+                    onSubmitted: (value) => Navigator.of(context).pop(value),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: <Widget>[
+                      _button('Cancel', () => Navigator.of(context).pop()),
+                      const SizedBox(width: 8),
+                      _button(
+                        'Clone',
+                        () => Navigator.of(context).pop(_name),
+                        lit: true,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),

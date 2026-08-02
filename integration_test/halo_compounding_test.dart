@@ -588,6 +588,6 @@ class _HarnessState extends State<_Harness>
   Widget build(BuildContext context) => VfdCluster(
     renderAssets: widget.renderAssets,
     controller: _controller,
-    safeInsets: EdgeInsets.zero,
+    frameInsets: EdgeInsets.zero,
   );
 }

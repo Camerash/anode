@@ -5,6 +5,8 @@ PODS:
     - FlutterMacOS
   - integration_test (0.0.1):
     - Flutter
+  - native_device_orientation (0.0.1):
+    - Flutter
   - package_info_plus (0.4.5):
     - Flutter
   - sensors_plus (0.0.1):
@@ -19,6 +21,7 @@ DEPENDENCIES:
   - Flutter (from `Flutter`)
   - geolocator_apple (from `.symlinks/plugins/geolocator_apple/darwin`)
   - integration_test (from `.symlinks/plugins/integration_test/ios`)
+  - native_device_orientation (from `.symlinks/plugins/native_device_orientation/ios`)
   - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
   - sensors_plus (from `.symlinks/plugins/sensors_plus/ios`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
@@ -31,6 +34,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/geolocator_apple/darwin"
   integration_test:
     :path: ".symlinks/plugins/integration_test/ios"
+  native_device_orientation:
+    :path: ".symlinks/plugins/native_device_orientation/ios"
   package_info_plus:
     :path: ".symlinks/plugins/package_info_plus/ios"
   sensors_plus:
@@ -44,6 +49,7 @@ SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   geolocator_apple: 66b711889fd333205763b83c9dcf0a57a28c7afd
   integration_test: 252f60fa39af5e17c3aa9899d35d908a0721b573
+  native_device_orientation: 42487b19c552fb5a6a2b51e61b93366f628113df
   package_info_plus: c0502532a26c7662a62a356cebe2692ec5fe4ec4
   sensors_plus: c218c5335a0c9169ad70dfcb51b96cc395b3406a
   shared_preferences_foundation: 5086985c1d43c5ba4d5e69a4e8083a389e2909e6

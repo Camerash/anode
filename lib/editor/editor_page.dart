@@ -15,6 +15,7 @@ import '../model/optical_profile.dart';
 import '../model/placement.dart';
 import '../model/variant.dart';
 import '../model/vfd_module.dart';
+import '../platform/physical_interface_orientation.dart';
 import '../vfd/prism_widgets.dart';
 import '../vfd/vfd_render_assets.dart';
 import '../vfd/vfd_widgets.dart';
@@ -36,6 +37,7 @@ class EditorPage extends StatefulWidget {
     this.soundEnabled = true,
     this.hapticsEnabled = true,
     this.actionRegistry,
+    this.interfaceOrientation = PhysicalInterfaceOrientation.unknown,
   });
 
   final Dashboard dashboard;
@@ -44,6 +46,7 @@ class EditorPage extends StatefulWidget {
   final bool soundEnabled;
   final bool hapticsEnabled;
   final ActionRegistry? actionRegistry;
+  final PhysicalInterfaceOrientation interfaceOrientation;
 
   @override
   State<EditorPage> createState() => _EditorPageState();
@@ -88,42 +91,65 @@ class _EditorPageState extends State<EditorPage> {
   }
 
   /// Full physical viewport. Authored designs may deliberately use unsafe
-  /// regions; safe insets are editor guides, never layout constraints.
+  /// regions.
   Size get _deviceViewportSize => MediaQuery.sizeOf(context);
 
-  EdgeInsets get _deviceSafeInsets => MediaQuery.paddingOf(context);
+  EdgeInsets get _deviceSafeInsets => MediaQuery.viewPaddingOf(context);
+
+  EdgeInsets get _workspaceChromeInsets => EdgeInsets.fromLTRB(
+    _deviceSafeInsets.left,
+    0,
+    _deviceSafeInsets.right,
+    _deviceSafeInsets.bottom,
+  );
 
   @override
   Widget build(BuildContext context) {
     if (_fullScreen) {
       return ColoredBox(
         color: const Color(0xFF050807),
-        child: _canvas(frameInset: EdgeInsets.zero),
+        child: _canvas(
+          frameInset: EdgeInsets.zero,
+          chromeSafeInsets: _deviceSafeInsets,
+        ),
       );
     }
+    final safeInsets = _deviceSafeInsets;
     return ColoredBox(
       color: const Color(0xFF050807),
-      child: SafeArea(
-        child: Column(
-          children: <Widget>[
-            SizedBox(height: 48, child: _topRail(context)),
-            Expanded(
+      child: Column(
+        children: <Widget>[
+          SizedBox(
+            height: safeInsets.top + 48,
+            child: _topRail(context, safeInsets),
+          ),
+          Expanded(
+            child: ColoredBox(
+              key: const ValueKey('editor-canvas-environment'),
+              color: const Color(0xFF050807),
               child: LayoutBuilder(
                 builder: (context, constraints) => _workspace(constraints),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _topRail(BuildContext context) => PrismPanel(
+  Widget _topRail(BuildContext context, EdgeInsets safeInsets) => PrismPanel(
+    key: const ValueKey('editor-header-surface'),
     palette: _palette,
-    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+    padding: EdgeInsets.fromLTRB(
+      safeInsets.left + 4,
+      safeInsets.top + 2,
+      safeInsets.right + 4,
+      2,
+    ),
     child: Row(
       children: <Widget>[
         PrismButton(
+          key: const ValueKey('editor-back'),
           label: 'Back',
           palette: _palette,
           role: PrismRole.compact,
@@ -134,11 +160,14 @@ class _EditorPageState extends State<EditorPage> {
         ),
         const SizedBox(width: 7),
         Expanded(
-          child: VfdLegend(
-            _dashboard.name,
-            palette: _palette,
-            lit: true,
-            size: 12,
+          child: KeyedSubtree(
+            key: const ValueKey('editor-title'),
+            child: VfdLegend(
+              _dashboard.name,
+              palette: _palette,
+              lit: true,
+              size: 12,
+            ),
           ),
         ),
         for (final value in DesignOrientation.values) ...<Widget>[
@@ -164,44 +193,46 @@ class _EditorPageState extends State<EditorPage> {
     ),
   );
 
-  Widget _canvas({EdgeInsets frameInset = const EdgeInsets.all(24)}) =>
-      EditorCanvas(
-        dashboard: _dashboard,
-        orientation: _layoutOrientation,
-        previewOrientation: _orientation,
-        editable: !_layoutInherited,
-        deviceViewportSize: _deviceViewportSize,
-        deviceSafeInsets: _deviceSafeInsets,
-        selectedId: _selectedId,
-        selectedModuleId: _selectedModuleId,
-        onSelect: _selectComponent,
-        onPlacementChanged: _setPlacement,
-        onPlacementGestureStarted: _beginPlacementHistory,
-        onPlacementGestureEnded: _finishPlacementHistory,
-        onModulePlacementChanged: _setModulePlacement,
-        renderAssets: widget.renderAssets,
-        frameInset: frameInset,
-        fullScreen: _fullScreen,
-        onToggleFullScreen: () => setState(() => _fullScreen = !_fullScreen),
-        onAddRequested: _layoutInherited ? null : _openAddCatalogue,
-        onAddDropped: _layoutInherited ? null : _addDropped,
-        previewController: _canvasPreviewController,
-        canUndo: _undoStack.isNotEmpty,
-        canRedo: _redoStack.isNotEmpty,
-        onUndo: _undo,
-        onRedo: _redo,
-        snapEnabled: _snapEnabled,
-        onToggleSnap: () => setState(() => _snapEnabled = !_snapEnabled),
-        soundEnabled: widget.soundEnabled,
-        hapticsEnabled: widget.hapticsEnabled,
-      );
+  Widget _canvas({
+    EdgeInsets frameInset = const EdgeInsets.all(24),
+    EdgeInsets chromeSafeInsets = EdgeInsets.zero,
+  }) => EditorCanvas(
+    dashboard: _dashboard,
+    orientation: _layoutOrientation,
+    previewOrientation: _orientation,
+    editable: !_layoutInherited,
+    deviceViewportSize: _deviceViewportSize,
+    selectedId: _selectedId,
+    selectedModuleId: _selectedModuleId,
+    onSelect: _selectComponent,
+    onPlacementChanged: _setPlacement,
+    onPlacementGestureStarted: _beginPlacementHistory,
+    onPlacementGestureEnded: _finishPlacementHistory,
+    onModulePlacementChanged: _setModulePlacement,
+    renderAssets: widget.renderAssets,
+    frameInset: frameInset,
+    chromeSafeInsets: chromeSafeInsets,
+    fullScreen: _fullScreen,
+    onToggleFullScreen: () => setState(() => _fullScreen = !_fullScreen),
+    onAddRequested: _layoutInherited ? null : _openAddCatalogue,
+    onAddDropped: _layoutInherited ? null : _addDropped,
+    previewController: _canvasPreviewController,
+    canUndo: _undoStack.isNotEmpty,
+    canRedo: _redoStack.isNotEmpty,
+    onUndo: _undo,
+    onRedo: _redo,
+    snapEnabled: _snapEnabled,
+    onToggleSnap: () => setState(() => _snapEnabled = !_snapEnabled),
+    soundEnabled: widget.soundEnabled,
+    hapticsEnabled: widget.hapticsEnabled,
+  );
 
   Widget _workspace(BoxConstraints constraints) {
     final layout = _WorkspaceLayout.resolve(
       windowSize: MediaQuery.sizeOf(context),
       constraints: constraints,
     );
-    final canvas = Padding(padding: const EdgeInsets.all(4), child: _canvas());
+    final workspaceSafeInsets = _workspaceChromeInsets;
     return Stack(
       key: _workspaceKey,
       fit: StackFit.expand,
@@ -214,10 +245,25 @@ class _EditorPageState extends State<EditorPage> {
           extent: layout.drawerExtent,
           palette: _palette,
           prismStyle: _dashboard.settings.prismStyle,
+          workspaceSafeInsets: workspaceSafeInsets,
           soundEnabled: widget.soundEnabled,
           hapticsEnabled: widget.hapticsEnabled,
           onOpenChanged: (open) => setState(() => _drawerOpen = open),
-          content: canvas,
+          contentBuilder: (context, progress) {
+            final safeLayout = _EditorSafeLayout.resolve(
+              workspaceSafeInsets: workspaceSafeInsets,
+              interfaceOrientation: widget.interfaceOrientation,
+              drawerEdge: layout.edge,
+              drawerProgress: progress,
+            );
+            return Padding(
+              padding: const EdgeInsets.all(4),
+              child: _canvas(
+                frameInset: safeLayout.frameInset,
+                chromeSafeInsets: safeLayout.canvasChromeInsets,
+              ),
+            );
+          },
           drawer: _addCatalogueOpen
               ? EditorAddCatalogue(
                   palette: _palette,
@@ -527,7 +573,8 @@ class _EditorPageState extends State<EditorPage> {
 
   void _clearInvalidSelection(Dashboard dashboard) {
     if (dashboard.layoutForViewport(_orientation) != _orientation ||
-        (_selectedId != null && _componentIn(dashboard, _selectedId!) == null) ||
+        (_selectedId != null &&
+            _componentIn(dashboard, _selectedId!) == null) ||
         (_selectedModuleId != null &&
             _moduleIn(dashboard, _selectedModuleId!) == null)) {
       _selectedId = null;
@@ -535,17 +582,13 @@ class _EditorPageState extends State<EditorPage> {
     }
   }
 
-  ComponentInstance? _componentIn(Dashboard dashboard, String id) => dashboard
-      .components
-      .where((item) => item.id == id)
-      .firstOrNull;
+  ComponentInstance? _componentIn(Dashboard dashboard, String id) =>
+      dashboard.components.where((item) => item.id == id).firstOrNull;
 
-  VfdModule? _moduleIn(Dashboard dashboard, String id) => dashboard.modules
-      .where((item) => item.id == id)
-      .firstOrNull;
+  VfdModule? _moduleIn(Dashboard dashboard, String id) =>
+      dashboard.modules.where((item) => item.id == id).firstOrNull;
 
-  ComponentInstance? _component(String id) =>
-      _componentIn(_dashboard, id);
+  ComponentInstance? _component(String id) => _componentIn(_dashboard, id);
 
   VfdModule? _module(String id) => _moduleIn(_dashboard, id);
 
@@ -610,6 +653,57 @@ class _WorkspaceLayout {
       drawerExtent: math.min(
         maxExtent,
         (constraints.maxWidth * 0.38).clamp(280, 420).toDouble(),
+      ),
+    );
+  }
+}
+
+/// Assigns physical safe space to the pane that owns each screen edge.
+///
+/// Runtime geometry remains full-viewport. Only the editor preview fit and its
+/// screen-space controls change while the service drawer travels.
+class _EditorSafeLayout {
+  const _EditorSafeLayout({
+    required this.frameInset,
+    required this.canvasChromeInsets,
+  });
+
+  static const double _frameMargin = 24;
+
+  final EdgeInsets frameInset;
+  final EdgeInsets canvasChromeInsets;
+
+  static _EditorSafeLayout resolve({
+    required EdgeInsets workspaceSafeInsets,
+    required PhysicalInterfaceOrientation interfaceOrientation,
+    required MechanicalDrawerEdge drawerEdge,
+    required double drawerProgress,
+  }) {
+    final progress = drawerProgress.clamp(0.0, 1.0);
+    final frameLeft =
+        drawerEdge == MechanicalDrawerEdge.right &&
+            interfaceOrientation == PhysicalInterfaceOrientation.landscapeLeft
+        ? workspaceSafeInsets.left * progress
+        : 0.0;
+    final canvasRight = drawerEdge == MechanicalDrawerEdge.right
+        ? workspaceSafeInsets.right * (1 - progress)
+        : workspaceSafeInsets.right;
+    final canvasBottom = drawerEdge == MechanicalDrawerEdge.bottom
+        ? workspaceSafeInsets.bottom * (1 - progress)
+        : workspaceSafeInsets.bottom;
+
+    return _EditorSafeLayout(
+      frameInset: EdgeInsets.fromLTRB(
+        _frameMargin + frameLeft,
+        _frameMargin,
+        _frameMargin,
+        _frameMargin,
+      ),
+      canvasChromeInsets: EdgeInsets.fromLTRB(
+        workspaceSafeInsets.left,
+        workspaceSafeInsets.top,
+        canvasRight,
+        canvasBottom,
       ),
     );
   }
@@ -731,6 +825,9 @@ class _EditorServicePanelState extends State<_EditorServicePanel> {
                   PrismSelectorChoice<_EditorSection>(
                     value: section,
                     label: section.name,
+                    controlKey: ValueKey(
+                      'editor-service-section-${section.name}',
+                    ),
                     lit: section == active,
                   ),
               ],

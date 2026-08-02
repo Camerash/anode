@@ -225,7 +225,8 @@ void main() {
                   soundEnabled: false,
                   hapticsEnabled: false,
                   onOpenChanged: (value) => rebuild(() => open = value),
-                  content: const SizedBox(key: ValueKey('drawer-content')),
+                  contentBuilder: (context, progress) =>
+                      const SizedBox(key: ValueKey('drawer-content')),
                   drawer: const Text('DRAWER'),
                 );
               },

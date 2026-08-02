@@ -15,14 +15,18 @@ class EditorLiveVfdPreview extends StatefulWidget {
     required this.renderAssets,
     required this.dashboard,
     required this.orientation,
-    this.safeInsets = EdgeInsets.zero,
+    this.frameInsets = EdgeInsets.zero,
+    this.clipRect,
     this.transparentBackground = false,
   });
 
   final VfdRenderAssets renderAssets;
   final Dashboard dashboard;
   final DesignOrientation orientation;
-  final EdgeInsets safeInsets;
+  final EdgeInsets frameInsets;
+
+  /// Optional local viewport for an otherwise full-size VFD render.
+  final Rect? clipRect;
   final bool transparentBackground;
 
   @override
@@ -55,7 +59,8 @@ class _EditorLiveVfdPreviewState extends State<EditorLiveVfdPreview>
   Widget build(BuildContext context) => VfdCluster(
     renderAssets: widget.renderAssets,
     controller: _controller,
-    safeInsets: widget.safeInsets,
+    frameInsets: widget.frameInsets,
+    clipRect: widget.clipRect,
     transparentBackground: widget.transparentBackground,
   );
 }

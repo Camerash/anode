@@ -395,7 +395,8 @@ class VfdPainter extends CustomPainter {
     required this.shader,
     required this.prismGlyphAtlas,
     required this.controller,
-    required this.safeRect,
+    required this.frameRect,
+    required this.clipRect,
     required this.authoredRevision,
     required this.transparentBackground,
   }) : super(repaint: controller);
@@ -408,7 +409,8 @@ class VfdPainter extends CustomPainter {
 
   /// Where content is laid out, in Flutter's y-down logical pixels. The render
   /// still covers the full bounds — this only positions the authored frame.
-  final Rect safeRect;
+  final Rect frameRect;
+  final Rect? clipRect;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -433,10 +435,10 @@ class VfdPainter extends CustomPainter {
       ..setFloat(10, profile.effect(EffectIds.filamentWires).strength)
       ..setFloat(11, profile.effect(EffectIds.glassGrain).strength)
       // Shader space is y-up; Rect is y-down.
-      ..setFloat(12, safeRect.left)
-      ..setFloat(13, size.height - safeRect.bottom)
-      ..setFloat(14, safeRect.right)
-      ..setFloat(15, size.height - safeRect.top)
+      ..setFloat(12, frameRect.left)
+      ..setFloat(13, size.height - frameRect.bottom)
+      ..setFloat(14, frameRect.right)
+      ..setFloat(15, size.height - frameRect.top)
       ..setFloat(16, frame.width)
       ..setFloat(17, frame.height)
       ..setFloat(18, controller.componentCount.toDouble())
@@ -459,7 +461,11 @@ class VfdPainter extends CustomPainter {
       }
     }(), 'vfd.frag declares more float uniforms than VfdPainter sets');
 
+    canvas.save();
+    final clip = clipRect;
+    if (clip != null) canvas.clipRect(clip);
     canvas.drawRect(Offset.zero & size, Paint()..shader = shader);
+    canvas.restore();
   }
 
   @override
@@ -467,7 +473,8 @@ class VfdPainter extends CustomPainter {
       old.shader != shader ||
       old.prismGlyphAtlas != prismGlyphAtlas ||
       old.controller != controller ||
-      old.safeRect != safeRect ||
+      old.frameRect != frameRect ||
+      old.clipRect != clipRect ||
       old.authoredRevision != authoredRevision ||
       old.transparentBackground != transparentBackground;
 }
@@ -477,16 +484,21 @@ class VfdCluster extends StatefulWidget {
     super.key,
     required this.renderAssets,
     required this.controller,
-    this.safeInsets,
+    this.frameInsets = EdgeInsets.zero,
+    this.clipRect,
     this.transparentBackground = false,
   });
 
   final VfdRenderAssets renderAssets;
   final VfdController controller;
 
-  /// Where content may be laid out inside this widget. Defaults to the window
-  /// padding, which is only correct when the cluster fills the window.
-  final EdgeInsets? safeInsets;
+  /// Insets used to contain-fit the authored frame. This is renderer geometry,
+  /// not device-safe chrome; runtime content defaults to full-bleed.
+  final EdgeInsets frameInsets;
+
+  /// Optional local viewport. Painter clipping preserves shader coordinates
+  /// relative to this cluster's full bounds.
+  final Rect? clipRect;
   final bool transparentBackground;
 
   @override
@@ -505,24 +517,29 @@ class _VfdClusterState extends State<VfdCluster> {
 
   @override
   Widget build(BuildContext context) {
-    final padding = widget.safeInsets ?? MediaQuery.paddingOf(context);
-
     return RepaintBoundary(
       child: LayoutBuilder(
         builder: (context, constraints) {
           final size = constraints.biggest;
-          final safeRect = Rect.fromLTRB(
-            padding.left,
-            padding.top,
-            math.max(padding.left + 1, size.width - padding.right),
-            math.max(padding.top + 1, size.height - padding.bottom),
+          final frameRect = Rect.fromLTRB(
+            widget.frameInsets.left,
+            widget.frameInsets.top,
+            math.max(
+              widget.frameInsets.left + 1,
+              size.width - widget.frameInsets.right,
+            ),
+            math.max(
+              widget.frameInsets.top + 1,
+              size.height - widget.frameInsets.bottom,
+            ),
           );
           return CustomPaint(
             painter: VfdPainter(
               shader: _shader,
               prismGlyphAtlas: widget.renderAssets.prismGlyphAtlas,
               controller: widget.controller,
-              safeRect: safeRect,
+              frameRect: frameRect,
+              clipRect: widget.clipRect,
               authoredRevision: widget.controller.authoredRevision,
               transparentBackground: widget.transparentBackground,
             ),

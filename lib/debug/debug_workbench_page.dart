@@ -100,7 +100,7 @@ class _DebugWorkbenchPageState extends State<DebugWorkbenchPage>
               child: VfdCluster(
                 renderAssets: widget.renderAssets,
                 controller: _controller,
-                safeInsets: EdgeInsets.zero,
+                frameInsets: EdgeInsets.zero,
               ),
             ),
             SizedBox(

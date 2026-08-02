@@ -184,8 +184,8 @@ end and renumber both sides together.
 | 4–6 | `uPhosphor` |
 | 7–10 | `uLayers` (bloom, unlit, grid, filament) |
 | 11 | `uGrain` |
-| 12, 13 | `uSafeMin` |
-| 14, 15 | `uSafeMax` |
+| 12, 13 | `uFitMin` |
+| 14, 15 | `uFitMax` |
 | 16, 17 | `uFrame` — authored frame extent in design units |
 | 18 | `uCount` |
 | 19, 20 | `uDataSize` |

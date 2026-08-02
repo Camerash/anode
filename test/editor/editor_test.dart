@@ -6,6 +6,7 @@ import 'package:anode/editor/editor_page.dart';
 import 'package:anode/model/dashboard.dart';
 import 'package:anode/model/dev_design.dart';
 import 'package:anode/model/placement.dart';
+import 'package:anode/platform/physical_interface_orientation.dart';
 import 'package:anode/vfd/prism_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -442,7 +443,7 @@ void main() {
       final frame = find.byKey(const ValueKey('editor-canvas'));
       final before = tester.getRect(frame);
 
-      await tester.dragFrom(const Offset(20, 20), const Offset(35, 25));
+      await tester.dragFrom(const Offset(140, 20), const Offset(35, 25));
       await tester.pump();
 
       final after = tester.getRect(frame);
@@ -457,7 +458,7 @@ void main() {
       final frame = find.byKey(const ValueKey('editor-canvas'));
       final before = tester.getRect(frame);
 
-      await tester.dragFrom(const Offset(20, 20), const Offset(40, 30));
+      await tester.dragFrom(const Offset(140, 20), const Offset(40, 30));
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('canvas-fit')));
       await tester.pump();
@@ -544,6 +545,279 @@ void main() {
     final frame = tester.getRect(find.byKey(const ValueKey('editor-canvas')));
     expect(frame.width, closeTo(viewport.width, 0.001));
     expect(frame.height, closeTo(viewport.height, 0.001));
+  });
+
+  testWidgets('portrait editor surfaces bleed while chrome stays safe', (
+    tester,
+  ) async {
+    const viewport = Size(393, 852);
+    const safeInsets = EdgeInsets.fromLTRB(0, 59, 0, 34);
+    await _setViewport(tester, viewport);
+    final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: viewport,
+            padding: safeInsets,
+            viewPadding: safeInsets,
+          ),
+          child: EditorPage(dashboard: dashboard, onChanged: (_) {}),
+        ),
+      ),
+    );
+
+    final header = tester.getRect(
+      find.byKey(const ValueKey('editor-header-surface')),
+    );
+    final environment = tester.getRect(
+      find.byKey(const ValueKey('editor-canvas-environment')),
+    );
+    expect(header, const Rect.fromLTWH(0, 0, 393, 107));
+    expect(
+      tester.getRect(find.byKey(const ValueKey('editor-back'))).top,
+      greaterThanOrEqualTo(safeInsets.top),
+    );
+    expect(environment.left, 0);
+    expect(environment.right, viewport.width);
+    expect(environment.bottom, viewport.height);
+    expect(
+      tester.getRect(find.byKey(const ValueKey('canvas-full'))).bottom,
+      lessThanOrEqualTo(viewport.height - safeInsets.bottom),
+    );
+    expect(
+      tester
+          .getRect(find.byKey(const ValueKey('mechanical-drawer-latch')))
+          .bottom,
+      lessThanOrEqualTo(viewport.height - safeInsets.bottom),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('canvas-full')));
+    await tester.pump();
+
+    final frame = tester.getRect(find.byKey(const ValueKey('editor-canvas')));
+    expect(frame.left, closeTo(0, 0.001));
+    expect(frame.top, closeTo(0, 0.001));
+    expect(frame.width, closeTo(viewport.width, 0.001));
+    expect(frame.height, closeTo(viewport.height, 0.001));
+    expect(
+      tester.getRect(find.byKey(const ValueKey('canvas-undo'))).top,
+      greaterThanOrEqualTo(safeInsets.top),
+    );
+    expect(
+      tester.getRect(find.byKey(const ValueKey('canvas-full'))).bottom,
+      lessThanOrEqualTo(viewport.height - safeInsets.bottom),
+    );
+  });
+
+  testWidgets('landscape editor assigns safe space to the physical pane', (
+    tester,
+  ) async {
+    const viewport = Size(874, 402);
+    const safeInsets = EdgeInsets.fromLTRB(59, 0, 59, 21);
+    await _setViewport(tester, viewport);
+    final leftDashboard = Dashboard.forkFrom(
+      developmentPreset(),
+      id: 'editor-left-island',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: viewport,
+            padding: safeInsets,
+            viewPadding: safeInsets,
+          ),
+          child: EditorPage(
+            key: const ValueKey('left-island-editor'),
+            dashboard: leftDashboard,
+            interfaceOrientation: PhysicalInterfaceOrientation.landscapeLeft,
+            onChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      tester.getRect(find.byKey(const ValueKey('editor-header-surface'))),
+      const Rect.fromLTWH(0, 0, 874, 48),
+    );
+    expect(
+      tester.getRect(find.byKey(const ValueKey('editor-back'))).left,
+      greaterThanOrEqualTo(safeInsets.left),
+    );
+    expect(
+      tester.getRect(find.byKey(const ValueKey('orientation-landscape'))).right,
+      lessThanOrEqualTo(viewport.width - safeInsets.right),
+    );
+    expect(
+      tester.getRect(find.byKey(const ValueKey('canvas-undo'))).left,
+      greaterThanOrEqualTo(safeInsets.left),
+    );
+    expect(
+      tester.getRect(find.byKey(const ValueKey('canvas-full'))).right,
+      lessThanOrEqualTo(viewport.width - safeInsets.right),
+    );
+    expect(
+      tester
+          .getRect(find.byKey(const ValueKey('mechanical-drawer-latch')))
+          .right,
+      lessThanOrEqualTo(viewport.width - safeInsets.right),
+    );
+
+    final closedLeftFrame = tester.getRect(
+      find.byKey(const ValueKey('editor-authored-frame')),
+    );
+    final latch = find.byKey(const ValueKey('mechanical-drawer-latch'));
+    await tester.tap(latch);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+    final travellingLeftFrame = tester.getRect(
+      find.byKey(const ValueKey('editor-authored-frame')),
+    );
+    expect(travellingLeftFrame.width, lessThan(closedLeftFrame.width));
+
+    await tester.pump(const Duration(milliseconds: 90));
+    final openLeftFrame = tester.getRect(
+      find.byKey(const ValueKey('editor-authored-frame')),
+    );
+    expect(openLeftFrame.width, lessThan(travellingLeftFrame.width));
+    expect(openLeftFrame.left, greaterThanOrEqualTo(safeInsets.left));
+
+    final drawerEnvironment = tester.getRect(
+      find.byKey(const ValueKey('mechanical-push-drawer')),
+    );
+    final drawerContent = tester.getRect(
+      find.byKey(const ValueKey('mechanical-drawer-safe-content')),
+    );
+    expect(drawerEnvironment.right, viewport.width);
+    expect(drawerEnvironment.bottom, viewport.height);
+    expect(
+      drawerContent.right,
+      lessThanOrEqualTo(viewport.width - safeInsets.right),
+    );
+    expect(
+      drawerContent.bottom,
+      lessThanOrEqualTo(viewport.height - safeInsets.bottom),
+    );
+    final lookTab = find.byKey(const ValueKey('editor-service-section-look'));
+    expect(
+      tester.getRect(lookTab).right,
+      lessThanOrEqualTo(viewport.width - safeInsets.right),
+    );
+    await tester.tap(lookTab);
+    await tester.pump();
+    expect(
+      tester
+          .getRect(find.byKey(const ValueKey('mechanical-drawer-safe-content')))
+          .right,
+      lessThanOrEqualTo(viewport.width - safeInsets.right),
+    );
+    expect(
+      _canvasAspect(tester, key: const ValueKey('editor-authored-frame')),
+      closeTo(leftDashboard.frameAspect(DesignOrientation.landscape), 0.001),
+    );
+
+    final rightDashboard = Dashboard.forkFrom(
+      developmentPreset(),
+      id: 'editor-right-island',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: viewport,
+            padding: safeInsets,
+            viewPadding: safeInsets,
+          ),
+          child: EditorPage(
+            key: const ValueKey('right-island-editor'),
+            dashboard: rightDashboard,
+            interfaceOrientation: PhysicalInterfaceOrientation.landscapeRight,
+            onChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    final closedRightFrame = tester.getRect(
+      find.byKey(const ValueKey('editor-authored-frame')),
+    );
+    expect(closedRightFrame, closedLeftFrame);
+
+    await tester.tap(latch);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+
+    final openRightFrame = tester.getRect(
+      find.byKey(const ValueKey('editor-authored-frame')),
+    );
+    expect(openRightFrame.left, lessThan(openLeftFrame.left));
+    expect(openRightFrame.left, lessThan(safeInsets.left));
+    expect(
+      _canvasAspect(tester, key: const ValueKey('editor-authored-frame')),
+      closeTo(rightDashboard.frameAspect(DesignOrientation.landscape), 0.001),
+    );
+
+    final designTab = find.byKey(
+      const ValueKey('editor-service-section-design'),
+    );
+    expect(
+      tester.getRect(designTab).right,
+      lessThanOrEqualTo(viewport.width - safeInsets.right),
+    );
+    await tester.tap(find.byKey(const ValueKey('editor-service-section-look')));
+    await tester.pump();
+    expect(
+      tester
+          .getRect(find.byKey(const ValueKey('editor-service-section-look')))
+          .right,
+      lessThanOrEqualTo(viewport.width - safeInsets.right),
+    );
+  });
+
+  testWidgets('safe chrome never clamps authored elements or resize handles', (
+    tester,
+  ) async {
+    const safeInsets = EdgeInsets.fromLTRB(80, 60, 80, 40);
+    var dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    final speed = dashboard.components.firstWhere(
+      (component) => component.id == 'speed',
+    );
+    const edgePlacement = Placement(
+      center: Offset(-1.15, 0),
+      size: Size(0.4, 0.25),
+    );
+    dashboard = dashboard.withComponent(
+      speed.withPlacement(DesignOrientation.landscape, edgePlacement),
+    );
+    Placement? resized;
+    await _setViewport(tester, const Size(900, 500));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorCanvas(
+          dashboard: dashboard,
+          orientation: DesignOrientation.landscape,
+          deviceViewportSize: const Size(900, 500),
+          frameInset: EdgeInsets.zero,
+          chromeSafeInsets: safeInsets,
+          selectedId: 'speed',
+          onSelect: (_) {},
+          onPlacementChanged: (_, placement) => resized = placement,
+        ),
+      ),
+    );
+
+    final element = tester.getRect(find.byKey(const ValueKey('canvas-speed')));
+    expect(element.left, lessThan(safeInsets.left));
+
+    final handle = find.byKey(const ValueKey('resize-width'));
+    final gesture = await tester.startGesture(tester.getCenter(handle));
+    await gesture.moveBy(const Offset(24, 0));
+    await tester.pump();
+    await gesture.up();
+    expect(resized, isNotNull);
+    expect(resized!.size.width, greaterThan(edgePlacement.size.width));
   });
 
   testWidgets('ADD catalogue direct drag shows ghost and places a part', (
@@ -708,31 +982,24 @@ void main() {
     expect(find.text('SPEED DIGITS'), findsNothing);
   });
 
-  testWidgets('safe area is a guide and never changes the device envelope', (
+  testWidgets('device viewport never changes authored frame geometry', (
     tester,
   ) async {
     final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
     await tester.pumpWidget(
       MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(
-            size: Size(900, 500),
-            padding: EdgeInsets.fromLTRB(24, 18, 20, 12),
-          ),
-          child: EditorCanvas(
-            dashboard: dashboard,
-            orientation: DesignOrientation.landscape,
-            deviceViewportSize: const Size(900, 500),
-            deviceSafeInsets: const EdgeInsets.fromLTRB(24, 18, 20, 12),
-            selectedId: null,
-            onSelect: (_) {},
-            onPlacementChanged: (_, _) {},
-          ),
+        home: EditorCanvas(
+          dashboard: dashboard,
+          orientation: DesignOrientation.landscape,
+          deviceViewportSize: const Size(900, 500),
+          selectedId: null,
+          onSelect: (_) {},
+          onPlacementChanged: (_, _) {},
         ),
       ),
     );
 
-    expect(find.byKey(const ValueKey('device-safe-guide')), findsOneWidget);
+    expect(find.byKey(const ValueKey('device-safe-guide')), findsNothing);
     expect(_canvasAspect(tester), closeTo(900 / 500, 0.001));
     expect(
       _canvasAspect(tester, key: const ValueKey('editor-authored-frame')),
@@ -776,11 +1043,14 @@ void main() {
       expect(tester.widget<PrismButton>(redo).symbol, PrismSymbol.redo);
       expect(tester.widget<PrismButton>(undo).enabled, isFalse);
       expect(tester.widget<PrismButton>(redo).enabled, isFalse);
+      expect(tester.widget<PrismButton>(undo).lit, isFalse);
+      expect(tester.widget<PrismButton>(redo).lit, isFalse);
 
       await tester.tap(arm);
       await tester.pump();
       expect(dashboard.components.where((item) => item.id == 'speed'), isEmpty);
       expect(tester.widget<PrismButton>(undo).enabled, isTrue);
+      expect(tester.widget<PrismButton>(undo).lit, isTrue);
 
       await tester.tap(undo);
       await tester.pump();
@@ -789,6 +1059,7 @@ void main() {
         hasLength(1),
       );
       expect(tester.widget<PrismButton>(redo).enabled, isTrue);
+      expect(tester.widget<PrismButton>(redo).lit, isTrue);
       expect(redo.hitTestable(), findsOneWidget);
 
       await tester.tap(redo);
@@ -848,6 +1119,7 @@ void main() {
 
     final undo = find.byKey(const ValueKey('canvas-undo'));
     expect(tester.widget<PrismButton>(undo).enabled, isTrue);
+    expect(tester.widget<PrismButton>(undo).lit, isTrue);
     await tester.tap(undo);
     await tester.pump();
     final restored = dashboard.components

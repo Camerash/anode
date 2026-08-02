@@ -9,8 +9,8 @@ layout(location = 2)  uniform float uTilt;
 layout(location = 3)  uniform vec3  uPhosphor;
 layout(location = 4)  uniform vec4  uLayers;
 layout(location = 5)  uniform float uGrain;
-layout(location = 6)  uniform vec2  uSafeMin;
-layout(location = 7)  uniform vec2  uSafeMax;
+layout(location = 6)  uniform vec2  uFitMin;
+layout(location = 7)  uniform vec2  uFitMax;
 // The authored frame extent in design units. A design unit is frame-independent
 // — every optical constant below is expressed in them, so the unit must not
 // change meaning when the frame's shape does.
@@ -367,12 +367,12 @@ void main() {
   vec2 fc = FlutterFragCoord().xy;
   vec2 flipped = vec2(fc.x, uSize.y - fc.y);
 
-  // Contain-fit the authored frame inside the safe rect. Placement only — no
+  // Contain-fit the authored frame inside the fit rect. Placement only — no
   // mask and no clamp, so halo, sheen and grain still spill past it.
-  vec2 safeSize = uSafeMax - uSafeMin;
-  vec2 safeCenter = 0.5 * (uSafeMin + uSafeMax);
-  float fitScale = min(safeSize.x / uFrame.x, safeSize.y / uFrame.y);
-  vec2 uv = (flipped - safeCenter) / fitScale;
+  vec2 fitSize = uFitMax - uFitMin;
+  vec2 fitCenter = 0.5 * (uFitMin + uFitMax);
+  float fitScale = min(fitSize.x / uFrame.x, fitSize.y / uFrame.y);
+  vec2 uv = (flipped - fitCenter) / fitScale;
 
   vec2 q = uv + vec2(uTilt * 0.012, 0.0);
 

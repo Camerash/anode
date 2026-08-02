@@ -26,13 +26,13 @@ class EditorCanvas extends StatefulWidget {
     this.onPlacementGestureStarted,
     this.onPlacementGestureEnded,
     required this.deviceViewportSize,
-    this.deviceSafeInsets = EdgeInsets.zero,
     this.selectedModuleId,
     this.onModulePlacementChanged,
     this.renderAssets,
     this.previewOrientation,
     this.editable = true,
     this.frameInset = const EdgeInsets.all(24),
+    this.chromeSafeInsets = EdgeInsets.zero,
     this.fullScreen = false,
     this.onToggleFullScreen,
     this.onAddRequested,
@@ -57,10 +57,8 @@ class EditorCanvas extends StatefulWidget {
   final VoidCallback? onPlacementGestureStarted;
   final ValueChanged<bool>? onPlacementGestureEnded;
 
-  /// Full device viewport. Unsafe regions remain authorable; [deviceSafeInsets]
-  /// paint a non-rendering guide only.
+  /// Full device viewport. Unsafe regions remain authorable.
   final Size deviceViewportSize;
-  final EdgeInsets deviceSafeInsets;
   final String? selectedModuleId;
   final void Function(String moduleId, Placement placement)?
   onModulePlacementChanged;
@@ -68,6 +66,10 @@ class EditorCanvas extends StatefulWidget {
   final DesignOrientation? previewOrientation;
   final bool editable;
   final EdgeInsets frameInset;
+
+  /// Insets editor chrome only. Authored content and interaction geometry
+  /// remain resolved against the complete device viewport.
+  final EdgeInsets chromeSafeInsets;
   final bool fullScreen;
   final VoidCallback? onToggleFullScreen;
   final VoidCallback? onAddRequested;
@@ -186,6 +188,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
   static const double _handleExtent = 44;
   static const double _minCameraScale = 1;
   static const double _maxCameraScale = 4;
+  // Matches the former VFD substrate plus exterior matte composite, so a
+  // fitted canvas keeps its existing visual while a panned canvas stays flat.
+  static const Color _workspaceMatte = Color(0xFF121613);
 
   double _cameraScale = 1;
   Offset _cameraOrigin = Offset.zero;
@@ -242,7 +247,10 @@ class _EditorCanvasState extends State<EditorCanvas> {
       widget.dashboard.settings.opticalProfile.phosphor,
     );
     return ColoredBox(
-      color: const Color(0xFF161917),
+      // This stays fixed while the authored frame pans. The moving preview
+      // must not carry an opaque substrate beyond its visible frame, or a pan
+      // exposes a second canvas shade beneath it.
+      color: _workspaceMatte,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final sceneSize = Size(
@@ -272,8 +280,6 @@ class _EditorCanvasState extends State<EditorCanvas> {
             boundaryExtent,
           );
           final content = _containRect(boundary, layoutExtent);
-          final safeGuide = _safeGuideRect(boundary, previewOrientation);
-
           _layoutExtent = layoutExtent;
           _designScale = content.height / layoutExtent.height;
           _items = _buildItems(content);
@@ -295,7 +301,6 @@ class _EditorCanvasState extends State<EditorCanvas> {
                       sceneSize: sceneSize,
                       boundary: boundary,
                       content: content,
-                      safeGuide: safeGuide,
                       palette: palette,
                     ),
                   ),
@@ -340,7 +345,6 @@ class _EditorCanvasState extends State<EditorCanvas> {
     required Size sceneSize,
     required Rect boundary,
     required Rect content,
-    required Rect? safeGuide,
     required VfdPalette palette,
   }) => SizedBox.fromSize(
     size: sceneSize,
@@ -353,40 +357,30 @@ class _EditorCanvasState extends State<EditorCanvas> {
             renderAssets: widget.renderAssets!,
             dashboard: widget.dashboard,
             orientation: widget.orientation,
-            // The boundary, not the content rect: the shader performs the same
-            // contain fit the runtime does, so the pixels inside the border are
-            // exactly the runtime render.
-            safeInsets: EdgeInsets.fromLTRB(
+            // The boundary, not the content rect: the shader performs the
+            // same contain fit the runtime does. Painter-level clipping keeps
+            // shader coordinates intact while limiting its opaque substrate
+            // to the visible authored frame.
+            frameInsets: EdgeInsets.fromLTRB(
               boundary.left,
               boundary.top,
               sceneSize.width - boundary.right,
               sceneSize.height - boundary.bottom,
             ),
+            clipRect: content,
           ),
-        CustomPaint(
-          painter: _OutsideFramePainter(
-            frame: content,
-            palette: palette,
-            // Dimming, not opacity: an Opacity layer over the shader forces a
-            // saveLayer above the render pass.
-            insideScrim: widget.editable ? null : const Color(0x99111512),
-          ),
-        ),
-        CustomPaint(
-          painter: _AuthoredFramePainter(
-            palette: palette,
-            frame: boundary,
-            innerFrame: content,
-          ),
-        ),
-        if (safeGuide != null)
+        if (!widget.editable)
           CustomPaint(
-            key: const ValueKey('device-safe-guide'),
-            painter: _DeviceSafeGuidePainter(
-              palette: palette,
-              safeFrame: safeGuide,
+            painter: _FrameScrimPainter(
+              frame: content,
+              // Dimming, not opacity: an Opacity layer over the shader forces
+              // a saveLayer above the render pass.
+              color: const Color(0x99111512),
             ),
           ),
+        CustomPaint(
+          painter: _AuthoredFramePainter(palette: palette, frame: content),
+        ),
         Positioned.fromRect(
           rect: boundary,
           child: const SizedBox(key: ValueKey('editor-canvas')),
@@ -430,8 +424,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
   );
 
   Widget _controls(VfdPalette palette) => Positioned(
-    right: 8,
-    bottom: 8,
+    right: widget.chromeSafeInsets.right + 8,
+    bottom: widget.chromeSafeInsets.bottom + 8,
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
@@ -490,10 +484,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
   );
 
   Widget _historyControls(VfdPalette palette) => Positioned(
-    top: 8,
-    // MechanicalPushDrawer's 52px PANEL latch occupies the content edge while
-    // open. Keep history controls in the top-right canvas gutter, clear of it.
-    right: 64,
+    top: widget.chromeSafeInsets.top + 8,
+    left: widget.chromeSafeInsets.left + 8,
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
@@ -506,6 +498,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
           style: widget.dashboard.settings.prismStyle,
           soundEnabled: widget.soundEnabled,
           hapticsEnabled: widget.hapticsEnabled,
+          lit: widget.canUndo,
           enabled: widget.canUndo,
           onPressed: widget.canUndo ? widget.onUndo : null,
         ),
@@ -519,6 +512,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
           style: widget.dashboard.settings.prismStyle,
           soundEnabled: widget.soundEnabled,
           hapticsEnabled: widget.hapticsEnabled,
+          lit: widget.canRedo,
           enabled: widget.canRedo,
           onPressed: widget.canRedo ? widget.onRedo : null,
         ),
@@ -612,33 +606,6 @@ class _EditorCanvasState extends State<EditorCanvas> {
       bounds.top + (bounds.height - height) / 2,
       width,
       height,
-    );
-  }
-
-  Rect? _safeGuideRect(Rect boundary, DesignOrientation target) {
-    var insets = widget.deviceSafeInsets;
-    var viewport = widget.deviceViewportSize;
-    final viewportPortrait = viewport.height >= viewport.width;
-    final targetPortrait = target == DesignOrientation.portrait;
-    if (viewportPortrait != targetPortrait) {
-      viewport = Size(viewport.height, viewport.width);
-      insets = EdgeInsets.fromLTRB(
-        insets.bottom,
-        insets.left,
-        insets.top,
-        insets.right,
-      );
-    }
-    if (insets == EdgeInsets.zero ||
-        viewport.width <= 0 ||
-        viewport.height <= 0) {
-      return null;
-    }
-    return Rect.fromLTRB(
-      boundary.left + boundary.width * insets.left / viewport.width,
-      boundary.top + boundary.height * insets.top / viewport.height,
-      boundary.right - boundary.width * insets.right / viewport.width,
-      boundary.bottom - boundary.height * insets.bottom / viewport.height,
     );
   }
 
@@ -1010,18 +977,10 @@ class _SelectionBox extends StatelessWidget {
 }
 
 class _AuthoredFramePainter extends CustomPainter {
-  const _AuthoredFramePainter({
-    required this.palette,
-    required this.frame,
-    this.innerFrame,
-  });
+  const _AuthoredFramePainter({required this.palette, required this.frame});
 
   final VfdPalette palette;
   final Rect frame;
-
-  /// The contained inherited layout, drawn only while previewing an orientation
-  /// that has no authored layout of its own.
-  final Rect? innerFrame;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1035,8 +994,6 @@ class _AuthoredFramePainter extends CustomPainter {
       ..strokeWidth = 1;
     canvas.drawRect(frame, bright);
     canvas.drawRect(frame.deflate(4), dim);
-    final inner = innerFrame;
-    if (inner != null) canvas.drawRect(inner, dim);
     const mark = 13.0;
     const gap = 4.0;
     final segments = <(Offset, Offset)>[
@@ -1080,45 +1037,7 @@ class _AuthoredFramePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _AuthoredFramePainter oldDelegate) =>
-      oldDelegate.palette != palette ||
-      oldDelegate.frame != frame ||
-      oldDelegate.innerFrame != innerFrame;
-}
-
-class _DeviceSafeGuidePainter extends CustomPainter {
-  const _DeviceSafeGuidePainter({
-    required this.palette,
-    required this.safeFrame,
-  });
-
-  final VfdPalette palette;
-  final Rect safeFrame;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final guide = Paint()
-      ..color = palette.unlit.withValues(alpha: 0.34)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.8;
-    canvas.drawRect(safeFrame, guide);
-    const mark = 7.0;
-    for (final corner in <Offset>[
-      safeFrame.topLeft,
-      safeFrame.topRight,
-      safeFrame.bottomLeft,
-      safeFrame.bottomRight,
-    ]) {
-      final horizontal = corner.dx == safeFrame.left ? mark : -mark;
-      final vertical = corner.dy == safeFrame.top ? mark : -mark;
-      canvas
-        ..drawLine(corner, corner + Offset(horizontal, 0), guide)
-        ..drawLine(corner, corner + Offset(0, vertical), guide);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DeviceSafeGuidePainter oldDelegate) =>
-      oldDelegate.palette != palette || oldDelegate.safeFrame != safeFrame;
+      oldDelegate.palette != palette || oldDelegate.frame != frame;
 }
 
 class _DropTargetPainter extends CustomPainter {
@@ -1149,39 +1068,17 @@ class _DropTargetPainter extends CustomPainter {
       oldDelegate.palette != palette || oldDelegate.frame != frame;
 }
 
-class _OutsideFramePainter extends CustomPainter {
-  const _OutsideFramePainter({
-    required this.frame,
-    required this.palette,
-    this.insideScrim,
-  });
+class _FrameScrimPainter extends CustomPainter {
+  const _FrameScrimPainter({required this.frame, required this.color});
 
   final Rect frame;
-  final VfdPalette palette;
-
-  /// Drawn across the frame to mark a read-only preview. Same matte language as
-  /// the outside region, and — unlike an `Opacity` wrapper — no extra layer
-  /// over the shared render pass.
-  final Color? insideScrim;
+  final Color color;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final matte = Paint()..color = const Color(0xCC111512);
-    canvas
-      ..drawRect(Rect.fromLTRB(0, 0, size.width, frame.top), matte)
-      ..drawRect(Rect.fromLTRB(0, frame.bottom, size.width, size.height), matte)
-      ..drawRect(Rect.fromLTRB(0, frame.top, frame.left, frame.bottom), matte)
-      ..drawRect(
-        Rect.fromLTRB(frame.right, frame.top, size.width, frame.bottom),
-        matte,
-      );
-    final scrim = insideScrim;
-    if (scrim != null) canvas.drawRect(frame, Paint()..color = scrim);
-  }
+  void paint(Canvas canvas, Size size) =>
+      canvas.drawRect(frame, Paint()..color = color);
 
   @override
-  bool shouldRepaint(covariant _OutsideFramePainter oldDelegate) =>
-      oldDelegate.frame != frame ||
-      oldDelegate.palette != palette ||
-      oldDelegate.insideScrim != insideScrim;
+  bool shouldRepaint(covariant _FrameScrimPainter oldDelegate) =>
+      oldDelegate.frame != frame || oldDelegate.color != color;
 }

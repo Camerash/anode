@@ -11,6 +11,7 @@ import 'package:anode/mechanical/mechanical_lever.dart';
 import 'package:anode/model/dashboard.dart';
 import 'package:anode/model/dev_design.dart';
 import 'package:anode/model/optical_profile.dart';
+import 'package:anode/platform/physical_interface_orientation.dart';
 import 'package:anode/vfd/vfd_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -373,6 +374,139 @@ void main() {
     );
   });
 
+  testWidgets('editor safe chrome portrait and landscape baselines', (
+    tester,
+  ) async {
+    final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(393, 852),
+            padding: EdgeInsets.fromLTRB(0, 59, 0, 34),
+            viewPadding: EdgeInsets.fromLTRB(0, 59, 0, 34),
+          ),
+          child: RepaintBoundary(
+            key: const ValueKey('surface'),
+            child: EditorPage(
+              key: const ValueKey('safe-portrait-editor'),
+              dashboard: dashboard,
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await expectLater(
+      find.byKey(const ValueKey('surface')),
+      matchesGoldenFile('baselines/editor_safe_portrait.png'),
+    );
+
+    await tester.binding.setSurfaceSize(const Size(874, 402));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(874, 402),
+            padding: EdgeInsets.fromLTRB(59, 0, 59, 21),
+            viewPadding: EdgeInsets.fromLTRB(59, 0, 59, 21),
+          ),
+          child: RepaintBoundary(
+            key: const ValueKey('surface'),
+            child: EditorPage(
+              key: const ValueKey('safe-landscape-editor'),
+              dashboard: dashboard,
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+    await expectLater(
+      find.byKey(const ValueKey('surface')),
+      matchesGoldenFile('baselines/editor_safe_landscape.png'),
+    );
+  });
+
+  testWidgets('editor panel safe sides in both landscape rotations', (
+    tester,
+  ) async {
+    const viewport = Size(874, 402);
+    await tester.binding.setSurfaceSize(viewport);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final rightSafeDashboard = Dashboard.forkFrom(
+      developmentPreset(),
+      id: 'editor-panel-right',
+    );
+    const safeInsets = EdgeInsets.fromLTRB(59, 0, 59, 21);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: viewport,
+            padding: safeInsets,
+            viewPadding: safeInsets,
+          ),
+          child: RepaintBoundary(
+            key: ValueKey('editor-panel-safe-right'),
+            child: EditorPage(
+              dashboard: rightSafeDashboard,
+              interfaceOrientation: PhysicalInterfaceOrientation.landscapeRight,
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+    await expectLater(
+      find.byKey(const ValueKey('editor-panel-safe-right')),
+      matchesGoldenFile('baselines/editor_panel_safe_right.png'),
+    );
+
+    final leftSafeDashboard = Dashboard.forkFrom(
+      developmentPreset(),
+      id: 'editor-panel-left',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: viewport,
+            padding: safeInsets,
+            viewPadding: safeInsets,
+          ),
+          child: RepaintBoundary(
+            key: ValueKey('editor-panel-safe-left'),
+            child: EditorPage(
+              dashboard: leftSafeDashboard,
+              interfaceOrientation: PhysicalInterfaceOrientation.landscapeLeft,
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+    await tester.tap(find.byKey(const ValueKey('editor-service-section-look')));
+    await tester.pump();
+    await expectLater(
+      find.byKey(const ValueKey('editor-panel-safe-left')),
+      matchesGoldenFile('baselines/editor_panel_safe_left.png'),
+    );
+  });
+
   testWidgets('pager indexed state baseline', (tester) async {
     await tester.binding.setSurfaceSize(const Size(360, 260));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -444,5 +578,63 @@ void main() {
       find.byKey(const ValueKey('surface')),
       matchesGoldenFile('baselines/settings.png'),
     );
+  });
+
+  testWidgets('Library safe chrome portrait and landscape baselines', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final state = AnodeState.load(
+      repository: DesignRepository(await SharedPreferences.getInstance()),
+      presets: [preset()],
+    );
+    addTearDown(state.dispose);
+
+    const portrait = Size(393, 852);
+    const portraitInsets = EdgeInsets.fromLTRB(0, 59, 0, 34);
+    await tester.binding.setSurfaceSize(portrait);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: portrait,
+            padding: portraitInsets,
+            viewPadding: portraitInsets,
+          ),
+          child: RepaintBoundary(
+            key: ValueKey('library-safe-portrait'),
+            child: LibraryPage(state: state),
+          ),
+        ),
+      ),
+    );
+    await expectLater(
+      find.byKey(const ValueKey('library-safe-portrait')),
+      matchesGoldenFile('baselines/library_safe_portrait.png'),
+    );
+
+    const landscape = Size(874, 402);
+    const landscapeInsets = EdgeInsets.fromLTRB(0, 0, 118, 21);
+    await tester.binding.setSurfaceSize(landscape);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: landscape,
+            padding: landscapeInsets,
+            viewPadding: landscapeInsets,
+          ),
+          child: RepaintBoundary(
+            key: ValueKey('library-safe-landscape'),
+            child: LibraryPage(state: state),
+          ),
+        ),
+      ),
+    );
+    await expectLater(
+      find.byKey(const ValueKey('library-safe-landscape')),
+      matchesGoldenFile('baselines/library_safe_landscape.png'),
+    );
+    addTearDown(() => tester.binding.setSurfaceSize(null));
   });
 }

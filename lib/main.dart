@@ -164,7 +164,9 @@ class _ClusterPageState extends State<ClusterPage>
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     _controller.reduceMotion = reduceMotion;
 
-    final windowPadding = MediaQuery.paddingOf(context);
+    // Physical cutout protection remains stable while immersive system UI
+    // temporarily hides its bars. Authored VFD content stays full-bleed.
+    final windowPadding = MediaQuery.viewPaddingOf(context);
     final windowSize = MediaQuery.sizeOf(context);
     final currentOrientation = windowSize.width >= windowSize.height
         ? DesignOrientation.landscape
@@ -191,7 +193,7 @@ class _ClusterPageState extends State<ClusterPage>
                 child: VfdCluster(
                   renderAssets: widget.renderAssets,
                   controller: _controller,
-                  safeInsets: EdgeInsets.zero,
+                  frameInsets: EdgeInsets.zero,
                 ),
               );
             },
@@ -201,7 +203,7 @@ class _ClusterPageState extends State<ClusterPage>
             orientation: _controller.orientation,
             controller: _controller,
             registry: _actions,
-            safeInsets: EdgeInsets.zero,
+            frameInsets: EdgeInsets.zero,
           ),
           // Content insets to the safe area; the background does not.
           Padding(

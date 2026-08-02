@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import '../model/optical_profile.dart';
@@ -7,10 +9,14 @@ import 'mechanical_feedback.dart';
 
 enum MechanicalDrawerEdge { right, bottom }
 
+typedef MechanicalDrawerContentBuilder =
+    Widget Function(BuildContext context, double progress);
+
 /// Service bay that physically consumes workspace while opening.
 ///
 /// The child canvas receives the remaining constraints. Drawer contents retain
-/// their full layout extent behind a clipping aperture during travel.
+/// their full layout extent behind a clipping aperture during travel. Its
+/// surface stays full-bleed; [workspaceSafeInsets] only protect readable chrome.
 class MechanicalPushDrawer extends StatefulWidget {
   const MechanicalPushDrawer({
     super.key,
@@ -20,8 +26,9 @@ class MechanicalPushDrawer extends StatefulWidget {
     required this.palette,
     required this.prismStyle,
     required this.onOpenChanged,
-    required this.content,
+    required this.contentBuilder,
     required this.drawer,
+    this.workspaceSafeInsets = EdgeInsets.zero,
     this.soundEnabled = true,
     this.hapticsEnabled = true,
   });
@@ -32,8 +39,12 @@ class MechanicalPushDrawer extends StatefulWidget {
   final VfdPalette palette;
   final PrismStyle prismStyle;
   final ValueChanged<bool> onOpenChanged;
-  final Widget content;
+  final MechanicalDrawerContentBuilder contentBuilder;
   final Widget drawer;
+
+  /// Physical insets in workspace-local coordinates. A parent header may have
+  /// already consumed the top inset before this drawer is laid out.
+  final EdgeInsets workspaceSafeInsets;
   final bool soundEnabled;
   final bool hapticsEnabled;
 
@@ -89,7 +100,8 @@ class _MechanicalPushDrawerState extends State<MechanicalPushDrawer>
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: _controller,
     builder: (context, _) {
-      final reserved = widget.extent * _travel.value.clamp(0.0, 1.0);
+      final progress = _travel.value.clamp(0.0, 1.0);
+      final reserved = widget.extent * progress;
       return Stack(
         key: const ValueKey('mechanical-push-drawer'),
         fit: StackFit.expand,
@@ -101,7 +113,7 @@ class _MechanicalPushDrawerState extends State<MechanicalPushDrawer>
                 Expanded(
                   child: KeyedSubtree(
                     key: const ValueKey('mechanical-drawer-content'),
-                    child: widget.content,
+                    child: widget.contentBuilder(context, progress),
                   ),
                 ),
                 _horizontalDrawer(reserved),
@@ -113,7 +125,7 @@ class _MechanicalPushDrawerState extends State<MechanicalPushDrawer>
                 Expanded(
                   child: KeyedSubtree(
                     key: const ValueKey('mechanical-drawer-content'),
-                    child: widget.content,
+                    child: widget.contentBuilder(context, progress),
                   ),
                 ),
                 _verticalDrawer(reserved),
@@ -165,16 +177,39 @@ class _MechanicalPushDrawerState extends State<MechanicalPushDrawer>
 
   Widget _drawerBody({required Border border}) => DecoratedBox(
     decoration: BoxDecoration(color: const Color(0xFF050807), border: border),
-    child: widget.drawer,
+    child: Padding(
+      padding: _drawerSafePadding,
+      child: KeyedSubtree(
+        key: const ValueKey('mechanical-drawer-safe-content'),
+        child: widget.drawer,
+      ),
+    ),
   );
+
+  EdgeInsets get _drawerSafePadding => switch (widget.edge) {
+    MechanicalDrawerEdge.right => EdgeInsets.only(
+      right: widget.workspaceSafeInsets.right,
+      bottom: widget.workspaceSafeInsets.bottom,
+    ),
+    MechanicalDrawerEdge.bottom => EdgeInsets.fromLTRB(
+      widget.workspaceSafeInsets.left,
+      0,
+      widget.workspaceSafeInsets.right,
+      widget.workspaceSafeInsets.bottom,
+    ),
+  };
 
   Widget _latch(double reserved) {
     final right = widget.edge == MechanicalDrawerEdge.right;
     return Positioned(
-      right: right ? reserved : null,
-      bottom: right ? null : reserved,
-      top: right ? 22 : null,
-      left: right ? null : 8,
+      left: right ? null : widget.workspaceSafeInsets.left + 8,
+      right: right
+          ? math.max(reserved, widget.workspaceSafeInsets.right)
+          : null,
+      bottom: right
+          ? null
+          : math.max(reserved, widget.workspaceSafeInsets.bottom),
+      top: right ? widget.workspaceSafeInsets.top + 22 : null,
       width: 52,
       height: 44,
       child: PrismButton(
