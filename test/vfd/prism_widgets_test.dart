@@ -1,4 +1,4 @@
-import 'dart:ui' show Tristate;
+import 'dart:ui' as ui;
 
 import 'package:anode/editor/effect_pictogram.dart';
 import 'package:anode/editor/effect_panel.dart';
@@ -79,7 +79,7 @@ void main() {
       find.byKey(const ValueKey('symbol-button')),
     );
     expect(semantics.label, 'Undo');
-    expect(semantics.flagsCollection.isEnabled, Tristate.isTrue);
+    expect(semantics.flagsCollection.isEnabled, ui.Tristate.isTrue);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pump();
@@ -111,8 +111,8 @@ void main() {
     );
 
     final semantics = tester.getSemantics(find.byType(PrismButton));
-    expect(semantics.flagsCollection.isToggled, Tristate.isTrue);
-    expect(semantics.flagsCollection.isSelected, Tristate.isTrue);
+    expect(semantics.flagsCollection.isToggled, ui.Tristate.isTrue);
+    expect(semantics.flagsCollection.isSelected, ui.Tristate.isTrue);
 
     final housing = find.byKey(const ValueKey('prism-housing'));
     final cap = find.byKey(const ValueKey('prism-cap'));
@@ -161,6 +161,60 @@ void main() {
     expect(widths[1], lessThan(widths[2]));
   });
 
+  testWidgets('Smoke density controls real substrate transmission', (
+    tester,
+  ) async {
+    const teal = Color(0xFF17695D);
+    const oxide = Color(0xFF8A432F);
+    const cellSize = Size(100, 80);
+
+    Widget cell(Color substrate, double opticalDensity) => SizedBox.fromSize(
+      size: cellSize,
+      child: ColoredBox(
+        color: substrate,
+        child: Center(
+          child: PrismButton(
+            label: 'Test',
+            face: const SizedBox.shrink(),
+            palette: palette,
+            style: PrismStyle(faceOpacity: opticalDensity),
+            soundEnabled: false,
+            hapticsEnabled: false,
+            onPressed: () {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: RepaintBoundary(
+            key: const ValueKey('prism-transmission'),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[cell(teal, 0.60), cell(oxide, 0.60)],
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[cell(teal, 0.95), cell(oxide, 0.95)],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await expectLater(
+      find.byKey(const ValueKey('prism-transmission')),
+      matchesGoldenFile('goldens/prism_transmission.png'),
+    );
+  });
+
   testWidgets(
     'selection, light, keyboard focus, and disabled stay independent',
     (tester) async {
@@ -182,8 +236,8 @@ void main() {
       );
 
       final semantics = tester.getSemantics(find.byType(PrismButton));
-      expect(semantics.flagsCollection.isToggled, Tristate.isTrue);
-      expect(semantics.flagsCollection.isSelected, Tristate.isFalse);
+      expect(semantics.flagsCollection.isToggled, ui.Tristate.isTrue);
+      expect(semantics.flagsCollection.isSelected, ui.Tristate.isFalse);
 
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
@@ -207,7 +261,7 @@ void main() {
         ),
       );
       final disabled = tester.getSemantics(find.byType(PrismButton));
-      expect(disabled.flagsCollection.isEnabled, Tristate.isFalse);
+      expect(disabled.flagsCollection.isEnabled, ui.Tristate.isFalse);
       await tester.tap(find.byType(PrismButton));
       expect(activations, 1);
     },
@@ -562,7 +616,7 @@ void main() {
     expect(find.text('1.23'), findsOneWidget);
     expect(
       tester.getSemantics(lever).flagsCollection.isEnabled,
-      Tristate.isFalse,
+      ui.Tristate.isFalse,
     );
   });
 
@@ -608,7 +662,7 @@ void main() {
           .getSemantics(find.byKey(const ValueKey('effect-lever-bloom')))
           .flagsCollection
           .isEnabled,
-      Tristate.isFalse,
+      ui.Tristate.isFalse,
     );
     expect(
       tester

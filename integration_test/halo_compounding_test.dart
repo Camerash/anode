@@ -451,6 +451,7 @@ void main() {
       String label = 'RESET',
       double filament = 0,
       bool backdrop = false,
+      double opticalDensity = 0.78,
     }) => Dashboard(
       id: 'prism',
       name: 'Prism',
@@ -459,11 +460,11 @@ void main() {
           ComponentInstance(
             id: 'backdrop',
             typeId: ComponentTypes.speedBar,
-            params: const <String, Object?>{'cells': 1, 'maxKph': 100.0},
+            params: const <String, Object?>{'cells': 24, 'maxKph': 100.0},
             placements: const <DesignOrientation, Placement>{
               DesignOrientation.landscape: Placement(
-                center: Offset(0, 0.11),
-                size: Size(2.4, 0.08),
+                center: Offset.zero,
+                size: Size(2.4, 0.24),
               ),
             },
           ),
@@ -480,6 +481,7 @@ void main() {
         ),
       ],
       settings: DashboardSettings(
+        prismStyle: PrismStyle(faceOpacity: opticalDensity),
         opticalProfile: OpticalProfile(
           effects: <String, EffectSetting>{
             EffectIds.glassGrain: const EffectSetting(
@@ -515,6 +517,22 @@ void main() {
       tester,
       prism(lit: false, label: '', filament: 1, backdrop: true),
     );
+    final translucentPlain = await capture(
+      tester,
+      prism(lit: false, label: '', opticalDensity: 0.60),
+    );
+    final translucentBackdrop = await capture(
+      tester,
+      prism(lit: false, label: '', backdrop: true, opticalDensity: 0.60),
+    );
+    final densePlain = await capture(
+      tester,
+      prism(lit: false, label: '', opticalDensity: 0.95),
+    );
+    final denseBackdrop = await capture(
+      tester,
+      prism(lit: false, label: '', backdrop: true, opticalDensity: 0.95),
+    );
 
     const legendRegion = ui.Rect.fromLTWH(315, 130, 150, 40);
     const quietFaceRegion = ui.Rect.fromLTWH(350, 119, 80, 10);
@@ -538,6 +556,8 @@ void main() {
 
     const insideWireRegion = ui.Rect.fromLTWH(370, 110, 40, 80);
     const outsideWireRegion = ui.Rect.fromLTWH(220, 110, 40, 80);
+    const gasketProbe = ui.Rect.fromLTWH(292, 130, 4, 20);
+    const faceProbe = ui.Rect.fromLTWH(370, 130, 4, 20);
     final insideDifference = regionDifference(
       filamentOff,
       filamentOn,
@@ -549,7 +569,29 @@ void main() {
       outsideWireRegion,
     );
     expect(outsideDifference, greaterThan(200));
-    expect(insideDifference, lessThan(outsideDifference ~/ 10));
+    expect(insideDifference, greaterThan(20));
+    expect(insideDifference, lessThan(outsideDifference));
+
+    final translucentFaceTransmission = regionDifference(
+      translucentPlain,
+      translucentBackdrop,
+      faceProbe,
+    );
+    final denseFaceTransmission = regionDifference(
+      densePlain,
+      denseBackdrop,
+      faceProbe,
+    );
+    final translucentGasketTransmission = regionDifference(
+      translucentPlain,
+      translucentBackdrop,
+      gasketProbe,
+    );
+    expect(translucentFaceTransmission, greaterThan(denseFaceTransmission));
+    expect(
+      translucentGasketTransmission,
+      lessThan(translucentFaceTransmission),
+    );
   });
 }
 

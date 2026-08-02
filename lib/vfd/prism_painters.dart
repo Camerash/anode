@@ -56,47 +56,68 @@ class _PrismHousingPainter extends CustomPainter {
       Rect.fromLTRB(2, 2, size.width - 2, size.height - 2),
       const Radius.circular(1.4),
     );
-    _drawOuterFrame(canvas, outer);
-
     final pocket = RRect.fromRectAndRadius(
       Rect.fromLTRB(4.5, 4.5, size.width - 4.5, size.height - 4.5),
       const Radius.circular(0.8),
     );
-    _drawPocket(canvas, size, pocket);
+    _drawOuterFrame(canvas, size, outer, pocket);
+    _drawPocket(canvas, pocket);
     if (hovered && enabled) _drawHover(canvas, pocket);
     if (selected || focused) _drawLocators(canvas, size);
   }
 
-  void _drawOuterFrame(Canvas canvas, RRect outer) {
-    canvas.drawRRect(
+  void _drawOuterFrame(Canvas canvas, Size size, RRect outer, RRect pocket) {
+    canvas.drawDRRect(
       outer,
+      pocket,
       Paint()
         ..shader = const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: <Color>[
-            Color(0xFF070908),
-            Color(0xFF171B19),
-            Color(0xFF050606),
+            Color(0x7A89938E),
+            Color(0x52313A36),
+            Color(0x8A101412),
           ],
           stops: <double>[0, 0.36, 1],
         ).createShader(outer.outerRect),
     );
-  }
-
-  void _drawPocket(Canvas canvas, Size size, RRect pocket) {
-    canvas.drawRRect(
-      pocket,
-      Paint()
-        ..color = const Color(0xFF010202)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.inner, 1.8),
+    final highlight = Paint()
+      ..strokeWidth = 0.65
+      ..color = const Color(0x78DDE4E0);
+    canvas.drawLine(
+      Offset(outer.left + 2, outer.top),
+      Offset(outer.right - 2, outer.top),
+      highlight,
     );
     canvas.drawLine(
-      Offset(4.5, size.height - 4),
-      Offset(size.width - 4.5, size.height - 4),
+      Offset(outer.left, outer.top + 2),
+      Offset(outer.left, size.height * 0.58),
+      highlight..color = const Color(0x42DDE4E0),
+    );
+  }
+
+  void _drawPocket(Canvas canvas, RRect pocket) {
+    final gasketOpening = RRect.fromRectAndRadius(
+      pocket.outerRect.deflate(1.6),
+      const Radius.circular(0.5),
+    );
+    canvas.drawDRRect(
+      pocket,
+      gasketOpening,
       Paint()
-        ..strokeWidth = 0.7
-        ..color = const Color(0xFF66706B).withValues(alpha: 0.18),
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[Color(0xA8090B0A), Color(0xD4010202)],
+        ).createShader(pocket.outerRect),
+    );
+    canvas.drawLine(
+      Offset(pocket.left + 1, pocket.bottom),
+      Offset(pocket.right - 1, pocket.bottom),
+      Paint()
+        ..strokeWidth = 0.8
+        ..color = const Color(0x9C000000),
     );
   }
 
@@ -206,6 +227,8 @@ class _PrismCapPainter extends CustomPainter {
   }
 
   void _drawBody(Canvas canvas, Size size, _PrismCapGeometry geometry) {
+    final opticalDensity = style.faceOpacity.clamp(0.60, 0.95);
+    final bevelDensity = (opticalDensity + 0.10).clamp(0.0, 1.0);
     canvas.drawPath(
       geometry.body,
       Paint()
@@ -213,10 +236,18 @@ class _PrismCapPainter extends CustomPainter {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: <Color>[
-            const Color(0xFF69736E).withValues(alpha: 0.62 * geometry.opacity),
-            const Color(0xFF171C1A).withValues(alpha: 0.98 * geometry.opacity),
-            const Color(0xFF070908).withValues(alpha: geometry.opacity),
-            const Color(0xFF4A524E).withValues(alpha: 0.42 * geometry.opacity),
+            const Color(
+              0xFF69736E,
+            ).withValues(alpha: bevelDensity * 0.78 * geometry.opacity),
+            const Color(
+              0xFF171C1A,
+            ).withValues(alpha: bevelDensity * 0.92 * geometry.opacity),
+            const Color(
+              0xFF070908,
+            ).withValues(alpha: bevelDensity * geometry.opacity),
+            const Color(
+              0xFF4A524E,
+            ).withValues(alpha: bevelDensity * 0.66 * geometry.opacity),
           ],
           stops: const <double>[0, 0.24, 0.72, 1],
         ).createShader(Offset.zero & size),
@@ -224,7 +255,7 @@ class _PrismCapPainter extends CustomPainter {
   }
 
   void _drawFace(Canvas canvas, _PrismCapGeometry geometry) {
-    final smoke = style.faceOpacity.clamp(0.60, 0.95);
+    final opticalDensity = style.faceOpacity.clamp(0.60, 0.95);
     canvas.drawRRect(
       geometry.face,
       Paint()
@@ -232,13 +263,15 @@ class _PrismCapPainter extends CustomPainter {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: <Color>[
-            Color.lerp(
-              const Color(0xFF252B28),
-              const Color(0xFF080A09),
-              smoke,
-            )!.withValues(alpha: geometry.opacity),
-            const Color(0xFF050706).withValues(alpha: geometry.opacity),
-            const Color(0xFF101512).withValues(alpha: geometry.opacity),
+            const Color(
+              0xFF252B28,
+            ).withValues(alpha: opticalDensity * 0.78 * geometry.opacity),
+            const Color(
+              0xFF050706,
+            ).withValues(alpha: opticalDensity * geometry.opacity),
+            const Color(
+              0xFF101512,
+            ).withValues(alpha: opticalDensity * 0.90 * geometry.opacity),
           ],
           stops: const <double>[0, 0.44, 1],
         ).createShader(geometry.face.outerRect),
@@ -280,7 +313,7 @@ class _PrismCapPainter extends CustomPainter {
       Offset(face.right - 1, face.top),
       _edgePaint(
         pressed ? 0.7 : 1.15,
-        0.48,
+        pressed ? 0.28 : 0.48,
         opacity,
         color: const Color(0xFFE0E4E1),
       ),
@@ -294,6 +327,27 @@ class _PrismCapPainter extends CustomPainter {
       Offset(face.left + size.width * 0.09, face.top + 1.4),
       Offset(face.right - size.width * 0.24, face.top + 1.4),
       _edgePaint(0.55, 0.20, opacity),
+    );
+    final contactAlpha = pressed ? 0.56 : 0.30;
+    canvas.drawLine(
+      Offset(face.left + 1, face.bottom),
+      Offset(face.right - 1, face.bottom),
+      _edgePaint(
+        pressed ? 1.2 : 0.8,
+        contactAlpha,
+        opacity,
+        color: const Color(0xFF000000),
+      ),
+    );
+    canvas.drawLine(
+      Offset(face.right, face.top + 1),
+      Offset(face.right, face.bottom - 1),
+      _edgePaint(
+        0.7,
+        contactAlpha * 0.72,
+        opacity,
+        color: const Color(0xFF000000),
+      ),
     );
   }
 
