@@ -208,18 +208,22 @@ class _PrismCapPainter extends CustomPainter {
     required this.style,
     required this.lit,
     required this.enabled,
-    required this.pressed,
+    required this.pressProgress,
   });
 
   final VfdPalette palette;
   final PrismStyle style;
   final bool lit;
   final bool enabled;
-  final bool pressed;
+  final double pressProgress;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final geometry = _PrismCapGeometry.from(size, style, enabled: enabled);
+    final geometry = _PrismCapGeometry.from(
+      size,
+      style,
+      pressProgress: pressProgress,
+    );
     _drawBody(canvas, size, geometry);
     _drawFace(canvas, geometry);
     if (lit) _drawBacklight(canvas, geometry);
@@ -236,18 +240,10 @@ class _PrismCapPainter extends CustomPainter {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: <Color>[
-            const Color(
-              0xFF69736E,
-            ).withValues(alpha: bevelDensity * 0.78 * geometry.opacity),
-            const Color(
-              0xFF171C1A,
-            ).withValues(alpha: bevelDensity * 0.92 * geometry.opacity),
-            const Color(
-              0xFF070908,
-            ).withValues(alpha: bevelDensity * geometry.opacity),
-            const Color(
-              0xFF4A524E,
-            ).withValues(alpha: bevelDensity * 0.66 * geometry.opacity),
+            const Color(0xFF69736E).withValues(alpha: bevelDensity * 0.78),
+            const Color(0xFF171C1A).withValues(alpha: bevelDensity * 0.92),
+            const Color(0xFF070908).withValues(alpha: bevelDensity),
+            const Color(0xFF4A524E).withValues(alpha: bevelDensity * 0.66),
           ],
           stops: const <double>[0, 0.24, 0.72, 1],
         ).createShader(Offset.zero & size),
@@ -255,7 +251,11 @@ class _PrismCapPainter extends CustomPainter {
   }
 
   void _drawFace(Canvas canvas, _PrismCapGeometry geometry) {
-    final opticalDensity = style.faceOpacity.clamp(0.60, 0.95);
+    final faceCoverage =
+        (_prismFaceCoverage(style.faceOpacity) + pressProgress * 0.02).clamp(
+          0.0,
+          1.0,
+        );
     canvas.drawRRect(
       geometry.face,
       Paint()
@@ -263,15 +263,9 @@ class _PrismCapPainter extends CustomPainter {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: <Color>[
-            const Color(
-              0xFF252B28,
-            ).withValues(alpha: opticalDensity * 0.78 * geometry.opacity),
-            const Color(
-              0xFF050706,
-            ).withValues(alpha: opticalDensity * geometry.opacity),
-            const Color(
-              0xFF101512,
-            ).withValues(alpha: opticalDensity * 0.90 * geometry.opacity),
+            const Color(0xFF252B28).withValues(alpha: faceCoverage * 0.78),
+            const Color(0xFF050706).withValues(alpha: faceCoverage),
+            const Color(0xFF101512).withValues(alpha: faceCoverage * 0.90),
           ],
           stops: const <double>[0, 0.44, 1],
         ).createShader(geometry.face.outerRect),
@@ -279,6 +273,7 @@ class _PrismCapPainter extends CustomPainter {
   }
 
   void _drawBacklight(Canvas canvas, _PrismCapGeometry geometry) {
+    final electricalLuminosity = enabled ? 1.0 : 0.48;
     canvas.drawRRect(
       geometry.face,
       Paint()
@@ -286,10 +281,10 @@ class _PrismCapPainter extends CustomPainter {
           radius: 0.78,
           colors: <Color>[
             palette.lit.withValues(
-              alpha: 0.13 * style.activeLuminosity * geometry.opacity,
+              alpha: 0.13 * style.activeLuminosity * electricalLuminosity,
             ),
             palette.lit.withValues(
-              alpha: 0.035 * style.activeLuminosity * geometry.opacity,
+              alpha: 0.035 * style.activeLuminosity * electricalLuminosity,
             ),
             const Color(0x00000000),
           ],
@@ -300,52 +295,56 @@ class _PrismCapPainter extends CustomPainter {
 
   void _drawEdges(Canvas canvas, Size size, _PrismCapGeometry geometry) {
     final face = geometry.face;
-    final opacity = geometry.opacity;
+    final progress = pressProgress.clamp(0.0, 1.0);
     canvas.drawRRect(
       face,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 0.65
-        ..color = const Color(0xFF9EA7A2).withValues(alpha: 0.42 * opacity),
+        ..color = const Color(
+          0xFF9EA7A2,
+        ).withValues(alpha: 0.42 - progress * 0.24),
+    );
+    canvas.drawRRect(
+      face,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.45 + progress * 0.40
+        ..color = const Color(
+          0xFF000000,
+        ).withValues(alpha: 0.10 + progress * 0.34),
     );
     canvas.drawLine(
       Offset(face.left + 1, face.top),
       Offset(face.right - 1, face.top),
       _edgePaint(
-        pressed ? 0.7 : 1.15,
-        pressed ? 0.28 : 0.48,
-        opacity,
+        1.15 - progress * 0.45,
+        0.48 - progress * 0.28,
         color: const Color(0xFFE0E4E1),
       ),
     );
     canvas.drawLine(
       Offset(face.left, face.top + 1),
       Offset(face.left, face.bottom - 1),
-      _edgePaint(0.65, 0.24, opacity, color: const Color(0xFFBFC6C2)),
+      _edgePaint(0.65, 0.24 - progress * 0.12, color: const Color(0xFFBFC6C2)),
     );
     canvas.drawLine(
       Offset(face.left + size.width * 0.09, face.top + 1.4),
       Offset(face.right - size.width * 0.24, face.top + 1.4),
-      _edgePaint(0.55, 0.20, opacity),
+      _edgePaint(0.55, 0.20 - progress * 0.10),
     );
-    final contactAlpha = pressed ? 0.56 : 0.30;
+    final directionalContactAlpha = 0.30 - progress * 0.12;
     canvas.drawLine(
       Offset(face.left + 1, face.bottom),
       Offset(face.right - 1, face.bottom),
-      _edgePaint(
-        pressed ? 1.2 : 0.8,
-        contactAlpha,
-        opacity,
-        color: const Color(0xFF000000),
-      ),
+      _edgePaint(0.8, directionalContactAlpha, color: const Color(0xFF000000)),
     );
     canvas.drawLine(
       Offset(face.right, face.top + 1),
       Offset(face.right, face.bottom - 1),
       _edgePaint(
         0.7,
-        contactAlpha * 0.72,
-        opacity,
+        directionalContactAlpha * 0.72,
         color: const Color(0xFF000000),
       ),
     );
@@ -353,12 +352,11 @@ class _PrismCapPainter extends CustomPainter {
 
   Paint _edgePaint(
     double width,
-    double alpha,
-    double opacity, {
+    double alpha, {
     Color color = const Color(0xFFFFFFFF),
   }) => Paint()
     ..strokeWidth = width
-    ..color = color.withValues(alpha: alpha * opacity);
+    ..color = color.withValues(alpha: alpha);
 
   @override
   bool shouldRepaint(covariant _PrismCapPainter oldDelegate) =>
@@ -366,21 +364,25 @@ class _PrismCapPainter extends CustomPainter {
       oldDelegate.style != style ||
       oldDelegate.lit != lit ||
       oldDelegate.enabled != enabled ||
-      oldDelegate.pressed != pressed;
+      oldDelegate.pressProgress != pressProgress;
+}
+
+double _prismFaceCoverage(double opticalDensity) {
+  // Smoke density describes absorption, not raw layer alpha. Keeping even the
+  // lightest cap above 0.8 preserves its physical shell over busy substrates.
+  final normalized = (opticalDensity.clamp(0.60, 0.95) - 0.60) / (0.95 - 0.60);
+  return 0.82 + normalized * (0.97 - 0.82);
 }
 
 class _PrismCapGeometry {
-  const _PrismCapGeometry({
-    required this.body,
-    required this.face,
-    required this.opacity,
-  });
+  const _PrismCapGeometry({required this.body, required this.face});
 
   factory _PrismCapGeometry.from(
     Size size,
     PrismStyle style, {
-    required bool enabled,
+    required double pressProgress,
   }) {
+    final progress = pressProgress.clamp(0.0, 1.0);
     final depthScale = (style.bevelDepth / 0.12).clamp(0.55, 1.45);
     final side = (size.height * 0.115 * depthScale).clamp(3.2, 8.0);
     final left = size.height * 0.105;
@@ -398,23 +400,18 @@ class _PrismCapGeometry {
     );
     final face = RRect.fromRectAndRadius(
       Rect.fromLTRB(
-        left + side * 0.50,
-        top + side * 0.55,
-        right - side * 0.50,
-        bottom - side * 0.72,
+        left + side * (0.50 - progress * 0.15),
+        top + side * (0.55 - progress * 0.17),
+        right - side * (0.50 - progress * 0.15),
+        bottom - side * (0.72 - progress * 0.22),
       ),
       Radius.circular(size.height * 0.018),
     );
-    return _PrismCapGeometry(
-      body: body,
-      face: face,
-      opacity: enabled ? 1 : 0.52,
-    );
+    return _PrismCapGeometry(body: body, face: face);
   }
 
   final Path body;
   final RRect face;
-  final double opacity;
 
   static Path _bodyPath({
     required double left,

@@ -89,7 +89,7 @@ void main() {
     expect(activations, 2);
   });
 
-  testWidgets('Prism button exposes toggle semantics and depth press', (
+  testWidgets('Prism button exposes toggle semantics and centered press', (
     tester,
   ) async {
     var activations = 0;
@@ -117,14 +117,27 @@ void main() {
     final housing = find.byKey(const ValueKey('prism-housing'));
     final cap = find.byKey(const ValueKey('prism-cap'));
     final housingBefore = tester.getTopLeft(housing);
+    final capCenterBefore = tester.getCenter(cap);
     final gesture = await tester.startGesture(
       tester.getCenter(find.byType(PrismButton)),
     );
-    await tester.pump(const Duration(milliseconds: 60));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 45));
     expect(tester.getTopLeft(housing), housingBefore);
-    expect(tester.widget<AnimatedSlide>(cap).offset.dy, 0.07);
+    expect(tester.getCenter(cap), capCenterBefore);
+    final transform = tester.widget<Transform>(
+      find.byKey(const ValueKey('prism-cap-transform')),
+    );
+    expect(transform.transform.storage[0], closeTo(0.965, 0.0001));
+    expect(transform.transform.storage[5], closeTo(0.965, 0.0001));
+    expect(find.byType(AnimatedSlide), findsNothing);
     await gesture.up();
     await tester.pumpAndSettle();
+    final releasedTransform = tester.widget<Transform>(
+      find.byKey(const ValueKey('prism-cap-transform')),
+    );
+    expect(releasedTransform.transform.storage[0], closeTo(1, 0.0001));
+    expect(releasedTransform.transform.storage[5], closeTo(1, 0.0001));
     expect(activations, 1);
   });
 
@@ -186,6 +199,25 @@ void main() {
       ),
     );
 
+    Widget stateCell(Color substrate, {required bool enabled}) =>
+        SizedBox.fromSize(
+          size: cellSize,
+          child: ColoredBox(
+            color: substrate,
+            child: Center(
+              child: PrismButton(
+                label: enabled ? 'Enabled' : 'Disabled',
+                symbol: PrismSymbol.redo,
+                palette: palette,
+                enabled: enabled,
+                soundEnabled: false,
+                hapticsEnabled: false,
+                onPressed: enabled ? () {} : null,
+              ),
+            ),
+          ),
+        );
+
     await tester.pumpWidget(
       MaterialApp(
         home: Center(
@@ -201,6 +233,13 @@ void main() {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[cell(teal, 0.95), cell(oxide, 0.95)],
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    stateCell(teal, enabled: true),
+                    stateCell(teal, enabled: false),
+                  ],
                 ),
               ],
             ),
@@ -267,7 +306,7 @@ void main() {
     },
   );
 
-  testWidgets('reduced motion makes cap travel immediate', (tester) async {
+  testWidgets('reduced motion makes cap recession immediate', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: MediaQuery(
@@ -291,7 +330,9 @@ void main() {
     await tester.pump();
     expect(
       tester
-          .widget<AnimatedSlide>(find.byKey(const ValueKey('prism-cap')))
+          .widget<TweenAnimationBuilder<double>>(
+            find.byKey(const ValueKey('prism-cap')),
+          )
           .duration,
       Duration.zero,
     );

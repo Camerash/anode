@@ -148,28 +148,33 @@ class _PrismButtonState extends State<PrismButton> {
                       ),
                     ),
                   ),
-                  AnimatedSlide(
+                  TweenAnimationBuilder<double>(
                     key: const ValueKey('prism-cap'),
-                    offset: Offset(0, _pressed ? 0.07 : 0),
+                    tween: Tween<double>(begin: 0, end: _pressed ? 1 : 0),
                     duration: pressDuration,
                     curve: Curves.linear,
-                    child: RepaintBoundary(
-                      child: CustomPaint(
-                        painter: _PrismCapPainter(
-                          palette: widget.palette,
-                          style: widget.style,
-                          lit: widget.lit,
-                          enabled: enabled,
-                          pressed: _pressed,
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.fromLTRB(
-                            widget.role == PrismRole.compact ? 8 : 10,
-                            9,
-                            widget.role == PrismRole.compact ? 8 : 10,
-                            12,
+                    builder: (context, pressProgress, _) => Transform.scale(
+                      key: const ValueKey('prism-cap-transform'),
+                      scale: 1 - pressProgress * 0.035,
+                      alignment: Alignment.center,
+                      child: RepaintBoundary(
+                        child: CustomPaint(
+                          painter: _PrismCapPainter(
+                            palette: widget.palette,
+                            style: widget.style,
+                            lit: widget.lit,
+                            enabled: enabled,
+                            pressProgress: pressProgress,
                           ),
-                          child: _face(enabled),
+                          child: Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              widget.role == PrismRole.compact ? 8 : 10,
+                              9,
+                              widget.role == PrismRole.compact ? 8 : 10,
+                              12,
+                            ),
+                            child: _face(enabled),
+                          ),
                         ),
                       ),
                     ),

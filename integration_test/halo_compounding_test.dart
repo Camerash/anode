@@ -443,7 +443,7 @@ void main() {
     expect(right[1], greaterThan(left[1]));
   });
 
-  testWidgets('shader Prism has physical body, atlas legend, and cap travel', (
+  testWidgets('shader Prism has dense face, atlas legend, and centered press', (
     tester,
   ) async {
     Dashboard prism({
@@ -509,6 +509,12 @@ void main() {
       pressedComponentId: 'button',
     );
     final blank = await capture(tester, prism(lit: true, label: ''));
+    final unlitBlank = await capture(tester, prism(lit: false, label: ''));
+    final pressedUnlitBlank = await capture(
+      tester,
+      prism(lit: false, label: ''),
+      pressedComponentId: 'button',
+    );
     final filamentOff = await capture(
       tester,
       prism(lit: false, label: '', filament: 0, backdrop: true),
@@ -538,6 +544,8 @@ void main() {
     const quietFaceRegion = ui.Rect.fromLTWH(350, 119, 80, 10);
     const leftSocketRegion = ui.Rect.fromLTWH(285, 114, 10, 72);
     const capRegion = ui.Rect.fromLTWH(300, 119, 180, 62);
+    const leftCapEdge = ui.Rect.fromLTWH(296, 120, 14, 60);
+    const rightCapEdge = ui.Rect.fromLTWH(470, 120, 14, 60);
 
     expect(
       regionLuminance(lit, legendRegion),
@@ -553,6 +561,22 @@ void main() {
     final capDifference = regionDifference(lit, pressed, capRegion);
     expect(capDifference, greaterThan(1000));
     expect(socketDifference, lessThan(capDifference ~/ 8));
+    final leftEdgeRecession = regionDifference(
+      unlitBlank,
+      pressedUnlitBlank,
+      leftCapEdge,
+    );
+    final rightEdgeRecession = regionDifference(
+      unlitBlank,
+      pressedUnlitBlank,
+      rightCapEdge,
+    );
+    expect(leftEdgeRecession, greaterThan(500));
+    expect(rightEdgeRecession, greaterThan(500));
+    expect(
+      leftEdgeRecession / rightEdgeRecession,
+      inInclusiveRange(0.35, 2.85),
+    );
 
     const insideWireRegion = ui.Rect.fromLTWH(370, 110, 40, 80);
     const outsideWireRegion = ui.Rect.fromLTWH(220, 110, 40, 80);

@@ -289,9 +289,13 @@ void addPrismComponent(
   vec2 halfSize = sz * 0.5;
   float depthScale = clamp(style.x / 0.12, 0.55, 1.45);
   float opticalDensity = clamp(style.y, 0.60, 0.95);
+  // Density controls absorption rather than raw alpha so the acrylic shell
+  // remains present over high-contrast authored content.
+  float densityProgress = (opticalDensity - 0.60) / (0.95 - 0.60);
+  float faceCoverage = mix(0.82, 0.97, densityProgress);
+  faceCoverage = min(faceCoverage + pressed * 0.02, 1.0);
   float bevelDensity = min(opticalDensity + 0.10, 1.0);
   float inactiveScale = clamp(style.z / 0.18, 0.0, 2.8);
-  vec2 pressOffset = vec2(0.0, -sz.y * 0.07 * pressed);
 
   vec2 socketP = q - c;
   float socketD = sdBox(socketP, halfSize);
@@ -303,14 +307,16 @@ void addPrismComponent(
   float skirtFill = max(socketFill - gasketOuterFill, 0.0);
   float gasketFill = max(gasketOuterFill - gasketInnerFill, 0.0);
 
-  vec2 capP = q - c - pressOffset;
-  vec2 capHalf = halfSize * vec2(0.88, 0.78);
+  vec2 capP = q - c;
+  vec2 capHalf = halfSize * vec2(0.88, 0.78) * mix(1.0, 0.965, pressed);
   float capD = sdBox(capP, capHalf);
   float capFill = smoothstep(EDGE_OUT, EDGE_IN, capD);
-  vec2 faceHalf = capHalf * vec2(
+  vec2 faceRatio = vec2(
     0.88 - 0.035 * depthScale,
     0.68 - 0.055 * depthScale
   );
+  faceRatio = 1.0 - (1.0 - faceRatio) * mix(1.0, 0.70, pressed);
+  vec2 faceHalf = capHalf * faceRatio;
   float faceD = sdBox(capP - vec2(0.0, sz.y * 0.015), faceHalf);
   float faceFill = smoothstep(EDGE_OUT, EDGE_IN, faceD);
   float bevelFill = max(capFill - faceFill, 0.0);
@@ -341,13 +347,23 @@ void addPrismComponent(
   float rightEdge =
       (1.0 - smoothstep(0.0, 0.0022, abs(capP.x - faceHalf.x)))
       * step(abs(capP.y), faceHalf.y);
-  surface += vec3(0.34, 0.37, 0.35)
-           * topEdge * mix(0.45, 0.26, pressed);
-  surface += vec3(0.20, 0.23, 0.21) * leftEdge * 0.22;
+  float perimeterEdge = max(
+    max(topEdge, leftEdge),
+    max(bottomEdge, rightEdge)
+  );
   surface = mix(
     surface,
     vec3(0.002, 0.003, 0.003),
-    max(bottomEdge, rightEdge * 0.72) * mix(0.30, 0.56, pressed)
+    perimeterEdge * mix(0.10, 0.44, pressed)
+  );
+  surface += vec3(0.34, 0.37, 0.35)
+           * topEdge * mix(0.45, 0.20, pressed);
+  surface += vec3(0.20, 0.23, 0.21)
+           * leftEdge * mix(0.22, 0.11, pressed);
+  surface = mix(
+    surface,
+    vec3(0.002, 0.003, 0.003),
+    max(bottomEdge, rightEdge * 0.72) * mix(0.30, 0.18, pressed)
   );
 
   float count = clamp(floor(glyphCount + 0.5), 0.0, 24.0);
@@ -377,7 +393,7 @@ void addPrismComponent(
 
   float surfaceCoverage = max(
     max(skirtFill * 0.48, gasketFill * 0.84),
-    max(bevelFill * bevelDensity, faceFill * opticalDensity)
+    max(bevelFill * bevelDensity, faceFill * faceCoverage)
   );
   prismSurface += surface;
   prismSurfaceCoverage = max(prismSurfaceCoverage, surfaceCoverage);
