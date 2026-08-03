@@ -33,6 +33,7 @@ class EditorCanvas extends StatefulWidget {
     this.editable = true,
     this.frameInset = EdgeInsets.zero,
     this.chromeSafeInsets = EdgeInsets.zero,
+    this.commandBankBottomInset = 0,
     this.onAddRequested,
     this.onAddDropped,
     this.previewController,
@@ -42,6 +43,7 @@ class EditorCanvas extends StatefulWidget {
     this.onRedo,
     this.snapEnabled = true,
     this.onToggleSnap,
+    this.onPreviewOrientationChanged,
     this.soundEnabled = true,
     this.hapticsEnabled = true,
   });
@@ -68,6 +70,7 @@ class EditorCanvas extends StatefulWidget {
   /// Insets editor chrome only. Authored content and interaction geometry
   /// remain resolved against the complete device viewport.
   final EdgeInsets chromeSafeInsets;
+  final double commandBankBottomInset;
   final VoidCallback? onAddRequested;
   final void Function(EditorAddRequest request, Offset center)? onAddDropped;
   final EditorCanvasPreviewController? previewController;
@@ -77,6 +80,7 @@ class EditorCanvas extends StatefulWidget {
   final VoidCallback? onRedo;
   final bool snapEnabled;
   final VoidCallback? onToggleSnap;
+  final ValueChanged<DesignOrientation>? onPreviewOrientationChanged;
   final bool soundEnabled;
   final bool hapticsEnabled;
 
@@ -321,8 +325,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
                       ),
                     ),
                   ),
-                _historyControls(palette),
-                _controls(palette),
+                _commandBank(palette),
               ],
             ),
           );
@@ -417,88 +420,164 @@ class _EditorCanvasState extends State<EditorCanvas> {
     ],
   );
 
-  Widget _controls(VfdPalette palette) => Positioned(
+  Widget _commandBank(VfdPalette palette) => Positioned(
+    key: const ValueKey('editor-command-bank-position'),
+    left: widget.chromeSafeInsets.left + 8,
     right: widget.chromeSafeInsets.right + 8,
-    bottom: widget.chromeSafeInsets.bottom + 8,
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        if (widget.onAddRequested != null) ...<Widget>[
-          PrismButton(
-            key: const ValueKey('canvas-add'),
-            label: 'Add',
-            palette: palette,
-            role: PrismRole.compact,
-            style: widget.dashboard.settings.prismStyle,
-            soundEnabled: widget.soundEnabled,
-            hapticsEnabled: widget.hapticsEnabled,
-            onPressed: widget.editable ? widget.onAddRequested : null,
+    bottom: widget.chromeSafeInsets.bottom + widget.commandBankBottomInset + 8,
+    child: Align(
+      alignment: Alignment.bottomCenter,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: PrismPanel(
+          key: const ValueKey('editor-command-bank'),
+          palette: palette,
+          surfaceOpacity: 0.88,
+          padding: const EdgeInsets.all(4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              _commandBay(
+                label: 'History',
+                palette: palette,
+                controls: <Widget>[
+                  _commandButton(
+                    key: const ValueKey('canvas-undo'),
+                    label: 'Undo',
+                    symbol: PrismSymbol.undo,
+                    lit: widget.canUndo,
+                    enabled: widget.canUndo,
+                    onPressed: widget.canUndo ? widget.onUndo : null,
+                    palette: palette,
+                  ),
+                  _commandButton(
+                    key: const ValueKey('canvas-redo'),
+                    label: 'Redo',
+                    symbol: PrismSymbol.redo,
+                    lit: widget.canRedo,
+                    enabled: widget.canRedo,
+                    onPressed: widget.canRedo ? widget.onRedo : null,
+                    palette: palette,
+                  ),
+                ],
+              ),
+              _bayDivider(palette),
+              _commandBay(
+                label: 'Build',
+                palette: palette,
+                controls: <Widget>[
+                  if (widget.onAddRequested != null)
+                    _commandButton(
+                      key: const ValueKey('canvas-add'),
+                      label: 'Add',
+                      onPressed: widget.editable ? widget.onAddRequested : null,
+                      palette: palette,
+                    ),
+                  _commandButton(
+                    key: const ValueKey('canvas-snap'),
+                    label: 'Snap',
+                    lit: widget.snapEnabled,
+                    selected: widget.snapEnabled,
+                    onPressed: widget.onToggleSnap,
+                    palette: palette,
+                  ),
+                ],
+              ),
+              _bayDivider(palette),
+              _commandBay(
+                label: 'View',
+                palette: palette,
+                controls: <Widget>[
+                  _commandButton(
+                    key: const ValueKey('canvas-fit'),
+                    label: 'Fit view',
+                    symbol: PrismSymbol.fit,
+                    onPressed: _fit,
+                    palette: palette,
+                  ),
+                  for (final orientation in DesignOrientation.values)
+                    _commandButton(
+                      key: ValueKey('orientation-${orientation.name}'),
+                      label: orientation.name,
+                      lit:
+                          orientation ==
+                          (widget.previewOrientation ?? widget.orientation),
+                      selected:
+                          orientation ==
+                          (widget.previewOrientation ?? widget.orientation),
+                      onPressed: widget.onPreviewOrientationChanged == null
+                          ? null
+                          : () => widget.onPreviewOrientationChanged!(
+                              orientation,
+                            ),
+                      palette: palette,
+                    ),
+                ],
+              ),
+            ],
           ),
-          const SizedBox(width: 5),
-        ],
-        PrismButton(
-          key: const ValueKey('canvas-snap'),
-          label: 'Snap',
-          palette: palette,
-          lit: widget.snapEnabled,
-          selected: widget.snapEnabled,
-          role: PrismRole.compact,
-          style: widget.dashboard.settings.prismStyle,
-          soundEnabled: widget.soundEnabled,
-          hapticsEnabled: widget.hapticsEnabled,
-          onPressed: widget.onToggleSnap,
         ),
-        const SizedBox(width: 5),
-        PrismButton(
-          key: const ValueKey('canvas-fit'),
-          label: 'Fit view',
-          symbol: PrismSymbol.fit,
-          palette: palette,
-          role: PrismRole.compact,
-          style: widget.dashboard.settings.prismStyle,
-          soundEnabled: widget.soundEnabled,
-          hapticsEnabled: widget.hapticsEnabled,
-          onPressed: _fit,
-        ),
-      ],
+      ),
     ),
   );
 
-  Widget _historyControls(VfdPalette palette) => Positioned(
-    top: widget.chromeSafeInsets.top + 8,
-    left: widget.chromeSafeInsets.left + 8,
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        PrismButton(
-          key: const ValueKey('canvas-undo'),
-          label: 'Undo',
-          symbol: PrismSymbol.undo,
-          palette: palette,
-          role: PrismRole.compact,
-          style: widget.dashboard.settings.prismStyle,
-          soundEnabled: widget.soundEnabled,
-          hapticsEnabled: widget.hapticsEnabled,
-          lit: widget.canUndo,
-          enabled: widget.canUndo,
-          onPressed: widget.canUndo ? widget.onUndo : null,
-        ),
-        const SizedBox(width: 5),
-        PrismButton(
-          key: const ValueKey('canvas-redo'),
-          label: 'Redo',
-          symbol: PrismSymbol.redo,
-          palette: palette,
-          role: PrismRole.compact,
-          style: widget.dashboard.settings.prismStyle,
-          soundEnabled: widget.soundEnabled,
-          hapticsEnabled: widget.hapticsEnabled,
-          lit: widget.canRedo,
-          enabled: widget.canRedo,
-          onPressed: widget.canRedo ? widget.onRedo : null,
-        ),
+  Widget _commandBay({
+    required String label,
+    required VfdPalette palette,
+    required List<Widget> controls,
+  }) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: <Widget>[
+      if (MediaQuery.sizeOf(context).width >= 600) ...<Widget>[
+        VfdLegend(label, palette: palette, size: 7),
+        const SizedBox(height: 1),
       ],
+      Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          for (var index = 0; index < controls.length; index++) ...<Widget>[
+            if (index > 0) const SizedBox(width: 3),
+            controls[index],
+          ],
+        ],
+      ),
+    ],
+  );
+
+  Widget _bayDivider(VfdPalette palette) => SizedBox(
+    width: 7,
+    height: 34,
+    child: Center(
+      child: SizedBox(
+        width: 1,
+        height: 30,
+        child: ColoredBox(color: palette.unlit.withValues(alpha: 0.34)),
+      ),
     ),
+  );
+
+  Widget _commandButton({
+    required Key key,
+    required String label,
+    required VfdPalette palette,
+    required VoidCallback? onPressed,
+    PrismSymbol? symbol,
+    bool lit = false,
+    bool selected = false,
+    bool enabled = true,
+  }) => PrismButton(
+    key: key,
+    label: label,
+    symbol: symbol,
+    palette: palette,
+    role: PrismRole.compact,
+    style: widget.dashboard.settings.prismStyle,
+    soundEnabled: widget.soundEnabled,
+    hapticsEnabled: widget.hapticsEnabled,
+    lit: lit,
+    selected: selected,
+    enabled: enabled,
+    onPressed: onPressed,
   );
 
   String _frameLabel() {

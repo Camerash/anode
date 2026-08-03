@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/widgets.dart';
 
 import '../model/optical_profile.dart';
@@ -131,7 +129,7 @@ class _MechanicalPushDrawerState extends State<MechanicalPushDrawer>
                 _verticalDrawer(reserved),
               ],
             ),
-          _latch(reserved),
+          _latch(reserved, progress),
         ],
       );
     },
@@ -200,27 +198,51 @@ class _MechanicalPushDrawerState extends State<MechanicalPushDrawer>
     ),
   };
 
-  Widget _latch(double reserved) {
+  Widget _latch(double reserved, double progress) {
     final right = widget.edge == MechanicalDrawerEdge.right;
+    final edgeGap = right
+        ? widget.chromeInsets.right * (1 - progress)
+        : widget.chromeInsets.bottom * (1 - progress);
     return Positioned(
       left: right ? null : widget.chromeInsets.left + 8,
-      right: right ? math.max(reserved, widget.chromeInsets.right) : null,
-      bottom: right ? null : math.max(reserved, widget.chromeInsets.bottom),
+      right: right ? reserved : null,
+      bottom: right ? null : reserved,
       top: right ? widget.chromeInsets.top + 22 : null,
-      width: 52,
-      height: 44,
-      child: PrismButton(
-        key: const ValueKey('mechanical-drawer-latch'),
-        label: 'Panel',
-        palette: widget.palette,
-        lit: widget.open,
-        selected: widget.open,
-        role: PrismRole.compact,
-        style: widget.prismStyle,
-        // Drawer state change emits the single latch feedback event.
-        soundEnabled: false,
-        hapticsEnabled: false,
-        onPressed: () => widget.onOpenChanged(!widget.open),
+      width: right ? 58 + edgeGap : 52,
+      height: right ? 44 : 50 + edgeGap,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          Positioned(
+            left: right ? 46 : 25,
+            right: right ? 0 : 25,
+            top: right ? 21 : 38,
+            bottom: right ? 21 : 0,
+            child: ColoredBox(
+              key: const ValueKey('mechanical-drawer-latch-mount'),
+              color: widget.palette.unlit.withValues(alpha: 0.38),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            top: 0,
+            width: 52,
+            height: 44,
+            child: PrismButton(
+              key: const ValueKey('mechanical-drawer-latch'),
+              label: 'Panel',
+              palette: widget.palette,
+              lit: widget.open,
+              selected: widget.open,
+              role: PrismRole.compact,
+              style: widget.prismStyle,
+              // Drawer state change emits the single latch feedback event.
+              soundEnabled: false,
+              hapticsEnabled: false,
+              onPressed: () => widget.onOpenChanged(!widget.open),
+            ),
+          ),
+        ],
       ),
     );
   }

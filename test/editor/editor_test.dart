@@ -558,7 +558,7 @@ void main() {
     expect(frame.size, viewport);
   });
 
-  testWidgets('floating header leaves center open to canvas gestures', (
+  testWidgets('document binnacle leaves center open to canvas gestures', (
     tester,
   ) async {
     const viewport = Size(874, 402);
@@ -580,14 +580,26 @@ void main() {
     final leftHousing = find.byKey(
       const ValueKey('editor-header-left-housing'),
     );
-    final rightHousing = find.byKey(
-      const ValueKey('editor-header-right-housing'),
-    );
+    final commandBank = find.byKey(const ValueKey('editor-command-bank'));
     expect(layer, const Rect.fromLTWH(0, 0, 874, 48));
     expect(tester.getRect(leftHousing).right, lessThan(viewport.width / 2));
-    expect(tester.getRect(rightHousing).left, greaterThan(viewport.width / 2));
     expect(tester.widget<PrismPanel>(leftHousing).surfaceOpacity, 0.88);
-    expect(tester.widget<PrismPanel>(rightHousing).surfaceOpacity, 0.88);
+    expect(
+      find.byKey(const ValueKey('editor-header-right-housing')),
+      findsNothing,
+    );
+    expect(tester.widget<PrismPanel>(commandBank).surfaceOpacity, 0.88);
+    expect(
+      tester.getRect(commandBank).bottom,
+      lessThanOrEqualTo(viewport.height),
+    );
+    expect(find.text('HISTORY'), findsOneWidget);
+    expect(find.text('BUILD'), findsOneWidget);
+    expect(find.text('VIEW'), findsOneWidget);
+    expect(
+      tester.getRect(find.byKey(const ValueKey('canvas-undo'))).bottom,
+      tester.getRect(find.byKey(const ValueKey('canvas-fit'))).bottom,
+    );
 
     final title = tester.widget<VfdLegend>(
       find.descendant(
@@ -597,6 +609,7 @@ void main() {
     );
     expect(title.maxLines, 1);
     expect(title.overflow, TextOverflow.ellipsis);
+    expect(title.text, contains('landscape'));
 
     final frame = find.byKey(const ValueKey('editor-canvas'));
     final before = tester.getRect(frame);
@@ -655,6 +668,14 @@ void main() {
           .getRect(find.byKey(const ValueKey('mechanical-drawer-latch')))
           .bottom,
       lessThanOrEqualTo(viewport.height - safeInsets.bottom),
+    );
+    expect(
+      tester.getRect(find.byKey(const ValueKey('editor-command-bank'))).bottom,
+      lessThanOrEqualTo(
+        tester
+            .getRect(find.byKey(const ValueKey('mechanical-drawer-latch')))
+            .top,
+      ),
     );
 
     final frame = tester.getRect(find.byKey(const ValueKey('editor-canvas')));

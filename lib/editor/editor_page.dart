@@ -145,7 +145,7 @@ class _EditorPageState extends State<EditorPage> {
         Flexible(
           fit: FlexFit.loose,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 240),
+            constraints: const BoxConstraints(maxWidth: 320),
             child: PrismPanel(
               key: const ValueKey('editor-header-left-housing'),
               palette: _palette,
@@ -169,7 +169,7 @@ class _EditorPageState extends State<EditorPage> {
                     child: KeyedSubtree(
                       key: const ValueKey('editor-title'),
                       child: VfdLegend(
-                        _dashboard.name,
+                        '${_dashboard.name} · ${_orientation.name}',
                         palette: _palette,
                         lit: true,
                         size: 12,
@@ -183,37 +183,6 @@ class _EditorPageState extends State<EditorPage> {
             ),
           ),
         ),
-        const Spacer(),
-        PrismPanel(
-          key: const ValueKey('editor-header-right-housing'),
-          palette: _palette,
-          surfaceOpacity: 0.88,
-          padding: const EdgeInsets.only(left: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              for (final value in DesignOrientation.values) ...<Widget>[
-                PrismButton(
-                  key: ValueKey('orientation-${value.name}'),
-                  label: value.name,
-                  palette: _palette,
-                  lit: value == _orientation,
-                  selected: value == _orientation,
-                  role: PrismRole.compact,
-                  style: _dashboard.settings.prismStyle,
-                  soundEnabled: widget.soundEnabled,
-                  hapticsEnabled: widget.hapticsEnabled,
-                  onPressed: () => setState(() {
-                    _orientation = value;
-                    _selectedId = null;
-                    _selectedModuleId = null;
-                  }),
-                ),
-                const SizedBox(width: 4),
-              ],
-            ],
-          ),
-        ),
       ],
     ),
   );
@@ -221,6 +190,7 @@ class _EditorPageState extends State<EditorPage> {
   Widget _canvas({
     EdgeInsets frameInset = EdgeInsets.zero,
     EdgeInsets chromeSafeInsets = EdgeInsets.zero,
+    double commandBankBottomInset = 0,
   }) => EditorCanvas(
     dashboard: _dashboard,
     orientation: _layoutOrientation,
@@ -237,6 +207,7 @@ class _EditorPageState extends State<EditorPage> {
     renderAssets: widget.renderAssets,
     frameInset: frameInset,
     chromeSafeInsets: chromeSafeInsets,
+    commandBankBottomInset: commandBankBottomInset,
     onAddRequested: _layoutInherited ? null : _openAddCatalogue,
     onAddDropped: _layoutInherited ? null : _addDropped,
     previewController: _canvasPreviewController,
@@ -246,9 +217,16 @@ class _EditorPageState extends State<EditorPage> {
     onRedo: _redo,
     snapEnabled: _snapEnabled,
     onToggleSnap: () => setState(() => _snapEnabled = !_snapEnabled),
+    onPreviewOrientationChanged: _setPreviewOrientation,
     soundEnabled: widget.soundEnabled,
     hapticsEnabled: widget.hapticsEnabled,
   );
+
+  void _setPreviewOrientation(DesignOrientation orientation) => setState(() {
+    _orientation = orientation;
+    _selectedId = null;
+    _selectedModuleId = null;
+  });
 
   Widget _workspace(
     BoxConstraints constraints, {
@@ -284,6 +262,9 @@ class _EditorPageState extends State<EditorPage> {
             return _canvas(
               frameInset: safeLayout.frameInset,
               chromeSafeInsets: safeLayout.canvasChromeInsets,
+              commandBankBottomInset: layout.edge == MechanicalDrawerEdge.bottom
+                  ? 52
+                  : 0,
             );
           },
           drawer: _addCatalogueOpen
