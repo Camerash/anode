@@ -13,7 +13,7 @@ enum PrismRole { compact, standard, primary }
 
 enum PrismSpan { one, two, three }
 
-enum PrismSymbol { undo, redo, fit, add, snap, portrait, landscape }
+enum PrismSymbol { undo, redo, fit, portrait, landscape }
 
 /// Normalized stamped geometry shared by every Prism symbol renderer.
 abstract final class PrismSymbolGeometry {
@@ -21,8 +21,6 @@ abstract final class PrismSymbolGeometry {
     return switch (symbol) {
       PrismSymbol.undo || PrismSymbol.redo => _historyPath(symbol, size),
       PrismSymbol.fit => _fitPath(size),
-      PrismSymbol.add => _addPath(size),
-      PrismSymbol.snap => _snapPath(size),
       PrismSymbol.portrait => _orientationPath(size, portrait: true),
       PrismSymbol.landscape => _orientationPath(size, portrait: false),
     };
@@ -46,42 +44,6 @@ abstract final class PrismSymbolGeometry {
       ..lineTo(x(0.37), y(0.48))
       ..lineTo(x(0.37), y(0.68))
       ..close();
-  }
-
-  static Path _addPath(Size size) {
-    Rect rect(double left, double top, double right, double bottom) =>
-        Rect.fromLTRB(
-          size.width * left,
-          size.height * top,
-          size.width * right,
-          size.height * bottom,
-        );
-
-    return Path()
-      ..addRect(rect(0.40, 0.08, 0.60, 0.92))
-      ..addRect(rect(0.12, 0.37, 0.88, 0.63));
-  }
-
-  static Path _snapPath(Size size) {
-    double x(double value) => size.width * value;
-    double y(double value) => size.height * value;
-
-    return Path()
-      ..moveTo(x(0.12), y(0.28))
-      ..lineTo(x(0.36), y(0.28))
-      ..lineTo(x(0.36), y(0.58))
-      ..lineTo(x(0.43), y(0.72))
-      ..lineTo(x(0.57), y(0.72))
-      ..lineTo(x(0.64), y(0.58))
-      ..lineTo(x(0.64), y(0.28))
-      ..lineTo(x(0.88), y(0.28))
-      ..lineTo(x(0.88), y(0.62))
-      ..lineTo(x(0.72), y(0.88))
-      ..lineTo(x(0.28), y(0.88))
-      ..lineTo(x(0.12), y(0.62))
-      ..close()
-      ..addRect(Rect.fromLTRB(x(0.08), y(0.06), x(0.40), y(0.22)))
-      ..addRect(Rect.fromLTRB(x(0.60), y(0.06), x(0.92), y(0.22)));
   }
 
   static Path _orientationPath(Size size, {required bool portrait}) {

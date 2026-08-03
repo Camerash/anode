@@ -470,14 +470,12 @@ class _EditorCanvasState extends State<EditorCanvas> {
                     _commandButton(
                       key: const ValueKey('canvas-add'),
                       label: 'Add',
-                      symbol: PrismSymbol.add,
                       onPressed: widget.editable ? widget.onAddRequested : null,
                       palette: palette,
                     ),
                   _commandButton(
                     key: const ValueKey('canvas-snap'),
                     label: 'Snap',
-                    symbol: PrismSymbol.snap,
                     lit: widget.snapEnabled,
                     selected: widget.snapEnabled,
                     onPressed: widget.onToggleSnap,

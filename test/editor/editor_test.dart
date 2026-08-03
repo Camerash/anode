@@ -596,17 +596,19 @@ void main() {
     expect(find.text('HISTORY'), findsOneWidget);
     expect(find.text('BUILD'), findsOneWidget);
     expect(find.text('VIEW'), findsOneWidget);
+    expect(find.text('ADD'), findsOneWidget);
+    expect(find.text('SNAP'), findsOneWidget);
     expect(
       tester
           .widget<PrismButton>(find.byKey(const ValueKey('canvas-add')))
           .symbol,
-      PrismSymbol.add,
+      isNull,
     );
     expect(
       tester
           .widget<PrismButton>(find.byKey(const ValueKey('canvas-snap')))
           .symbol,
-      PrismSymbol.snap,
+      isNull,
     );
     expect(
       tester
