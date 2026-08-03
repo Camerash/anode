@@ -597,6 +597,38 @@ void main() {
     expect(find.text('BUILD'), findsOneWidget);
     expect(find.text('VIEW'), findsOneWidget);
     expect(
+      tester
+          .widget<PrismButton>(find.byKey(const ValueKey('canvas-add')))
+          .symbol,
+      PrismSymbol.add,
+    );
+    expect(
+      tester
+          .widget<PrismButton>(find.byKey(const ValueKey('canvas-snap')))
+          .symbol,
+      PrismSymbol.snap,
+    );
+    expect(
+      tester
+          .widget<PrismButton>(
+            find.byKey(const ValueKey('orientation-portrait')),
+          )
+          .symbol,
+      PrismSymbol.portrait,
+    );
+    expect(
+      tester
+          .widget<PrismButton>(
+            find.byKey(const ValueKey('orientation-landscape')),
+          )
+          .symbol,
+      PrismSymbol.landscape,
+    );
+    expect(
+      tester.widget<PrismButton>(find.byKey(const ValueKey('canvas-fit'))).role,
+      PrismRole.standard,
+    );
+    expect(
       tester.getRect(find.byKey(const ValueKey('canvas-undo'))).bottom,
       tester.getRect(find.byKey(const ValueKey('canvas-fit'))).bottom,
     );

@@ -433,7 +433,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
           key: const ValueKey('editor-command-bank'),
           palette: palette,
           surfaceOpacity: 0.88,
-          padding: const EdgeInsets.all(4),
+          padding: EdgeInsets.all(_expandedCommandBank ? 7 : 4),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
@@ -470,12 +470,14 @@ class _EditorCanvasState extends State<EditorCanvas> {
                     _commandButton(
                       key: const ValueKey('canvas-add'),
                       label: 'Add',
+                      symbol: PrismSymbol.add,
                       onPressed: widget.editable ? widget.onAddRequested : null,
                       palette: palette,
                     ),
                   _commandButton(
                     key: const ValueKey('canvas-snap'),
                     label: 'Snap',
+                    symbol: PrismSymbol.snap,
                     lit: widget.snapEnabled,
                     selected: widget.snapEnabled,
                     onPressed: widget.onToggleSnap,
@@ -499,6 +501,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
                     _commandButton(
                       key: ValueKey('orientation-${orientation.name}'),
                       label: orientation.name,
+                      symbol: orientation == DesignOrientation.portrait
+                          ? PrismSymbol.portrait
+                          : PrismSymbol.landscape,
                       lit:
                           orientation ==
                           (widget.previewOrientation ?? widget.orientation),
@@ -528,15 +533,15 @@ class _EditorCanvasState extends State<EditorCanvas> {
   }) => Column(
     mainAxisSize: MainAxisSize.min,
     children: <Widget>[
-      if (MediaQuery.sizeOf(context).width >= 600) ...<Widget>[
-        VfdLegend(label, palette: palette, size: 7),
-        const SizedBox(height: 1),
+      if (_expandedCommandBank) ...<Widget>[
+        VfdLegend(label, palette: palette, size: 8),
+        const SizedBox(height: 2),
       ],
       Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           for (var index = 0; index < controls.length; index++) ...<Widget>[
-            if (index > 0) const SizedBox(width: 3),
+            if (index > 0) SizedBox(width: _expandedCommandBank ? 5 : 3),
             controls[index],
           ],
         ],
@@ -545,12 +550,12 @@ class _EditorCanvasState extends State<EditorCanvas> {
   );
 
   Widget _bayDivider(VfdPalette palette) => SizedBox(
-    width: 7,
-    height: 34,
+    width: _expandedCommandBank ? 11 : 7,
+    height: _expandedCommandBank ? 44 : 34,
     child: Center(
       child: SizedBox(
         width: 1,
-        height: 30,
+        height: _expandedCommandBank ? 40 : 30,
         child: ColoredBox(color: palette.unlit.withValues(alpha: 0.34)),
       ),
     ),
@@ -570,7 +575,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
     label: label,
     symbol: symbol,
     palette: palette,
-    role: PrismRole.compact,
+    role: _expandedCommandBank ? PrismRole.standard : PrismRole.compact,
     style: widget.dashboard.settings.prismStyle,
     soundEnabled: widget.soundEnabled,
     hapticsEnabled: widget.hapticsEnabled,
@@ -579,6 +584,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
     enabled: enabled,
     onPressed: onPressed,
   );
+
+  bool get _expandedCommandBank => MediaQuery.sizeOf(context).width >= 600;
 
   String _frameLabel() {
     if (!widget.editable) return 'Inherited · read only';

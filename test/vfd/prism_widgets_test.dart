@@ -63,6 +63,27 @@ void main() {
     expect(fit.contains(const Offset(12, 9)), isFalse);
   });
 
+  test('Prism editor symbols retain distinct stamped silhouettes', () {
+    const size = Size(24, 18);
+    final add = PrismSymbolGeometry.path(PrismSymbol.add, size);
+    final snap = PrismSymbolGeometry.path(PrismSymbol.snap, size);
+    final portrait = PrismSymbolGeometry.path(PrismSymbol.portrait, size);
+    final landscape = PrismSymbolGeometry.path(PrismSymbol.landscape, size);
+
+    expect(add.contains(const Offset(12, 9)), isTrue);
+    expect(add.contains(const Offset(3, 2)), isFalse);
+    expect(snap.contains(const Offset(12, 15)), isTrue);
+    expect(snap.contains(const Offset(12, 2)), isFalse);
+    expect(
+      portrait.getBounds().height,
+      greaterThan(portrait.getBounds().width),
+    );
+    expect(
+      landscape.getBounds().width,
+      greaterThan(landscape.getBounds().height),
+    );
+  });
+
   testWidgets('Prism symbols hide text and retain command semantics', (
     tester,
   ) async {
