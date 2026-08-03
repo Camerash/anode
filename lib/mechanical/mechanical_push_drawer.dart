@@ -17,6 +17,13 @@ typedef MechanicalDrawerContentBuilder =
 /// surface stays full-bleed; [chromeInsets] protect readable controls from
 /// physical unsafe edges and persistent overlay bands.
 class MechanicalPushDrawer extends StatefulWidget {
+  static const double latchButtonWidth = 52;
+  static const double latchButtonHeight = 44;
+  static const double latchEdgeGap = 8;
+
+  /// Width reserved after a bottom command bank, including latch clearance.
+  static const double latchRailReserve = latchButtonWidth + latchEdgeGap;
+
   const MechanicalPushDrawer({
     super.key,
     required this.open,
@@ -54,6 +61,12 @@ class MechanicalPushDrawer extends StatefulWidget {
 
 class _MechanicalPushDrawerState extends State<MechanicalPushDrawer>
     with SingleTickerProviderStateMixin {
+  static const _latchButtonSize = Size(
+    MechanicalPushDrawer.latchButtonWidth,
+    MechanicalPushDrawer.latchButtonHeight,
+  );
+  static const _latchMountHeight = 6.0;
+
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 180),
@@ -131,7 +144,7 @@ class _MechanicalPushDrawerState extends State<MechanicalPushDrawer>
                 _verticalDrawer(reserved),
               ],
             ),
-          _latch(reserved, progress),
+          _latch(reserved),
         ],
       );
     },
@@ -200,26 +213,19 @@ class _MechanicalPushDrawerState extends State<MechanicalPushDrawer>
     ),
   };
 
-  Widget _latch(double reserved, double progress) {
-    final right = widget.edge == MechanicalDrawerEdge.right;
-    final edgeGap = right
-        ? widget.chromeInsets.right * (1 - progress)
-        : widget.chromeInsets.bottom * (1 - progress);
+  Widget _latch(double reserved) {
     return Positioned(
-      left: right ? null : widget.chromeInsets.left + 8,
-      right: right ? reserved : null,
-      bottom: right ? null : reserved,
-      top: right ? widget.chromeInsets.top + 22 : null,
-      width: right ? 58 + edgeGap : 52,
-      height: right ? 44 : 50 + edgeGap,
+      right: _latchRight(reserved),
+      bottom: _latchBottom(reserved),
+      width: _latchButtonSize.width,
+      height: _latchButtonSize.height + _latchMountHeight,
       child: Stack(
-        clipBehavior: Clip.none,
         children: <Widget>[
           Positioned(
-            left: right ? 46 : 25,
-            right: right ? 0 : 25,
-            top: right ? 21 : 38,
-            bottom: right ? 21 : 0,
+            left: 4,
+            right: 4,
+            bottom: 0,
+            height: _latchMountHeight,
             child: ColoredBox(
               key: const ValueKey('mechanical-drawer-latch-mount'),
               color: widget.palette.unlit.withValues(alpha: 0.38),
@@ -228,8 +234,8 @@ class _MechanicalPushDrawerState extends State<MechanicalPushDrawer>
           Positioned(
             left: 0,
             top: 0,
-            width: 52,
-            height: 44,
+            width: _latchButtonSize.width,
+            height: _latchButtonSize.height,
             child: PrismButton(
               key: const ValueKey('mechanical-drawer-latch'),
               label: widget.latchLabel,
@@ -248,4 +254,14 @@ class _MechanicalPushDrawerState extends State<MechanicalPushDrawer>
       ),
     );
   }
+
+  double _latchRight(double reserved) =>
+      widget.chromeInsets.right +
+      (widget.edge == MechanicalDrawerEdge.right ? reserved : 0) +
+      MechanicalPushDrawer.latchEdgeGap;
+
+  double _latchBottom(double reserved) =>
+      widget.chromeInsets.bottom +
+      (widget.edge == MechanicalDrawerEdge.bottom ? reserved : 0) +
+      MechanicalPushDrawer.latchEdgeGap;
 }

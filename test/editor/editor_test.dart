@@ -103,9 +103,14 @@ void main() {
     expect(add.enabled, isFalse);
     expect(add.onPressed, isNull);
     final after = tester.getCenter(frame);
+    final console = tester.getRect(
+      find.byKey(const ValueKey('mechanical-drawer-latch')),
+    );
+    final center = tester.getRect(find.byKey(const ValueKey('canvas-center')));
 
     expect(after.dy, lessThan(before.dy));
     expect(_canvasAspect(tester), closeTo(393 / 852, 0.002));
+    expect((console.center.dy - center.center.dy).abs(), lessThanOrEqualTo(12));
   });
 
   testWidgets('drag and edge resize update displayed orientation only', (
@@ -719,13 +724,23 @@ void main() {
           .bottom,
       lessThanOrEqualTo(viewport.height - safeInsets.bottom),
     );
+    final portraitConsole = tester.getRect(
+      find.byKey(const ValueKey('mechanical-drawer-latch')),
+    );
+    final portraitCenter = tester.getRect(
+      find.byKey(const ValueKey('canvas-center')),
+    );
     expect(
-      tester.getRect(find.byKey(const ValueKey('editor-command-bank'))).bottom,
-      lessThanOrEqualTo(
-        tester
-            .getRect(find.byKey(const ValueKey('mechanical-drawer-latch')))
-            .top,
-      ),
+      (portraitConsole.center.dy - portraitCenter.center.dy).abs(),
+      lessThanOrEqualTo(12),
+    );
+    expect(
+      portraitConsole.right,
+      closeTo(viewport.width - safeInsets.right - 8, 0.001),
+    );
+    expect(
+      tester.getRect(find.byKey(const ValueKey('editor-command-bank'))).right,
+      lessThanOrEqualTo(portraitConsole.left),
     );
 
     final frame = tester.getRect(find.byKey(const ValueKey('editor-canvas')));
@@ -793,6 +808,24 @@ void main() {
           .right,
       lessThanOrEqualTo(viewport.width - safeInsets.right),
     );
+    final landscapeConsole = tester.getRect(
+      find.byKey(const ValueKey('mechanical-drawer-latch')),
+    );
+    final landscapeCenter = tester.getRect(
+      find.byKey(const ValueKey('canvas-center')),
+    );
+    expect(
+      (landscapeConsole.center.dy - landscapeCenter.center.dy).abs(),
+      lessThanOrEqualTo(12),
+    );
+    expect(
+      landscapeConsole.right,
+      closeTo(viewport.width - safeInsets.right - 8, 0.001),
+    );
+    expect(
+      tester.getRect(find.byKey(const ValueKey('editor-command-bank'))).right,
+      lessThanOrEqualTo(landscapeConsole.left),
+    );
 
     final closedLeftBoundary = tester.getRect(
       find.byKey(const ValueKey('editor-canvas')),
@@ -827,6 +860,22 @@ void main() {
     expect(openLeftFrame.left, greaterThanOrEqualTo(safeInsets.left));
     expect(openLeftBoundary.left, greaterThanOrEqualTo(safeInsets.left));
     expect(openLeftBoundary.right, lessThan(viewport.width));
+    final openLandscapeConsole = tester.getRect(latch);
+    final openLandscapeCenter = tester.getRect(
+      find.byKey(const ValueKey('canvas-center')),
+    );
+    expect(
+      (openLandscapeConsole.center.dy - openLandscapeCenter.center.dy).abs(),
+      lessThanOrEqualTo(12),
+    );
+    expect(
+      openLandscapeConsole.right,
+      closeTo(openLeftBoundary.right - safeInsets.right - 8, 0.001),
+    );
+    expect(
+      tester.getRect(find.byKey(const ValueKey('editor-command-bank'))).right,
+      lessThanOrEqualTo(openLandscapeConsole.left),
+    );
 
     final drawerEnvironment = tester.getRect(
       find.byKey(const ValueKey('mechanical-push-drawer')),

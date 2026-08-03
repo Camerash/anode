@@ -192,7 +192,7 @@ class _EditorPageState extends State<EditorPage> {
   Widget _canvas({
     EdgeInsets frameInset = EdgeInsets.zero,
     EdgeInsets chromeSafeInsets = EdgeInsets.zero,
-    double commandBankBottomInset = 0,
+    double commandBankTrailingReserve = 0,
   }) => EditorCanvas(
     dashboard: _dashboard,
     orientation: _layoutOrientation,
@@ -209,7 +209,7 @@ class _EditorPageState extends State<EditorPage> {
     renderAssets: widget.renderAssets,
     frameInset: frameInset,
     chromeSafeInsets: chromeSafeInsets,
-    commandBankBottomInset: commandBankBottomInset,
+    commandBankTrailingReserve: commandBankTrailingReserve,
     onAddDropped: _layoutInherited ? null : _addDropped,
     previewController: _canvasPreviewController,
     canUndo: _undoStack.isNotEmpty,
@@ -263,9 +263,7 @@ class _EditorPageState extends State<EditorPage> {
             return _canvas(
               frameInset: safeLayout.frameInset,
               chromeSafeInsets: safeLayout.canvasChromeInsets,
-              commandBankBottomInset: layout.edge == MechanicalDrawerEdge.bottom
-                  ? 52
-                  : 0,
+              commandBankTrailingReserve: safeLayout.commandBankTrailingReserve,
             );
           },
           drawer: IndexedStack(
@@ -677,10 +675,12 @@ class _EditorSafeLayout {
   const _EditorSafeLayout({
     required this.frameInset,
     required this.canvasChromeInsets,
+    required this.commandBankTrailingReserve,
   });
 
   final EdgeInsets frameInset;
   final EdgeInsets canvasChromeInsets;
+  final double commandBankTrailingReserve;
 
   static _EditorSafeLayout resolve({
     required EdgeInsets chromeInsets,
@@ -709,6 +709,10 @@ class _EditorSafeLayout {
         canvasRight,
         canvasBottom,
       ),
+      commandBankTrailingReserve:
+          chromeInsets.right -
+          canvasRight +
+          MechanicalPushDrawer.latchRailReserve,
     );
   }
 }

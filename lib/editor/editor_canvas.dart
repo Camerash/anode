@@ -33,7 +33,7 @@ class EditorCanvas extends StatefulWidget {
     this.editable = true,
     this.frameInset = EdgeInsets.zero,
     this.chromeSafeInsets = EdgeInsets.zero,
-    this.commandBankBottomInset = 0,
+    this.commandBankTrailingReserve = 0,
     this.onAddDropped,
     this.previewController,
     this.canUndo = false,
@@ -68,7 +68,7 @@ class EditorCanvas extends StatefulWidget {
   /// Insets editor chrome only. Authored content and interaction geometry
   /// remain resolved against the complete device viewport.
   final EdgeInsets chromeSafeInsets;
-  final double commandBankBottomInset;
+  final double commandBankTrailingReserve;
   final void Function(EditorAddRequest request, Offset center)? onAddDropped;
   final EditorCanvasPreviewController? previewController;
   final bool canUndo;
@@ -419,8 +419,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
   Widget _commandBank(VfdPalette palette) => Positioned(
     key: const ValueKey('editor-command-bank-position'),
     left: widget.chromeSafeInsets.left + 8,
-    right: widget.chromeSafeInsets.right + 8,
-    bottom: widget.chromeSafeInsets.bottom + widget.commandBankBottomInset + 8,
+    right:
+        widget.chromeSafeInsets.right + widget.commandBankTrailingReserve + 8,
+    bottom: widget.chromeSafeInsets.bottom + 8,
     child: Align(
       alignment: Alignment.bottomCenter,
       child: FittedBox(
