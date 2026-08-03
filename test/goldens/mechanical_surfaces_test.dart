@@ -46,7 +46,7 @@ void main() {
       find.byKey(const ValueKey('surface')),
       matchesGoldenFile('baselines/editor_closed.png'),
     );
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.tap(find.byKey(const ValueKey('editor-console')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     await expectLater(
@@ -87,7 +87,7 @@ void main() {
       warnIfMissed: false,
     );
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.tap(find.byKey(const ValueKey('editor-console')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     await expectLater(
@@ -331,7 +331,7 @@ void main() {
       warnIfMissed: false,
     );
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.tap(find.byKey(const ValueKey('editor-console')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     await tester.tap(
@@ -360,7 +360,7 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.tap(find.byKey(const ValueKey('editor-console')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     await expectLater(
@@ -420,7 +420,7 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.tap(find.byKey(const ValueKey('editor-console')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     await expectLater(
@@ -460,7 +460,7 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.tap(find.byKey(const ValueKey('editor-console')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     await expectLater(
@@ -491,7 +491,7 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.tap(find.byKey(const ValueKey('editor-console')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     await tester.tap(find.byKey(const ValueKey('editor-service-section-look')));

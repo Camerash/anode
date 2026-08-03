@@ -13,6 +13,7 @@ import '../model/component_type.dart';
 import '../model/dashboard.dart';
 import '../model/optical_profile.dart';
 import '../model/placement.dart';
+import '../model/settings.dart';
 import '../model/variant.dart';
 import '../model/vfd_module.dart';
 import '../platform/physical_interface_orientation.dart';
@@ -21,6 +22,8 @@ import '../vfd/vfd_render_assets.dart';
 import '../vfd/vfd_widgets.dart';
 import 'editor_add_catalogue.dart';
 import 'editor_canvas.dart';
+import 'editor_chrome_skin.dart';
+import 'editor_command_dock.dart';
 import 'editor_live_preview.dart';
 import 'effect_panel.dart';
 import 'param_editor.dart';
@@ -38,6 +41,8 @@ class EditorPage extends StatefulWidget {
     this.hapticsEnabled = true,
     this.actionRegistry,
     this.interfaceOrientation = PhysicalInterfaceOrientation.unknown,
+    this.dockPreferences = const EditorDockPreferences(),
+    this.onDockPreferencesChanged,
   });
 
   final Dashboard dashboard;
@@ -47,6 +52,8 @@ class EditorPage extends StatefulWidget {
   final bool hapticsEnabled;
   final ActionRegistry? actionRegistry;
   final PhysicalInterfaceOrientation interfaceOrientation;
+  final EditorDockPreferences dockPreferences;
+  final ValueChanged<EditorDockPreferences>? onDockPreferencesChanged;
 
   @override
   State<EditorPage> createState() => _EditorPageState();
@@ -57,6 +64,7 @@ class _EditorPageState extends State<EditorPage> {
 
   late Dashboard _dashboard = widget.dashboard;
   late DesignOrientation _orientation = _dashboard.primaryOrientation;
+  late EditorDockPreferences _dockPreferences = widget.dockPreferences;
   bool _initialOrientationResolved = false;
   String? _selectedId;
   String? _selectedModuleId;
@@ -69,15 +77,28 @@ class _EditorPageState extends State<EditorPage> {
   final GlobalKey _workspaceKey = GlobalKey();
   final GlobalKey<_EditorServicePanelState> _servicePanelKey =
       GlobalKey<_EditorServicePanelState>();
-  final EditorCanvasPreviewController _canvasPreviewController =
-      EditorCanvasPreviewController();
+  final EditorCanvasController _canvasController = EditorCanvasController();
   _WorkspaceDropPreview? _dropPreview;
 
   VfdPalette get _palette =>
       VfdPalette.of(_dashboard.settings.opticalProfile.phosphor);
+  EditorChromeSkin get _chromeSkin => VfdEditorChromeSkin(
+    palette: _palette,
+    prismStyle: _dashboard.settings.prismStyle,
+    soundEnabled: widget.soundEnabled,
+    hapticsEnabled: widget.hapticsEnabled,
+  );
   DesignOrientation get _layoutOrientation =>
       _dashboard.layoutForViewport(_orientation);
   bool get _layoutInherited => _layoutOrientation != _orientation;
+
+  @override
+  void didUpdateWidget(covariant EditorPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.dockPreferences != widget.dockPreferences) {
+      _dockPreferences = widget.dockPreferences;
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -134,66 +155,46 @@ class _EditorPageState extends State<EditorPage> {
     );
   }
 
-  Widget _topChrome(BuildContext context, EdgeInsets safeInsets) => Padding(
-    key: const ValueKey('editor-header-layer'),
-    padding: EdgeInsets.fromLTRB(
-      safeInsets.left + 4,
-      safeInsets.top + 2,
-      safeInsets.right + 4,
-      2,
-    ),
-    child: Row(
-      children: <Widget>[
-        Flexible(
-          fit: FlexFit.loose,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 320),
-            child: PrismPanel(
-              key: const ValueKey('editor-header-left-housing'),
-              palette: _palette,
-              surfaceOpacity: 0.88,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  PrismButton(
-                    key: const ValueKey('editor-back'),
-                    label: 'Back',
-                    palette: _palette,
-                    role: PrismRole.compact,
-                    style: _dashboard.settings.prismStyle,
-                    soundEnabled: widget.soundEnabled,
-                    hapticsEnabled: widget.hapticsEnabled,
-                    onPressed: () => Navigator.of(context).maybePop(),
-                  ),
-                  const SizedBox(width: 7),
-                  Flexible(
-                    child: KeyedSubtree(
-                      key: const ValueKey('editor-title'),
-                      child: VfdLegend(
-                        _dashboard.name,
-                        palette: _palette,
-                        lit: true,
-                        size: 12,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                ],
+  Widget _topChrome(BuildContext context, EdgeInsets safeInsets) =>
+      _chromeSkin.surface(
+        key: const ValueKey('editor-header-layer'),
+        role: EditorChromeSurfaceRole.header,
+        padding: EdgeInsets.fromLTRB(
+          safeInsets.left + 4,
+          safeInsets.top + 2,
+          safeInsets.right + 4,
+          2,
+        ),
+        child: Row(
+          children: <Widget>[
+            _chromeSkin.button(
+              key: const ValueKey('editor-back'),
+              label: 'Back',
+              compact: true,
+              onPressed: () => Navigator.of(context).maybePop(),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: _chromeSkin.title(
+                _dashboard.name,
+                key: const ValueKey('editor-title'),
               ),
             ),
-          ),
+            const Spacer(),
+            const SizedBox(width: 8),
+            _chromeSkin.button(
+              key: const ValueKey('editor-console'),
+              label: 'Console',
+              compact: true,
+              lit: _drawerOpen,
+              selected: _drawerOpen,
+              onPressed: () => setState(() => _drawerOpen = !_drawerOpen),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      );
 
-  Widget _canvas({
-    EdgeInsets frameInset = EdgeInsets.zero,
-    EdgeInsets chromeSafeInsets = EdgeInsets.zero,
-    double commandBankTrailingReserve = 0,
-  }) => EditorCanvas(
+  Widget _canvas({EdgeInsets frameInset = EdgeInsets.zero}) => EditorCanvas(
     dashboard: _dashboard,
     orientation: _layoutOrientation,
     previewOrientation: _orientation,
@@ -208,18 +209,9 @@ class _EditorPageState extends State<EditorPage> {
     onModulePlacementChanged: _setModulePlacement,
     renderAssets: widget.renderAssets,
     frameInset: frameInset,
-    chromeSafeInsets: chromeSafeInsets,
-    commandBankTrailingReserve: commandBankTrailingReserve,
     onAddDropped: _layoutInherited ? null : _addDropped,
-    previewController: _canvasPreviewController,
-    canUndo: _undoStack.isNotEmpty,
-    canRedo: _redoStack.isNotEmpty,
-    onUndo: _undo,
-    onRedo: _redo,
+    controller: _canvasController,
     snapEnabled: _snapEnabled,
-    onToggleSnap: () => setState(() => _snapEnabled = !_snapEnabled),
-    soundEnabled: widget.soundEnabled,
-    hapticsEnabled: widget.hapticsEnabled,
   );
 
   void _setPreviewOrientation(DesignOrientation orientation) => setState(() {
@@ -246,13 +238,6 @@ class _EditorPageState extends State<EditorPage> {
           open: _drawerOpen,
           edge: layout.edge,
           extent: layout.drawerExtent,
-          palette: _palette,
-          prismStyle: _dashboard.settings.prismStyle,
-          latchLabel: 'Console',
-          chromeInsets: workspaceChromeInsets,
-          soundEnabled: widget.soundEnabled,
-          hapticsEnabled: widget.hapticsEnabled,
-          onOpenChanged: (open) => setState(() => _drawerOpen = open),
           contentBuilder: (context, progress) {
             final safeLayout = _EditorSafeLayout.resolve(
               chromeInsets: workspaceChromeInsets,
@@ -260,28 +245,52 @@ class _EditorPageState extends State<EditorPage> {
               drawerEdge: layout.edge,
               drawerProgress: progress,
             );
-            return _canvas(
-              frameInset: safeLayout.frameInset,
-              chromeSafeInsets: safeLayout.canvasChromeInsets,
-              commandBankTrailingReserve: safeLayout.commandBankTrailingReserve,
+            return Stack(
+              fit: StackFit.expand,
+              children: <Widget>[
+                _canvas(frameInset: safeLayout.frameInset),
+                EditorCommandDock(
+                  skin: _chromeSkin,
+                  placement: _dockPlacement(layout.windowOrientation),
+                  safeInsets: safeLayout.dockSafeInsets,
+                  headerExtent: workspaceChromeInsets.top,
+                  canUndo: _undoStack.isNotEmpty,
+                  canRedo: _redoStack.isNotEmpty,
+                  snapEnabled: _snapEnabled,
+                  onUndo: _undo,
+                  onRedo: _redo,
+                  onToggleSnap: () =>
+                      setState(() => _snapEnabled = !_snapEnabled),
+                  onCenter: _canvasController.centerCamera,
+                  onPlacementChanged: (placement) =>
+                      _setDockPlacement(layout.windowOrientation, placement),
+                ),
+              ],
             );
           },
-          drawer: IndexedStack(
-            index: _addCatalogueOpen ? 1 : 0,
-            children: <Widget>[
-              _servicePanel(),
-              EditorAddCatalogue(
-                palette: _palette,
-                prismStyle: _dashboard.settings.prismStyle,
-                soundEnabled: widget.soundEnabled,
-                hapticsEnabled: widget.hapticsEnabled,
-                dashboard: _dashboard,
-                renderAssets: widget.renderAssets,
-                onClose: () => setState(() => _addCatalogueOpen = false),
-                onDragEnded: _clearDropPreview,
-                onDragUpdated: _updateDropPreview,
+          drawer: _chromeSkin.consoleSurface(
+            edge: layout.edge,
+            safeInsets: workspaceChromeInsets,
+            child: KeyedSubtree(
+              key: const ValueKey('mechanical-drawer-safe-content'),
+              child: IndexedStack(
+                index: _addCatalogueOpen ? 1 : 0,
+                children: <Widget>[
+                  _servicePanel(),
+                  EditorAddCatalogue(
+                    palette: _palette,
+                    prismStyle: _dashboard.settings.prismStyle,
+                    soundEnabled: widget.soundEnabled,
+                    hapticsEnabled: widget.hapticsEnabled,
+                    dashboard: _dashboard,
+                    renderAssets: widget.renderAssets,
+                    onClose: () => setState(() => _addCatalogueOpen = false),
+                    onDragEnded: _clearDropPreview,
+                    onDragUpdated: _updateDropPreview,
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
         if (_dropPreview case final preview?)
@@ -371,9 +380,26 @@ class _EditorPageState extends State<EditorPage> {
   }
 
   void _updateDropPreview(EditorAddRequest request, Offset globalPosition) {
-    final rect = _canvasPreviewController.previewRect(request, globalPosition);
+    final rect = _canvasController.previewRect(request, globalPosition);
     if (rect == null) return;
     _setDropPreview(request, rect);
+  }
+
+  EditorDockPlacement _dockPlacement(DesignOrientation windowOrientation) =>
+      windowOrientation == DesignOrientation.portrait
+      ? _dockPreferences.portrait
+      : _dockPreferences.landscape;
+
+  void _setDockPlacement(
+    DesignOrientation windowOrientation,
+    EditorDockPlacement placement,
+  ) {
+    final next = windowOrientation == DesignOrientation.portrait
+        ? _dockPreferences.copyWith(portrait: placement)
+        : _dockPreferences.copyWith(landscape: placement);
+    if (next == _dockPreferences) return;
+    setState(() => _dockPreferences = next);
+    widget.onDockPreferencesChanged?.call(next);
   }
 
   void _clearDropPreview() {
@@ -637,10 +663,15 @@ class _WorkspaceDropPreview {
 /// different reserve from one that pushes in from the side — but every other
 /// part of the editor is shape-agnostic, so this is the only branch.
 class _WorkspaceLayout {
-  const _WorkspaceLayout({required this.edge, required this.drawerExtent});
+  const _WorkspaceLayout({
+    required this.edge,
+    required this.drawerExtent,
+    required this.windowOrientation,
+  });
 
   final MechanicalDrawerEdge edge;
   final double drawerExtent;
+  final DesignOrientation windowOrientation;
 
   static _WorkspaceLayout resolve({
     required Size windowSize,
@@ -650,6 +681,7 @@ class _WorkspaceLayout {
       final maxExtent = math.max(160.0, constraints.maxHeight - 120);
       return _WorkspaceLayout(
         edge: MechanicalDrawerEdge.bottom,
+        windowOrientation: DesignOrientation.portrait,
         drawerExtent: math.min(
           maxExtent,
           (constraints.maxHeight * 0.42).clamp(220, 420).toDouble(),
@@ -659,6 +691,7 @@ class _WorkspaceLayout {
     final maxExtent = math.max(240.0, constraints.maxWidth - 60);
     return _WorkspaceLayout(
       edge: MechanicalDrawerEdge.right,
+      windowOrientation: DesignOrientation.landscape,
       drawerExtent: math.min(
         maxExtent,
         (constraints.maxWidth * 0.38).clamp(280, 420).toDouble(),
@@ -674,13 +707,11 @@ class _WorkspaceLayout {
 class _EditorSafeLayout {
   const _EditorSafeLayout({
     required this.frameInset,
-    required this.canvasChromeInsets,
-    required this.commandBankTrailingReserve,
+    required this.dockSafeInsets,
   });
 
   final EdgeInsets frameInset;
-  final EdgeInsets canvasChromeInsets;
-  final double commandBankTrailingReserve;
+  final EdgeInsets dockSafeInsets;
 
   static _EditorSafeLayout resolve({
     required EdgeInsets chromeInsets,
@@ -703,16 +734,12 @@ class _EditorSafeLayout {
 
     return _EditorSafeLayout(
       frameInset: EdgeInsets.only(left: frameLeft),
-      canvasChromeInsets: EdgeInsets.fromLTRB(
+      dockSafeInsets: EdgeInsets.fromLTRB(
         chromeInsets.left,
         chromeInsets.top,
         canvasRight,
         canvasBottom,
       ),
-      commandBankTrailingReserve:
-          chromeInsets.right -
-          canvasRight +
-          MechanicalPushDrawer.latchRailReserve,
     );
   }
 }

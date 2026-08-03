@@ -22,7 +22,9 @@ glanceable driving information and precise, recoverable authoring.
 
 Mechanical, photographic, uncompromising. Anode should feel like operating
 1980s automotive switchgear and viewing a physical vacuum fluorescent module,
-not a modern mobile UI wearing a retro theme.
+not a stock mobile UI wearing a retro theme. Familiar modern editing hierarchy
+is welcome when it makes tools predictable; its physical expression remains
+purpose-built.
 
 ## Anti-references
 
@@ -44,6 +46,19 @@ not a modern mobile UI wearing a retro theme.
    geometry across viewports unless an alternate layout was explicitly made.
 5. Adapt editor chrome to physical window bounds without changing persisted
    design data or restricting authored content.
+
+## Interface Skins
+
+Editor structure is stable across visual families: full-width document header,
+movable command dock, contextual Console, safe-area behavior, semantics, and
+accessibility do not change. A skin supplies materials, typography, colour,
+motion, backgrounds, and cutout treatment without owning editor layout or
+authored renderer geometry.
+
+VFD is the first interface skin, not a permanent universal shell. Future
+families include Outrun, Cyberpunk, and Vintage Orange. New skins must preserve
+control location, meaning, hit targets, and interaction so changing appearance
+never means relearning the editor.
 
 ## Accessibility & Inclusion
 

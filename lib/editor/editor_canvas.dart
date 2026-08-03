@@ -9,7 +9,6 @@ import '../model/dashboard.dart';
 import '../model/placement.dart';
 import '../model/vfd_module.dart';
 import '../vfd/vfd_render_assets.dart';
-import '../vfd/prism_widgets.dart';
 import '../vfd/vfd_widgets.dart';
 import 'editor_add_catalogue.dart';
 import 'editor_live_preview.dart';
@@ -32,18 +31,9 @@ class EditorCanvas extends StatefulWidget {
     this.previewOrientation,
     this.editable = true,
     this.frameInset = EdgeInsets.zero,
-    this.chromeSafeInsets = EdgeInsets.zero,
-    this.commandBankTrailingReserve = 0,
     this.onAddDropped,
-    this.previewController,
-    this.canUndo = false,
-    this.canRedo = false,
-    this.onUndo,
-    this.onRedo,
+    this.controller,
     this.snapEnabled = true,
-    this.onToggleSnap,
-    this.soundEnabled = true,
-    this.hapticsEnabled = true,
   });
 
   final Dashboard dashboard;
@@ -64,21 +54,9 @@ class EditorCanvas extends StatefulWidget {
   final DesignOrientation? previewOrientation;
   final bool editable;
   final EdgeInsets frameInset;
-
-  /// Insets editor chrome only. Authored content and interaction geometry
-  /// remain resolved against the complete device viewport.
-  final EdgeInsets chromeSafeInsets;
-  final double commandBankTrailingReserve;
   final void Function(EditorAddRequest request, Offset center)? onAddDropped;
-  final EditorCanvasPreviewController? previewController;
-  final bool canUndo;
-  final bool canRedo;
-  final VoidCallback? onUndo;
-  final VoidCallback? onRedo;
+  final EditorCanvasController? controller;
   final bool snapEnabled;
-  final VoidCallback? onToggleSnap;
-  final bool soundEnabled;
-  final bool hapticsEnabled;
 
   @override
   State<EditorCanvas> createState() => _EditorCanvasState();
@@ -86,11 +64,13 @@ class EditorCanvas extends StatefulWidget {
 
 /// Maps global drag positions to target-scale preview bounds without making the
 /// catalogue depend on canvas layout internals.
-class EditorCanvasPreviewController {
+class EditorCanvasController {
   _EditorCanvasState? _state;
 
   Rect? previewRect(EditorAddRequest request, Offset globalPosition) =>
       _state?._unboundedPreviewRect(request, globalPosition);
+
+  void centerCamera() => _state?._center();
 
   void _attach(_EditorCanvasState state) => _state = state;
 
@@ -214,7 +194,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
   @override
   void initState() {
     super.initState();
-    widget.previewController?._attach(this);
+    widget.controller?._attach(this);
   }
 
   @override
@@ -225,15 +205,15 @@ class _EditorCanvasState extends State<EditorCanvas> {
         oldWidget.dashboard.id != widget.dashboard.id) {
       _center();
     }
-    if (oldWidget.previewController != widget.previewController) {
-      oldWidget.previewController?._detach(this);
-      widget.previewController?._attach(this);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?._detach(this);
+      widget.controller?._attach(this);
     }
   }
 
   @override
   void dispose() {
-    widget.previewController?._detach(this);
+    widget.controller?._detach(this);
     super.dispose();
   }
 
@@ -321,7 +301,6 @@ class _EditorCanvasState extends State<EditorCanvas> {
                       ),
                     ),
                   ),
-                _commandBank(palette),
               ],
             ),
           );
@@ -415,137 +394,6 @@ class _EditorCanvasState extends State<EditorCanvas> {
         ),
     ],
   );
-
-  Widget _commandBank(VfdPalette palette) => Positioned(
-    key: const ValueKey('editor-command-bank-position'),
-    left: widget.chromeSafeInsets.left + 8,
-    right:
-        widget.chromeSafeInsets.right + widget.commandBankTrailingReserve + 8,
-    bottom: widget.chromeSafeInsets.bottom + 8,
-    child: Align(
-      alignment: Alignment.bottomCenter,
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: PrismPanel(
-          key: const ValueKey('editor-command-bank'),
-          palette: palette,
-          surfaceOpacity: 0.88,
-          padding: EdgeInsets.all(_expandedCommandBank ? 7 : 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              _commandBay(
-                label: 'History',
-                palette: palette,
-                controls: <Widget>[
-                  _commandButton(
-                    key: const ValueKey('canvas-undo'),
-                    label: 'Undo',
-                    symbol: PrismSymbol.undo,
-                    lit: widget.canUndo,
-                    enabled: widget.canUndo,
-                    onPressed: widget.canUndo ? widget.onUndo : null,
-                    palette: palette,
-                  ),
-                  _commandButton(
-                    key: const ValueKey('canvas-redo'),
-                    label: 'Redo',
-                    symbol: PrismSymbol.redo,
-                    lit: widget.canRedo,
-                    enabled: widget.canRedo,
-                    onPressed: widget.canRedo ? widget.onRedo : null,
-                    palette: palette,
-                  ),
-                ],
-              ),
-              _bayDivider(palette),
-              _commandBay(
-                label: 'View',
-                palette: palette,
-                controls: <Widget>[
-                  _commandButton(
-                    key: const ValueKey('canvas-snap'),
-                    label: 'Snap',
-                    lit: widget.snapEnabled,
-                    selected: widget.snapEnabled,
-                    onPressed: widget.onToggleSnap,
-                    palette: palette,
-                  ),
-                  _commandButton(
-                    key: const ValueKey('canvas-center'),
-                    label: 'Center',
-                    onPressed: _center,
-                    palette: palette,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-
-  Widget _commandBay({
-    required String label,
-    required VfdPalette palette,
-    required List<Widget> controls,
-  }) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: <Widget>[
-      if (_expandedCommandBank) ...<Widget>[
-        VfdLegend(label, palette: palette, size: 8),
-        const SizedBox(height: 2),
-      ],
-      Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          for (var index = 0; index < controls.length; index++) ...<Widget>[
-            if (index > 0) SizedBox(width: _expandedCommandBank ? 5 : 3),
-            controls[index],
-          ],
-        ],
-      ),
-    ],
-  );
-
-  Widget _bayDivider(VfdPalette palette) => SizedBox(
-    width: _expandedCommandBank ? 11 : 7,
-    height: _expandedCommandBank ? 44 : 34,
-    child: Center(
-      child: SizedBox(
-        width: 1,
-        height: _expandedCommandBank ? 40 : 30,
-        child: ColoredBox(color: palette.unlit.withValues(alpha: 0.34)),
-      ),
-    ),
-  );
-
-  Widget _commandButton({
-    required Key key,
-    required String label,
-    required VfdPalette palette,
-    required VoidCallback? onPressed,
-    PrismSymbol? symbol,
-    bool lit = false,
-    bool selected = false,
-    bool enabled = true,
-  }) => PrismButton(
-    key: key,
-    label: label,
-    symbol: symbol,
-    palette: palette,
-    role: _expandedCommandBank ? PrismRole.standard : PrismRole.compact,
-    style: widget.dashboard.settings.prismStyle,
-    soundEnabled: widget.soundEnabled,
-    hapticsEnabled: widget.hapticsEnabled,
-    lit: lit,
-    selected: selected,
-    enabled: enabled,
-    onPressed: onPressed,
-  );
-
-  bool get _expandedCommandBank => MediaQuery.sizeOf(context).width >= 600;
 
   String _frameLabel() {
     if (!widget.editable) return 'Inherited · read only';

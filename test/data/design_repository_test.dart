@@ -28,7 +28,17 @@ void main() {
 
     final fork = first.forkPreset(source, at: DateTime.utc(2026, 7, 27, 12));
     first.updateActiveComponentParam(ComponentTypes.speedDigits, 'digits', 2);
-    first.updateGlobalSettings(const GlobalSettings(soundEnabled: false));
+    first.updateGlobalSettings(
+      const GlobalSettings(
+        soundEnabled: false,
+        editorDock: EditorDockPreferences(
+          landscape: EditorDockPlacement(
+            edge: EditorDockEdge.right,
+            alignment: 0.25,
+          ),
+        ),
+      ),
+    );
     await first.flush();
 
     final restored = AnodeState.load(
@@ -44,6 +54,10 @@ void main() {
       2,
     );
     expect(restored.globalSettings.soundEnabled, isFalse);
+    expect(
+      restored.globalSettings.editorDock.landscape,
+      const EditorDockPlacement(edge: EditorDockEdge.right, alignment: 0.25),
+    );
   });
 
   test('activating a preset does not create a dashboard', () async {

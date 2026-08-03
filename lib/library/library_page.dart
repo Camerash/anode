@@ -206,6 +206,11 @@ class _LibraryPageState extends State<LibraryPage> {
             renderAssets: widget.renderAssets,
             soundEnabled: widget.state.globalSettings.soundEnabled,
             hapticsEnabled: widget.state.globalSettings.hapticsEnabled,
+            dockPreferences: widget.state.globalSettings.editorDock,
+            onDockPreferencesChanged: (preferences) =>
+                widget.state.updateGlobalSettings(
+                  widget.state.globalSettings.copyWith(editorDock: preferences),
+                ),
             onChanged: widget.state.updateDashboard,
           ),
         ),

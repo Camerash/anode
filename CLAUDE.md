@@ -446,7 +446,8 @@ participates in runtime fitting.
   optical overrides.
 - Per-dashboard: primary/alternate layouts, baseline `OpticalProfile`, and
   `PrismStyle`.
-- App-wide: sound, haptics, accessibility, demo mode, and renderer quality only.
+- App-wide: sound, haptics, accessibility, demo mode, renderer quality, and
+  portrait/landscape editor dock placement.
 
 ### Build order
 
@@ -493,22 +494,36 @@ Fixed frames always scale uniformly and letterbox. Editor service chrome may
 reduce available preview space, but it must recompute the same contain fit; it
 never changes authored coordinates or frame aspect.
 
-### Config UI is in the VFD idiom
+### Config UI has stable structure and skin-defined appearance
 
-Every user-facing control surface — editor, Library, and Settings — is drawn
-in the tube's visual language, not Material's. A stock switch or a filled chip
-sitting on the substrate breaks the illusion exactly the way a crisp vector gear
-does, and these surfaces sit directly on top of the render.
+Familiar modern hierarchy is allowed and preferred when it makes editing more
+predictable. Layout, semantics, safe-area behavior, accessibility, and
+interaction remain stable across interface skins. Materials, typography,
+colour, motion, backgrounds, and cutout treatment are skin-defined. VFD is the
+first skin; planned families include Outrun, Cyberpunk, and Vintage Orange.
+
+`EditorChromeSkin` is the editor-shell boundary. Header, command dock, and
+Console shell request semantic surfaces and controls from it; they must not
+directly construct VFD or Prism widgets. It never owns authored renderer
+geometry. A design skin is also distinct from `OpticalProfile`, which controls
+tube rendering, and VFD-specific `PrismStyle`, which controls Prism material.
+Do not add a dashboard schema field for editor skin selection until multiple
+skins exist.
+
+Current VFD-skinned user-facing controls are drawn in the tube's visual
+language, not Material's. A stock switch or filled chip sitting on substrate
+breaks the illusion exactly as a crisp vector gear does.
 
 - The primary control primitive is the **Prism button**: smoked acrylic with a
-  dark face, an integrated recessed mounting socket, thin transparent chamfer,
+  dense translucent face, narrow elastomer mounting gasket, transparent chamfer,
   hard neutral perimeter reflections, and visible extrusion. It comes from
   moulded automotive switchgear, not generic frosted-glass or glassmorphism UI.
 - Enabled and pressed are independent states. An active button rests raised and
   lit; an inactive button rests raised and dark; pointer-down depresses either
-  one temporarily. Only the cap translates by seven percent of its height; the
-  socket and layout never scale or move. Reduced-motion mode applies the same
-  state immediately.
+  one temporarily. Press scales the cap inward around its fixed centre, narrows
+  its bevel, weakens top reflection, and tightens its perimeter contact shadow;
+  no directional translation occurs. Reduced-motion mode applies the same state
+  immediately.
 - The active light follows the dashboard phosphor colour. Component optical
   overrides never recolour the surrounding panel. Illumination belongs to the
   backlit legend plus a faint internal diffuser wash; no status dot and no
@@ -522,7 +537,7 @@ does, and these surfaces sit directly on top of the render.
   commands. Draw them with first-party Prism geometry and keep their word
   labels as accessibility names. Current symbol set: undo and redo.
 - A physical Prism cap has one immutable legend. A binary control names the
-  asserted state (`FULL`, `OVERRIDE`, `VISIBLE`, `RUN`); illumination says
+  asserted state (`OVERRIDE`, `VISIBLE`, `RUN`); illumination says
   whether that state is active. It never swaps to `EXIT`, `INHERIT`, `HIDDEN`,
   or `HOLD` when dark. Multi-choice state uses separate fixed-label keys, such
   as `KM/H` and `MPH`, rather than one cap whose print changes. Momentary
@@ -674,9 +689,9 @@ depth already rules out accidental entry.
 
 Editing needs persistent chrome that tuning does not, so it gets a dedicated
 screen: a contain-fit authored canvas plus a contextual inspector. On
-entry, current window orientation is previewed. The top switch chooses portrait
-or landscape viewport. If no matching alternate exists, it shows the contained
-primary read-only and offers explicit creation.
+entry, current window orientation is previewed. Portrait/landscape selection
+lives in Console's DESIGN section. If no matching alternate exists, it shows
+the contained primary read-only and offers explicit creation.
 
 The editor canvas is the one place visible frame edges are correct. Its outer
 boundary is the complete runtime device envelope; the fixed authored frame is
@@ -693,14 +708,28 @@ active. It never enters dashboard state or survives drag end.
 Selection chrome may be lifted above the canvas so handles remain reachable;
 this does not change component list order or runtime z-order.
 
-The 48px top rail contains only `BACK`, dashboard identity, and orientation.
-Every other control lives in one manually latched service bay. Its edge follows
-the current route window, never the preview orientation: `height > width` pushes
-from the bottom; `width >= height` pushes from the right. Opening it reduces
-available preview bounds, then
-re-contain-fits the same authored frame. It never changes authored coordinates,
-fixed aspect, or element size. The closed bay leaves a compact Prism `PANEL`
-latch. Its permanent legend stays unchanged; illumination means open.
+The full-width editor header starts at the physical top and overlays the
+full-viewport canvas. Its fixed 48px control band sits below any top safe inset;
+left and right controls also remain inside physical safe bounds. Order is
+`BACK`, truncated dashboard name, flexible space, then `CONSOLE`. Header owns
+pointer input, so drops over it never edit the canvas. Console illumination
+means its drawer is open.
+
+Console edge follows the route window, never preview orientation: portrait
+pushes from bottom; landscape pushes from right. Opening it reduces available
+preview bounds and re-contain-fits the same authored frame without changing
+authored coordinates, fixed aspect, or element size. Drawer mechanism owns only
+aperture and travel; `EditorChromeSkin` owns its surface and safe padding.
+
+Undo, Redo, Snap, and Center live in one movable command dock. Its six-dot
+handle is the only drag target. Dock may attach to left, right, or bottom, never
+top; it touches its edge while controls remain inside safe bounds. Placement is
+continuous and normalized along that edge, persisted app-wide independently for
+portrait and landscape windows. Defaults are left-centre in portrait and
+bottom-centre in landscape. When Console opens on the dock's edge, the dock
+follows the animated remaining-canvas boundary without changing saved
+placement. Structure belongs to `EditorCommandDock`; material belongs to
+`EditorChromeSkin`.
 
 There is no camera mode switch. One pointer gesture is resolved at pointer-down
 by explicit hit-testing against known screen-space rects, topmost first, corner
@@ -714,11 +743,10 @@ before edges:
   element, and the placement freezes at the value it had when the second pointer
   landed.
 
-Camera scale is clamped 1×–4×; `FIT` restores identity. Camera transforms never
+Camera scale is clamped 0.5×–4×; `CENTER` restores identity. Camera transforms never
 write placement.
 
-Canvas controls are `ADD`, `SNAP`, `FIT`, and `FULL`. `ADD` opens a dedicated
-catalogue, outside the contextual inspector. Catalogue rows come from component
+`ADD` lives inside Console and opens its dedicated catalogue. Catalogue rows come from component
 registry metadata and use fixed mechanical pages, never kinetic scrolling. The
 catalogue has one selected-item cradle with its only live VFD preview; tapping a
 row changes that preview without adding anything. Dragging a row directly onto
@@ -732,9 +760,8 @@ ghost never enters dashboard state and disappears on drop, cancel, or drag end.
 Dropping a module creates an independently placeable tube region. The drag
 target remains disabled for inherited read-only layouts.
 
-`SNAP` is illuminated and active
-by default, lives only for the editor session, and survives preview/full-screen
-switches. It affects component and module drag/resize only. A gesture quantizes
+`SNAP` is illuminated and active by default and lives only for the editor
+session. It affects component and module drag/resize only. A gesture quantizes
 its total design-space delta to `0.1` relative to the pointer-down placement,
 so toggling SNAP never mutates existing off-grid geometry. With SNAP dark,
 movement and resize are fully continuous. Selection chrome always derives from
@@ -756,11 +783,6 @@ transform, so a handle stays a constant 44px at any zoom and the hit test never
 has to undo the transform. The overlay paints and carries semantics; it does not
 consume pointer events. It never prints the selected element's name inside the
 frame; PART owns that identity label.
-
-`FULL` hides the rail and the service bay and gives the canvas the whole route,
-so the render is at exactly runtime scale. Selection, drag, resize and camera all
-keep working. It is a state flag, not a route, so selection and the render
-controller survive entering and leaving it.
 
 Right, bottom, and bottom-right resize handles retain small visual grips but
 have 44x44 touch regions, straddling the border they resize rather than sitting
@@ -784,11 +806,11 @@ or camera zoom, so imported geometry edits remain deterministic across devices.
 The canvas is the only inventory and selection surface. There is no RACK,
 duplicate element list, visibility key, or reorder key. Z-order remains implicit
 list order until overlap proves a real need. Selected PART and non-main MODULE
-panels expose one always-lit red `REMOVE` key and remove immediately. The canvas
-top-right carries editor-local `UNDO` and `REDO` keys for authored dashboard
-changes. A move or resize emits live placement updates but commits exactly one
-history entry when its pointer lifts. Drawer, selection, camera, SNAP, and
-other editor-session state stay outside this history.
+panels expose one always-lit red `REMOVE` key and remove immediately. The command
+dock carries editor-local `UNDO` and `REDO` keys for authored dashboard changes.
+A move or resize emits live placement updates but commits exactly one history
+entry when its pointer lifts. Drawer, selection, camera, SNAP, dock placement,
+and other editor-session state stay outside this history.
 
 PART shows the selected component name followed by list-like control rows:
 variant, module, optional action, then generic component params. Boolean,

@@ -220,11 +220,6 @@ void main() {
                   open: open,
                   edge: MechanicalDrawerEdge.right,
                   extent: 180,
-                  palette: palette,
-                  prismStyle: const PrismStyle(),
-                  soundEnabled: false,
-                  hapticsEnabled: false,
-                  onOpenChanged: (value) => rebuild(() => open = value),
                   contentBuilder: (context, progress) =>
                       const SizedBox(key: ValueKey('drawer-content')),
                   drawer: const Text('DRAWER'),
@@ -240,15 +235,10 @@ void main() {
       tester.getSize(find.byKey(const ValueKey('drawer-content'))).width,
       500,
     );
-    expect(find.text('PANEL'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    expect(find.byKey(const ValueKey('mechanical-drawer-latch')), findsNothing);
+    rebuild(() => open = true);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
-    final latch = tester.widget<PrismButton>(
-      find.byKey(const ValueKey('mechanical-drawer-latch')),
-    );
-    expect(latch.label, 'Panel');
-    expect(latch.lit, isTrue);
     expect(
       tester.getSize(find.byKey(const ValueKey('drawer-content'))).width,
       320,

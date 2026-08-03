@@ -6,6 +6,7 @@ import 'package:anode/editor/editor_page.dart';
 import 'package:anode/model/dashboard.dart';
 import 'package:anode/model/dev_design.dart';
 import 'package:anode/model/placement.dart';
+import 'package:anode/model/settings.dart';
 import 'package:anode/platform/physical_interface_orientation.dart';
 import 'package:anode/vfd/prism_widgets.dart';
 import 'package:anode/vfd/vfd_widgets.dart';
@@ -35,7 +36,7 @@ void main() {
       _canvasAspect(tester, key: const ValueKey('editor-authored-frame')),
       closeTo(2.6, 0.001),
     );
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.tap(find.byKey(const ValueKey('editor-console')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     await tester.tap(find.byKey(const ValueKey('orientation-portrait')));
@@ -71,7 +72,7 @@ void main() {
       canvasBefore,
     );
 
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.tap(find.byKey(const ValueKey('editor-console')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     expect(
@@ -94,7 +95,10 @@ void main() {
     expect(find.text('INHERITED · READ ONLY'), findsOneWidget);
     final frame = find.byKey(const ValueKey('editor-canvas'));
     final before = tester.getCenter(frame);
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    final dockBefore = tester.getCenter(
+      find.byKey(const ValueKey('editor-command-dock')),
+    );
+    await tester.tap(find.byKey(const ValueKey('editor-console')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     final add = tester.widget<PrismButton>(
@@ -103,14 +107,13 @@ void main() {
     expect(add.enabled, isFalse);
     expect(add.onPressed, isNull);
     final after = tester.getCenter(frame);
-    final console = tester.getRect(
-      find.byKey(const ValueKey('mechanical-drawer-latch')),
+    final dockAfter = tester.getCenter(
+      find.byKey(const ValueKey('editor-command-dock')),
     );
-    final center = tester.getRect(find.byKey(const ValueKey('canvas-center')));
 
     expect(after.dy, lessThan(before.dy));
     expect(_canvasAspect(tester), closeTo(393 / 852, 0.002));
-    expect((console.center.dy - center.center.dy).abs(), lessThanOrEqualTo(12));
+    expect(dockAfter.dy, lessThan(dockBefore.dy));
   });
 
   testWidgets('drag and edge resize update displayed orientation only', (
@@ -387,7 +390,7 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.tap(find.byKey(const ValueKey('editor-console')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     await tester.tap(find.byKey(const ValueKey('create-layout')));
@@ -484,14 +487,10 @@ void main() {
 
       await tester.dragFrom(const Offset(140, 20), const Offset(40, 30));
       await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('canvas-center')));
+      harness.controller.centerCamera();
       await tester.pump();
 
       expect(tester.getRect(frame), before);
-      expect(
-        tester.getSemantics(find.byKey(const ValueKey('canvas-center'))).label,
-        contains('Center'),
-      );
       expect(harness.placementOf('speed'), same(harness.initialSpeedPlacement));
     });
 
@@ -570,7 +569,7 @@ void main() {
     expect(frame.size, viewport);
   });
 
-  testWidgets('document binnacle leaves center open to canvas gestures', (
+  testWidgets('full-width header owns its band and dock stays compact', (
     tester,
   ) async {
     const viewport = Size(874, 402);
@@ -589,38 +588,35 @@ void main() {
     final layer = tester.getRect(
       find.byKey(const ValueKey('editor-header-layer')),
     );
-    final leftHousing = find.byKey(
-      const ValueKey('editor-header-left-housing'),
-    );
-    final commandBank = find.byKey(const ValueKey('editor-command-bank'));
+    final commandDock = find.byKey(const ValueKey('editor-command-dock'));
     expect(layer, const Rect.fromLTWH(0, 0, 874, 48));
-    expect(tester.getRect(leftHousing).right, lessThan(viewport.width / 2));
-    expect(tester.widget<PrismPanel>(leftHousing).surfaceOpacity, 0.88);
     expect(
-      find.byKey(const ValueKey('editor-header-right-housing')),
-      findsNothing,
+      tester
+          .widget<PrismPanel>(find.byKey(const ValueKey('editor-header-layer')))
+          .surfaceOpacity,
+      0.94,
     );
-    expect(tester.widget<PrismPanel>(commandBank).surfaceOpacity, 0.88);
+    expect(tester.widget<PrismPanel>(commandDock).surfaceOpacity, 0.90);
     expect(
-      tester.getRect(commandBank).bottom,
+      tester.getRect(commandDock).bottom,
       lessThanOrEqualTo(viewport.height),
     );
-    expect(find.text('HISTORY'), findsOneWidget);
+    expect(find.text('HISTORY'), findsNothing);
     expect(find.text('BUILD'), findsNothing);
-    expect(find.text('VIEW'), findsOneWidget);
+    expect(find.text('VIEW'), findsNothing);
     expect(find.text('SNAP'), findsOneWidget);
     expect(find.text('CENTER'), findsOneWidget);
     expect(find.byKey(const ValueKey('canvas-add')), findsNothing);
     expect(
       find.descendant(
-        of: commandBank,
+        of: commandDock,
         matching: find.byKey(const ValueKey('orientation-portrait')),
       ),
       findsNothing,
     );
     expect(
       find.descendant(
-        of: commandBank,
+        of: commandDock,
         matching: find.byKey(const ValueKey('orientation-landscape')),
       ),
       findsNothing,
@@ -659,11 +655,13 @@ void main() {
     expect(title.text, dashboard.name);
     expect(
       tester
-          .widget<PrismButton>(
-            find.byKey(const ValueKey('mechanical-drawer-latch')),
-          )
+          .widget<PrismButton>(find.byKey(const ValueKey('editor-console')))
           .label,
       'Console',
+    );
+    expect(
+      tester.getRect(find.byKey(const ValueKey('editor-console'))).right,
+      closeTo(viewport.width - 4, 0.001),
     );
 
     final frame = find.byKey(const ValueKey('editor-canvas'));
@@ -675,8 +673,53 @@ void main() {
     await gesture.up();
     await tester.pump();
     final after = tester.getRect(frame);
-    expect(after.left, closeTo(before.left + 30, 0.001));
-    expect(after.top, closeTo(before.top + 20, 0.001));
+    expect(after, before);
+  });
+
+  testWidgets('dock handle snaps continuously and persists on release', (
+    tester,
+  ) async {
+    const viewport = Size(874, 402);
+    await _setViewport(tester, viewport);
+    EditorDockPreferences? changed;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorPage(
+          dashboard: Dashboard.forkFrom(developmentPreset(), id: 'editor'),
+          dockPreferences: const EditorDockPreferences(),
+          onDockPreferencesChanged: (value) => changed = value,
+          onChanged: (_) {},
+        ),
+      ),
+    );
+
+    final dock = find.byKey(const ValueKey('editor-command-dock'));
+    expect(tester.getRect(dock).bottom, viewport.height);
+    final handle = find.byKey(const ValueKey('editor-dock-handle'));
+    final gesture = await tester.startGesture(tester.getCenter(handle));
+    await gesture.moveTo(const Offset(8, 230));
+    await tester.pump();
+    expect(changed, isNull);
+    await gesture.up();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 160));
+
+    expect(changed, isNotNull);
+    expect(changed!.landscape.edge, EditorDockEdge.left);
+    expect(changed!.landscape.alignment, closeTo(0.52, 0.08));
+    expect(tester.getRect(dock).left, 0);
+    expect(
+      tester.getRect(find.byKey(const ValueKey('canvas-undo'))).top,
+      lessThan(tester.getRect(find.byKey(const ValueKey('canvas-center'))).top),
+    );
+
+    changed = null;
+    await tester.drag(
+      find.byKey(const ValueKey('canvas-snap')),
+      const Offset(120, 0),
+    );
+    await tester.pump();
+    expect(changed, isNull);
   });
 
   testWidgets('portrait editor surfaces bleed while chrome stays safe', (
@@ -715,33 +758,21 @@ void main() {
     expect(environment.right, viewport.width);
     expect(environment.bottom, viewport.height);
     expect(
-      tester.getRect(find.byKey(const ValueKey('canvas-center'))).bottom,
-      lessThanOrEqualTo(viewport.height - safeInsets.bottom),
+      tester.getRect(find.byKey(const ValueKey('editor-console'))).top,
+      greaterThanOrEqualTo(safeInsets.top),
     );
     expect(
-      tester
-          .getRect(find.byKey(const ValueKey('mechanical-drawer-latch')))
-          .bottom,
-      lessThanOrEqualTo(viewport.height - safeInsets.bottom),
+      tester.getRect(find.byKey(const ValueKey('editor-console'))).right,
+      lessThanOrEqualTo(viewport.width - safeInsets.right),
     );
-    final portraitConsole = tester.getRect(
-      find.byKey(const ValueKey('mechanical-drawer-latch')),
+    final dock = tester.getRect(
+      find.byKey(const ValueKey('editor-command-dock')),
     );
-    final portraitCenter = tester.getRect(
-      find.byKey(const ValueKey('canvas-center')),
-    );
-    expect(
-      (portraitConsole.center.dy - portraitCenter.center.dy).abs(),
-      lessThanOrEqualTo(12),
-    );
-    expect(
-      portraitConsole.right,
-      closeTo(viewport.width - safeInsets.right - 8, 0.001),
-    );
-    expect(
-      tester.getRect(find.byKey(const ValueKey('editor-command-bank'))).right,
-      lessThanOrEqualTo(portraitConsole.left),
-    );
+    final undo = tester.getRect(find.byKey(const ValueKey('canvas-undo')));
+    final center = tester.getRect(find.byKey(const ValueKey('canvas-center')));
+    expect(dock.left, 0);
+    expect(undo.left, greaterThanOrEqualTo(safeInsets.left));
+    expect(undo.top, lessThan(center.top));
 
     final frame = tester.getRect(find.byKey(const ValueKey('editor-canvas')));
     expect(frame.left, closeTo(0, 0.001));
@@ -752,7 +783,7 @@ void main() {
       greaterThanOrEqualTo(header.bottom),
     );
     expect(
-      tester.getRect(find.byKey(const ValueKey('canvas-center'))).bottom,
+      center.bottom,
       lessThanOrEqualTo(viewport.height - safeInsets.bottom),
     );
     expect(find.byKey(const ValueKey('canvas-full')), findsNothing);
@@ -803,28 +834,16 @@ void main() {
       lessThanOrEqualTo(viewport.width - safeInsets.right),
     );
     expect(
-      tester
-          .getRect(find.byKey(const ValueKey('mechanical-drawer-latch')))
-          .right,
+      tester.getRect(find.byKey(const ValueKey('editor-console'))).right,
       lessThanOrEqualTo(viewport.width - safeInsets.right),
     );
-    final landscapeConsole = tester.getRect(
-      find.byKey(const ValueKey('mechanical-drawer-latch')),
+    final landscapeDock = tester.getRect(
+      find.byKey(const ValueKey('editor-command-dock')),
     );
-    final landscapeCenter = tester.getRect(
-      find.byKey(const ValueKey('canvas-center')),
-    );
+    expect(landscapeDock.bottom, viewport.height);
     expect(
-      (landscapeConsole.center.dy - landscapeCenter.center.dy).abs(),
-      lessThanOrEqualTo(12),
-    );
-    expect(
-      landscapeConsole.right,
-      closeTo(viewport.width - safeInsets.right - 8, 0.001),
-    );
-    expect(
-      tester.getRect(find.byKey(const ValueKey('editor-command-bank'))).right,
-      lessThanOrEqualTo(landscapeConsole.left),
+      tester.getRect(find.byKey(const ValueKey('canvas-center'))).bottom,
+      lessThanOrEqualTo(viewport.height - safeInsets.bottom),
     );
 
     final closedLeftBoundary = tester.getRect(
@@ -836,7 +855,7 @@ void main() {
     final closedLeftFrame = tester.getRect(
       find.byKey(const ValueKey('editor-authored-frame')),
     );
-    final latch = find.byKey(const ValueKey('mechanical-drawer-latch'));
+    final latch = find.byKey(const ValueKey('editor-console'));
     await tester.tap(latch);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 90));
@@ -860,21 +879,9 @@ void main() {
     expect(openLeftFrame.left, greaterThanOrEqualTo(safeInsets.left));
     expect(openLeftBoundary.left, greaterThanOrEqualTo(safeInsets.left));
     expect(openLeftBoundary.right, lessThan(viewport.width));
-    final openLandscapeConsole = tester.getRect(latch);
-    final openLandscapeCenter = tester.getRect(
-      find.byKey(const ValueKey('canvas-center')),
-    );
     expect(
-      (openLandscapeConsole.center.dy - openLandscapeCenter.center.dy).abs(),
-      lessThanOrEqualTo(12),
-    );
-    expect(
-      openLandscapeConsole.right,
-      closeTo(openLeftBoundary.right - safeInsets.right - 8, 0.001),
-    );
-    expect(
-      tester.getRect(find.byKey(const ValueKey('editor-command-bank'))).right,
-      lessThanOrEqualTo(openLandscapeConsole.left),
+      tester.getRect(find.byKey(const ValueKey('editor-command-dock'))).right,
+      lessThanOrEqualTo(openLeftBoundary.right),
     );
 
     final drawerEnvironment = tester.getRect(
@@ -1001,7 +1008,6 @@ void main() {
           orientation: DesignOrientation.landscape,
           deviceViewportSize: const Size(900, 500),
           frameInset: EdgeInsets.zero,
-          chromeSafeInsets: safeInsets,
           selectedId: 'speed',
           onSelect: (_) {},
           onPlacementChanged: (_, placement) => resized = placement,
@@ -1035,7 +1041,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.tap(find.byKey(const ValueKey('editor-console')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     await tester.tap(find.byKey(const ValueKey('console-add')));
@@ -1092,7 +1098,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.tap(find.byKey(const ValueKey('editor-console')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     await tester.tap(find.byKey(const ValueKey('editor-service-section-look')));
@@ -1132,7 +1138,7 @@ void main() {
       warnIfMissed: false,
     );
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.tap(find.byKey(const ValueKey('editor-console')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
 
@@ -1260,7 +1266,7 @@ void main() {
         warnIfMissed: false,
       );
       await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+      await tester.tap(find.byKey(const ValueKey('editor-console')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 180));
 
@@ -1389,7 +1395,7 @@ void main() {
     );
     expect(dashboard.toJson().toString(), before);
 
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.tap(find.byKey(const ValueKey('editor-console')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     await tester.tap(find.byKey(const ValueKey('orientation-portrait')));
@@ -1426,7 +1432,7 @@ void main() {
       warnIfMissed: false,
     );
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.tap(find.byKey(const ValueKey('editor-console')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     await tester.tap(
@@ -1477,7 +1483,7 @@ void main() {
       );
       final content = find.byKey(const ValueKey('mechanical-drawer-content'));
       final before = tester.getSize(content);
-      await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+      await tester.tap(find.byKey(const ValueKey('editor-console')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 180));
       await tester.tap(find.byKey(ValueKey('orientation-${preview.name}')));
@@ -1530,7 +1536,7 @@ void main() {
         ),
       );
       expect(tester.takeException(), isNull, reason: 'closed at $size');
-      await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+      await tester.tap(find.byKey(const ValueKey('editor-console')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 180));
       expect(tester.takeException(), isNull, reason: 'open at $size');
@@ -1542,6 +1548,7 @@ class _CanvasHarness {
   _CanvasHarness(this.dashboard);
   Dashboard dashboard;
   String? selected;
+  final EditorCanvasController controller = EditorCanvasController();
   late final Placement initialSpeedPlacement = dashboard.components
       .firstWhere((c) => c.id == 'speed')
       .placements[DesignOrientation.landscape]!;
@@ -1572,6 +1579,7 @@ Future<_CanvasHarness> _pumpCanvas(
             dashboard: harness.dashboard,
             orientation: DesignOrientation.landscape,
             deviceViewportSize: const Size(900, 500),
+            controller: harness.controller,
             selectedId: selectedId,
             onSelect: (id) => harness.selected = id,
             onPlacementChanged: (id, placement) => rebuild(() {

@@ -258,6 +258,28 @@ void main() {
     },
   );
 
+  test('editor dock preferences serialize directly and clamp alignment', () {
+    final settings = GlobalSettings.fromJson(<String, Object?>{
+      'editorDock': <String, Object?>{
+        'portrait': <String, Object?>{'edge': 'right', 'alignment': -2},
+        'landscape': <String, Object?>{'edge': 'left', 'alignment': 2},
+      },
+    });
+
+    expect(
+      settings.editorDock.portrait,
+      const EditorDockPlacement(edge: EditorDockEdge.right, alignment: 0),
+    );
+    expect(
+      settings.editorDock.landscape,
+      const EditorDockPlacement(edge: EditorDockEdge.left, alignment: 1),
+    );
+    expect(
+      GlobalSettings.fromJson(settings.toJson()).editorDock,
+      settings.editorDock,
+    );
+  });
+
   test('authoring registry keeps unsupported platform actions visible', () {
     final registry = ActionRegistry.forAuthoring();
 
