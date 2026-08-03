@@ -1,5 +1,3 @@
-import 'dart:ui' show SemanticsAction;
-
 import 'package:anode/app_state.dart';
 import 'package:anode/data/design_repository.dart';
 import 'package:anode/editor/editor_page.dart';
@@ -97,7 +95,7 @@ void main() {
       matchesGoldenFile('baselines/editor_part_register.png'),
     );
 
-    await tester.tap(find.byKey(const ValueKey('canvas-add')));
+    await tester.tap(find.byKey(const ValueKey('console-add')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     await expectLater(
@@ -336,12 +334,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
-    final sections = tester.getSemantics(
-      find.bySemanticsLabel('Editor service section'),
+    await tester.tap(
+      find.byKey(const ValueKey('editor-service-section-place')),
     );
-    sections.owner!.performAction(sections.id, SemanticsAction.increase);
-    await tester.pump();
-    await tester.tap(find.text('PLACE'));
     await tester.pump();
     await expectLater(
       find.byKey(const ValueKey('surface')),

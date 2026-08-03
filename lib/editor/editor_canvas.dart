@@ -34,7 +34,6 @@ class EditorCanvas extends StatefulWidget {
     this.frameInset = EdgeInsets.zero,
     this.chromeSafeInsets = EdgeInsets.zero,
     this.commandBankBottomInset = 0,
-    this.onAddRequested,
     this.onAddDropped,
     this.previewController,
     this.canUndo = false,
@@ -43,7 +42,6 @@ class EditorCanvas extends StatefulWidget {
     this.onRedo,
     this.snapEnabled = true,
     this.onToggleSnap,
-    this.onPreviewOrientationChanged,
     this.soundEnabled = true,
     this.hapticsEnabled = true,
   });
@@ -71,7 +69,6 @@ class EditorCanvas extends StatefulWidget {
   /// remain resolved against the complete device viewport.
   final EdgeInsets chromeSafeInsets;
   final double commandBankBottomInset;
-  final VoidCallback? onAddRequested;
   final void Function(EditorAddRequest request, Offset center)? onAddDropped;
   final EditorCanvasPreviewController? previewController;
   final bool canUndo;
@@ -80,7 +77,6 @@ class EditorCanvas extends StatefulWidget {
   final VoidCallback? onRedo;
   final bool snapEnabled;
   final VoidCallback? onToggleSnap;
-  final ValueChanged<DesignOrientation>? onPreviewOrientationChanged;
   final bool soundEnabled;
   final bool hapticsEnabled;
 
@@ -227,7 +223,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
     if (oldWidget.orientation != widget.orientation ||
         oldWidget.previewOrientation != widget.previewOrientation ||
         oldWidget.dashboard.id != widget.dashboard.id) {
-      _fit();
+      _center();
     }
     if (oldWidget.previewController != widget.previewController) {
       oldWidget.previewController?._detach(this);
@@ -463,16 +459,9 @@ class _EditorCanvasState extends State<EditorCanvas> {
               ),
               _bayDivider(palette),
               _commandBay(
-                label: 'Build',
+                label: 'View',
                 palette: palette,
                 controls: <Widget>[
-                  if (widget.onAddRequested != null)
-                    _commandButton(
-                      key: const ValueKey('canvas-add'),
-                      label: 'Add',
-                      onPressed: widget.editable ? widget.onAddRequested : null,
-                      palette: palette,
-                    ),
                   _commandButton(
                     key: const ValueKey('canvas-snap'),
                     label: 'Snap',
@@ -481,40 +470,12 @@ class _EditorCanvasState extends State<EditorCanvas> {
                     onPressed: widget.onToggleSnap,
                     palette: palette,
                   ),
-                ],
-              ),
-              _bayDivider(palette),
-              _commandBay(
-                label: 'View',
-                palette: palette,
-                controls: <Widget>[
                   _commandButton(
-                    key: const ValueKey('canvas-fit'),
-                    label: 'Fit view',
-                    symbol: PrismSymbol.fit,
-                    onPressed: _fit,
+                    key: const ValueKey('canvas-center'),
+                    label: 'Center',
+                    onPressed: _center,
                     palette: palette,
                   ),
-                  for (final orientation in DesignOrientation.values)
-                    _commandButton(
-                      key: ValueKey('orientation-${orientation.name}'),
-                      label: orientation.name,
-                      symbol: orientation == DesignOrientation.portrait
-                          ? PrismSymbol.portrait
-                          : PrismSymbol.landscape,
-                      lit:
-                          orientation ==
-                          (widget.previewOrientation ?? widget.orientation),
-                      selected:
-                          orientation ==
-                          (widget.previewOrientation ?? widget.orientation),
-                      onPressed: widget.onPreviewOrientationChanged == null
-                          ? null
-                          : () => widget.onPreviewOrientationChanged!(
-                              orientation,
-                            ),
-                      palette: palette,
-                    ),
                 ],
               ),
             ],
@@ -934,7 +895,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
     snapStep: widget.snapEnabled ? editorSnapStep : null,
   );
 
-  void _fit() {
+  void _center() {
     if (!mounted) return;
     setState(() {
       _cameraScale = 1;

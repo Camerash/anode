@@ -27,6 +27,7 @@ class MechanicalPushDrawer extends StatefulWidget {
     required this.onOpenChanged,
     required this.contentBuilder,
     required this.drawer,
+    this.latchLabel = 'Panel',
     this.chromeInsets = EdgeInsets.zero,
     this.soundEnabled = true,
     this.hapticsEnabled = true,
@@ -40,6 +41,7 @@ class MechanicalPushDrawer extends StatefulWidget {
   final ValueChanged<bool> onOpenChanged;
   final MechanicalDrawerContentBuilder contentBuilder;
   final Widget drawer;
+  final String latchLabel;
 
   /// Workspace-local bounds reserved for safe, readable chrome.
   final EdgeInsets chromeInsets;
@@ -230,7 +232,7 @@ class _MechanicalPushDrawerState extends State<MechanicalPushDrawer>
             height: 44,
             child: PrismButton(
               key: const ValueKey('mechanical-drawer-latch'),
-              label: 'Panel',
+              label: widget.latchLabel,
               palette: widget.palette,
               lit: widget.open,
               selected: widget.open,

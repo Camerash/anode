@@ -52,32 +52,6 @@ void main() {
     }
   });
 
-  test('Prism fit geometry stamps four corners around an open centre', () {
-    const size = Size(24, 18);
-    final fit = PrismSymbolGeometry.path(PrismSymbol.fit, size);
-
-    expect(fit.contains(const Offset(3, 2)), isTrue);
-    expect(fit.contains(const Offset(21, 2)), isTrue);
-    expect(fit.contains(const Offset(3, 16)), isTrue);
-    expect(fit.contains(const Offset(21, 16)), isTrue);
-    expect(fit.contains(const Offset(12, 9)), isFalse);
-  });
-
-  test('Prism orientation symbols retain distinct stamped silhouettes', () {
-    const size = Size(24, 18);
-    final portrait = PrismSymbolGeometry.path(PrismSymbol.portrait, size);
-    final landscape = PrismSymbolGeometry.path(PrismSymbol.landscape, size);
-
-    expect(
-      portrait.getBounds().height,
-      greaterThan(portrait.getBounds().width),
-    );
-    expect(
-      landscape.getBounds().width,
-      greaterThan(landscape.getBounds().height),
-    );
-  });
-
   testWidgets('Prism symbols hide text and retain command semantics', (
     tester,
   ) async {

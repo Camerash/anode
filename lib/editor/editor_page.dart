@@ -67,6 +67,8 @@ class _EditorPageState extends State<EditorPage> {
   final List<Dashboard> _redoStack = <Dashboard>[];
   Dashboard? _placementHistoryStart;
   final GlobalKey _workspaceKey = GlobalKey();
+  final GlobalKey<_EditorServicePanelState> _servicePanelKey =
+      GlobalKey<_EditorServicePanelState>();
   final EditorCanvasPreviewController _canvasPreviewController =
       EditorCanvasPreviewController();
   _WorkspaceDropPreview? _dropPreview;
@@ -169,7 +171,7 @@ class _EditorPageState extends State<EditorPage> {
                     child: KeyedSubtree(
                       key: const ValueKey('editor-title'),
                       child: VfdLegend(
-                        '${_dashboard.name} · ${_orientation.name}',
+                        _dashboard.name,
                         palette: _palette,
                         lit: true,
                         size: 12,
@@ -208,7 +210,6 @@ class _EditorPageState extends State<EditorPage> {
     frameInset: frameInset,
     chromeSafeInsets: chromeSafeInsets,
     commandBankBottomInset: commandBankBottomInset,
-    onAddRequested: _layoutInherited ? null : _openAddCatalogue,
     onAddDropped: _layoutInherited ? null : _addDropped,
     previewController: _canvasPreviewController,
     canUndo: _undoStack.isNotEmpty,
@@ -217,7 +218,6 @@ class _EditorPageState extends State<EditorPage> {
     onRedo: _redo,
     snapEnabled: _snapEnabled,
     onToggleSnap: () => setState(() => _snapEnabled = !_snapEnabled),
-    onPreviewOrientationChanged: _setPreviewOrientation,
     soundEnabled: widget.soundEnabled,
     hapticsEnabled: widget.hapticsEnabled,
   );
@@ -248,6 +248,7 @@ class _EditorPageState extends State<EditorPage> {
           extent: layout.drawerExtent,
           palette: _palette,
           prismStyle: _dashboard.settings.prismStyle,
+          latchLabel: 'Console',
           chromeInsets: workspaceChromeInsets,
           soundEnabled: widget.soundEnabled,
           hapticsEnabled: widget.hapticsEnabled,
@@ -267,19 +268,23 @@ class _EditorPageState extends State<EditorPage> {
                   : 0,
             );
           },
-          drawer: _addCatalogueOpen
-              ? EditorAddCatalogue(
-                  palette: _palette,
-                  prismStyle: _dashboard.settings.prismStyle,
-                  soundEnabled: widget.soundEnabled,
-                  hapticsEnabled: widget.hapticsEnabled,
-                  dashboard: _dashboard,
-                  renderAssets: widget.renderAssets,
-                  onClose: () => setState(() => _addCatalogueOpen = false),
-                  onDragEnded: _clearDropPreview,
-                  onDragUpdated: _updateDropPreview,
-                )
-              : _servicePanel(),
+          drawer: IndexedStack(
+            index: _addCatalogueOpen ? 1 : 0,
+            children: <Widget>[
+              _servicePanel(),
+              EditorAddCatalogue(
+                palette: _palette,
+                prismStyle: _dashboard.settings.prismStyle,
+                soundEnabled: widget.soundEnabled,
+                hapticsEnabled: widget.hapticsEnabled,
+                dashboard: _dashboard,
+                renderAssets: widget.renderAssets,
+                onClose: () => setState(() => _addCatalogueOpen = false),
+                onDragEnded: _clearDropPreview,
+                onDragUpdated: _updateDropPreview,
+              ),
+            ],
+          ),
         ),
         if (_dropPreview case final preview?)
           Positioned.fromRect(
@@ -298,6 +303,7 @@ class _EditorPageState extends State<EditorPage> {
   }
 
   Widget _servicePanel() => _EditorServicePanel(
+    key: _servicePanelKey,
     dashboard: _dashboard,
     orientation: _layoutOrientation,
     previewOrientation: _orientation,
@@ -309,6 +315,8 @@ class _EditorPageState extends State<EditorPage> {
     hapticsEnabled: widget.hapticsEnabled,
     actionRegistry: widget.actionRegistry ?? ActionRegistry.forAuthoring(),
     renderAssets: widget.renderAssets,
+    onOpenAddCatalogue: _openAddCatalogue,
+    onPreviewOrientationChanged: _setPreviewOrientation,
     onSelectComponent: _selectComponent,
     onSelectModule: _selectModule,
     onAddComponent: (type) => _addComponent(type, Offset.zero),
@@ -707,6 +715,7 @@ class _EditorSafeLayout {
 
 class _EditorServicePanel extends StatefulWidget {
   const _EditorServicePanel({
+    super.key,
     required this.dashboard,
     required this.orientation,
     required this.previewOrientation,
@@ -718,6 +727,8 @@ class _EditorServicePanel extends StatefulWidget {
     required this.hapticsEnabled,
     required this.actionRegistry,
     required this.renderAssets,
+    required this.onOpenAddCatalogue,
+    required this.onPreviewOrientationChanged,
     required this.onSelectComponent,
     required this.onSelectModule,
     required this.onAddComponent,
@@ -746,6 +757,8 @@ class _EditorServicePanel extends StatefulWidget {
   final bool hapticsEnabled;
   final ActionRegistry actionRegistry;
   final VfdRenderAssets? renderAssets;
+  final VoidCallback onOpenAddCatalogue;
+  final ValueChanged<DesignOrientation> onPreviewOrientationChanged;
   final ValueChanged<String?> onSelectComponent;
   final ValueChanged<String> onSelectModule;
   final ValueChanged<ComponentTypeSpec> onAddComponent;
@@ -815,27 +828,48 @@ class _EditorServicePanelState extends State<_EditorServicePanel> {
         _section = active;
         return Column(
           children: <Widget>[
-            PrismSelectorBank<_EditorSection>(
-              choices: <PrismSelectorChoice<_EditorSection>>[
-                for (final section in sections)
-                  PrismSelectorChoice<_EditorSection>(
-                    value: section,
-                    label: section.name,
-                    controlKey: ValueKey(
-                      'editor-service-section-${section.name}',
-                    ),
-                    lit: section == active,
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: PrismSelectorBank<_EditorSection>(
+                    choices: <PrismSelectorChoice<_EditorSection>>[
+                      for (final section in sections)
+                        PrismSelectorChoice<_EditorSection>(
+                          value: section,
+                          label: section.name,
+                          controlKey: ValueKey(
+                            'editor-service-section-${section.name}',
+                          ),
+                          lit: section == active,
+                        ),
+                    ],
+                    selected: active,
+                    palette: widget.palette,
+                    prismStyle: widget.dashboard.settings.prismStyle,
+                    rows: 1,
+                    columns: sections.length,
+                    role: PrismRole.compact,
+                    soundEnabled: widget.soundEnabled,
+                    hapticsEnabled: widget.hapticsEnabled,
+                    semanticLabel: 'Editor service section',
+                    onSelected: (section) => setState(() => _section = section),
                   ),
+                ),
+                const SizedBox(width: 6),
+                PrismButton(
+                  key: const ValueKey('console-add'),
+                  label: 'Add',
+                  palette: widget.palette,
+                  enabled: !widget.layoutInherited,
+                  role: PrismRole.compact,
+                  style: widget.dashboard.settings.prismStyle,
+                  soundEnabled: widget.soundEnabled,
+                  hapticsEnabled: widget.hapticsEnabled,
+                  onPressed: widget.layoutInherited
+                      ? null
+                      : widget.onOpenAddCatalogue,
+                ),
               ],
-              selected: active,
-              palette: widget.palette,
-              prismStyle: widget.dashboard.settings.prismStyle,
-              rows: 1,
-              role: PrismRole.compact,
-              soundEnabled: widget.soundEnabled,
-              hapticsEnabled: widget.hapticsEnabled,
-              semanticLabel: 'Editor service section',
-              onSelected: (section) => setState(() => _section = section),
             ),
             const SizedBox(height: 8),
             Expanded(child: _sectionBody(active)),
@@ -1191,6 +1225,29 @@ class _DesignPanel extends StatelessWidget {
         builder: (context, constraints) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
+            PrismSelectorBank<DesignOrientation>(
+              key: const ValueKey('design-orientation-selector'),
+              choices: <PrismSelectorChoice<DesignOrientation>>[
+                for (final orientation in DesignOrientation.values)
+                  PrismSelectorChoice<DesignOrientation>(
+                    value: orientation,
+                    label: orientation.name,
+                    controlKey: ValueKey('orientation-${orientation.name}'),
+                    lit: orientation == preview,
+                  ),
+              ],
+              selected: preview,
+              palette: host.palette,
+              prismStyle: host.dashboard.settings.prismStyle,
+              rows: 1,
+              columns: 2,
+              role: PrismRole.compact,
+              soundEnabled: host.soundEnabled,
+              hapticsEnabled: host.hapticsEnabled,
+              semanticLabel: 'Design orientation',
+              onSelected: host.onPreviewOrientationChanged,
+            ),
+            const SizedBox(height: 8),
             VfdLegend(
               'Primary · ${primary.name}',
               palette: host.palette,
@@ -1205,7 +1262,7 @@ class _DesignPanel extends StatelessWidget {
               palette: host.palette,
               size: 9,
             ),
-            if (!authored && constraints.maxHeight >= 145) ...<Widget>[
+            if (!authored && constraints.maxHeight >= 190) ...<Widget>[
               const SizedBox(height: 5),
               VfdLegend(
                 'Create copies this appearance into an editable layout.',

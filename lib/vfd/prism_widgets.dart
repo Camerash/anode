@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -13,16 +11,13 @@ enum PrismRole { compact, standard, primary }
 
 enum PrismSpan { one, two, three }
 
-enum PrismSymbol { undo, redo, fit, portrait, landscape }
+enum PrismSymbol { undo, redo }
 
 /// Normalized stamped geometry shared by every Prism symbol renderer.
 abstract final class PrismSymbolGeometry {
   static Path path(PrismSymbol symbol, Size size) {
     return switch (symbol) {
       PrismSymbol.undo || PrismSymbol.redo => _historyPath(symbol, size),
-      PrismSymbol.fit => _fitPath(size),
-      PrismSymbol.portrait => _orientationPath(size, portrait: true),
-      PrismSymbol.landscape => _orientationPath(size, portrait: false),
     };
   }
 
@@ -44,62 +39,6 @@ abstract final class PrismSymbolGeometry {
       ..lineTo(x(0.37), y(0.48))
       ..lineTo(x(0.37), y(0.68))
       ..close();
-  }
-
-  static Path _orientationPath(Size size, {required bool portrait}) {
-    final frame = portrait
-        ? Rect.fromLTRB(
-            size.width * 0.31,
-            size.height * 0.04,
-            size.width * 0.69,
-            size.height * 0.96,
-          )
-        : Rect.fromLTRB(
-            size.width * 0.06,
-            size.height * 0.24,
-            size.width * 0.94,
-            size.height * 0.76,
-          );
-    final thickness = math.min(frame.width, frame.height) * 0.16;
-    return Path()
-      ..addRect(Rect.fromLTWH(frame.left, frame.top, frame.width, thickness))
-      ..addRect(
-        Rect.fromLTWH(
-          frame.left,
-          frame.bottom - thickness,
-          frame.width,
-          thickness,
-        ),
-      )
-      ..addRect(Rect.fromLTWH(frame.left, frame.top, thickness, frame.height))
-      ..addRect(
-        Rect.fromLTWH(
-          frame.right - thickness,
-          frame.top,
-          thickness,
-          frame.height,
-        ),
-      );
-  }
-
-  static Path _fitPath(Size size) {
-    Rect rect(double left, double top, double right, double bottom) =>
-        Rect.fromLTRB(
-          size.width * left,
-          size.height * top,
-          size.width * right,
-          size.height * bottom,
-        );
-
-    return Path()
-      ..addRect(rect(0.08, 0.08, 0.39, 0.19))
-      ..addRect(rect(0.08, 0.08, 0.17, 0.41))
-      ..addRect(rect(0.61, 0.08, 0.92, 0.19))
-      ..addRect(rect(0.83, 0.08, 0.92, 0.41))
-      ..addRect(rect(0.08, 0.81, 0.39, 0.92))
-      ..addRect(rect(0.08, 0.59, 0.17, 0.92))
-      ..addRect(rect(0.61, 0.81, 0.92, 0.92))
-      ..addRect(rect(0.83, 0.59, 0.92, 0.92));
   }
 }
 

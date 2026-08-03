@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'dart:ui' show SemanticsAction, Tristate;
+import 'dart:ui' show Tristate;
 
 import 'package:anode/editor/editor_canvas.dart';
 import 'package:anode/editor/editor_page.dart';
@@ -35,6 +35,9 @@ void main() {
       _canvasAspect(tester, key: const ValueKey('editor-authored-frame')),
       closeTo(2.6, 0.001),
     );
+    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
     await tester.tap(find.byKey(const ValueKey('orientation-portrait')));
     await tester.pump();
     // The fallback preview draws the device envelope the runtime would fill,
@@ -94,6 +97,11 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
+    final add = tester.widget<PrismButton>(
+      find.byKey(const ValueKey('console-add')),
+    );
+    expect(add.enabled, isFalse);
+    expect(add.onPressed, isNull);
     final after = tester.getCenter(frame);
 
     expect(after.dy, lessThan(before.dy));
@@ -453,7 +461,7 @@ void main() {
       expect(after.top, closeTo(before.top + 25, 0.001));
     });
 
-    testWidgets('FIT restores camera identity after pan and zoom-out', (
+    testWidgets('CENTER restores camera identity after pan and zoom-out', (
       tester,
     ) async {
       final harness = await _pumpCanvas(tester, selectedId: null);
@@ -471,14 +479,13 @@ void main() {
 
       await tester.dragFrom(const Offset(140, 20), const Offset(40, 30));
       await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('canvas-fit')));
+      await tester.tap(find.byKey(const ValueKey('canvas-center')));
       await tester.pump();
 
       expect(tester.getRect(frame), before);
-      expect(find.byKey(const ValueKey('prism-symbol-fit')), findsOneWidget);
       expect(
-        tester.getSemantics(find.byKey(const ValueKey('canvas-fit'))).label,
-        'Fit view',
+        tester.getSemantics(find.byKey(const ValueKey('canvas-center'))).label,
+        contains('Center'),
       );
       expect(harness.placementOf('speed'), same(harness.initialSpeedPlacement));
     });
@@ -594,15 +601,24 @@ void main() {
       lessThanOrEqualTo(viewport.height),
     );
     expect(find.text('HISTORY'), findsOneWidget);
-    expect(find.text('BUILD'), findsOneWidget);
+    expect(find.text('BUILD'), findsNothing);
     expect(find.text('VIEW'), findsOneWidget);
-    expect(find.text('ADD'), findsOneWidget);
     expect(find.text('SNAP'), findsOneWidget);
+    expect(find.text('CENTER'), findsOneWidget);
+    expect(find.byKey(const ValueKey('canvas-add')), findsNothing);
     expect(
-      tester
-          .widget<PrismButton>(find.byKey(const ValueKey('canvas-add')))
-          .symbol,
-      isNull,
+      find.descendant(
+        of: commandBank,
+        matching: find.byKey(const ValueKey('orientation-portrait')),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: commandBank,
+        matching: find.byKey(const ValueKey('orientation-landscape')),
+      ),
+      findsNothing,
     );
     expect(
       tester
@@ -612,27 +628,19 @@ void main() {
     );
     expect(
       tester
-          .widget<PrismButton>(
-            find.byKey(const ValueKey('orientation-portrait')),
-          )
+          .widget<PrismButton>(find.byKey(const ValueKey('canvas-center')))
           .symbol,
-      PrismSymbol.portrait,
+      isNull,
     );
     expect(
       tester
-          .widget<PrismButton>(
-            find.byKey(const ValueKey('orientation-landscape')),
-          )
-          .symbol,
-      PrismSymbol.landscape,
-    );
-    expect(
-      tester.widget<PrismButton>(find.byKey(const ValueKey('canvas-fit'))).role,
+          .widget<PrismButton>(find.byKey(const ValueKey('canvas-center')))
+          .role,
       PrismRole.standard,
     );
     expect(
       tester.getRect(find.byKey(const ValueKey('canvas-undo'))).bottom,
-      tester.getRect(find.byKey(const ValueKey('canvas-fit'))).bottom,
+      tester.getRect(find.byKey(const ValueKey('canvas-center'))).bottom,
     );
 
     final title = tester.widget<VfdLegend>(
@@ -643,7 +651,15 @@ void main() {
     );
     expect(title.maxLines, 1);
     expect(title.overflow, TextOverflow.ellipsis);
-    expect(title.text, contains('landscape'));
+    expect(title.text, dashboard.name);
+    expect(
+      tester
+          .widget<PrismButton>(
+            find.byKey(const ValueKey('mechanical-drawer-latch')),
+          )
+          .label,
+      'Console',
+    );
 
     final frame = find.byKey(const ValueKey('editor-canvas'));
     final before = tester.getRect(frame);
@@ -694,7 +710,7 @@ void main() {
     expect(environment.right, viewport.width);
     expect(environment.bottom, viewport.height);
     expect(
-      tester.getRect(find.byKey(const ValueKey('canvas-fit'))).bottom,
+      tester.getRect(find.byKey(const ValueKey('canvas-center'))).bottom,
       lessThanOrEqualTo(viewport.height - safeInsets.bottom),
     );
     expect(
@@ -721,7 +737,7 @@ void main() {
       greaterThanOrEqualTo(header.bottom),
     );
     expect(
-      tester.getRect(find.byKey(const ValueKey('canvas-fit'))).bottom,
+      tester.getRect(find.byKey(const ValueKey('canvas-center'))).bottom,
       lessThanOrEqualTo(viewport.height - safeInsets.bottom),
     );
     expect(find.byKey(const ValueKey('canvas-full')), findsNothing);
@@ -764,15 +780,11 @@ void main() {
       greaterThanOrEqualTo(safeInsets.left),
     );
     expect(
-      tester.getRect(find.byKey(const ValueKey('orientation-landscape'))).right,
-      lessThanOrEqualTo(viewport.width - safeInsets.right),
-    );
-    expect(
       tester.getRect(find.byKey(const ValueKey('canvas-undo'))).left,
       greaterThanOrEqualTo(safeInsets.left),
     );
     expect(
-      tester.getRect(find.byKey(const ValueKey('canvas-fit'))).right,
+      tester.getRect(find.byKey(const ValueKey('canvas-center'))).right,
       lessThanOrEqualTo(viewport.width - safeInsets.right),
     );
     expect(
@@ -801,6 +813,10 @@ void main() {
     expect(travellingLeftFrame.width, lessThan(closedLeftFrame.width));
 
     await tester.pump(const Duration(milliseconds: 90));
+    expect(
+      tester.getRect(find.byKey(const ValueKey('orientation-landscape'))).right,
+      lessThanOrEqualTo(viewport.width - safeInsets.right),
+    );
     final openLeftFrame = tester.getRect(
       find.byKey(const ValueKey('editor-authored-frame')),
     );
@@ -970,7 +986,10 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('canvas-add')));
+    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+    await tester.tap(find.byKey(const ValueKey('console-add')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     expect(find.text('SEGMENTED NUMERIC SPEED READOUT.'), findsOneWidget);
@@ -1013,6 +1032,36 @@ void main() {
     final center = added.placements[DesignOrientation.landscape]!.center;
     expect(center.dx / 0.1, closeTo((center.dx / 0.1).round(), 1e-9));
     expect(center.dy / 0.1, closeTo((center.dy / 0.1).round(), 1e-9));
+  });
+
+  testWidgets('ADD catalogue returns to prior Console section', (tester) async {
+    await _setViewport(tester, const Size(900, 500));
+    final dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorPage(dashboard: dashboard, onChanged: (_) {}),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+    await tester.tap(find.byKey(const ValueKey('editor-service-section-look')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('console-add')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('add-catalogue-close')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('add-catalogue-close')));
+    await tester.pump();
+    expect(
+      tester
+          .widget<PrismButton>(
+            find.byKey(const ValueKey('editor-service-section-look')),
+          )
+          .selected,
+      isTrue,
+    );
   });
 
   testWidgets('PART exposes scalar controls inline and variant in panel', (
@@ -1291,14 +1340,17 @@ void main() {
     );
     expect(dashboard.toJson().toString(), before);
 
+    await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
     await tester.tap(find.byKey(const ValueKey('orientation-portrait')));
     await tester.pump();
     expect(find.byKey(const ValueKey('canvas-full')), findsNothing);
     expect(
       tester
-          .widget<PrismButton>(find.byKey(const ValueKey('canvas-fit')))
+          .widget<PrismButton>(find.byKey(const ValueKey('canvas-center')))
           .label,
-      'Fit view',
+      'Center',
     );
     expect(
       tester.getSemantics(snap).flagsCollection.isToggled,
@@ -1328,15 +1380,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
-    final sectionSemantics = tester.getSemantics(
-      find.bySemanticsLabel('Editor service section'),
+    await tester.tap(
+      find.byKey(const ValueKey('editor-service-section-place')),
     );
-    sectionSemantics.owner!.performAction(
-      sectionSemantics.id,
-      SemanticsAction.increase,
-    );
-    await tester.pump(const Duration(milliseconds: 60));
-    await tester.tap(find.text('PLACE'));
     await tester.pump();
 
     expect(find.byKey(const ValueKey('placement-dpad')), findsOneWidget);
@@ -1380,13 +1426,13 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.byKey(ValueKey('orientation-${preview.name}')));
-      await tester.pump();
       final content = find.byKey(const ValueKey('mechanical-drawer-content'));
       final before = tester.getSize(content);
       await tester.tap(find.byKey(const ValueKey('mechanical-drawer-latch')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 180));
+      await tester.tap(find.byKey(ValueKey('orientation-${preview.name}')));
+      await tester.pump();
       final after = tester.getSize(content);
       return Size(before.width - after.width, before.height - after.height);
     }
