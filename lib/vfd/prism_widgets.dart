@@ -7,11 +7,19 @@ import 'vfd_widgets.dart';
 
 part 'prism_painters.dart';
 
-enum PrismRole { compact, standard, primary }
+enum PrismRole { micro, compact, standard, primary }
 
 enum PrismSpan { one, two, three }
 
 enum PrismSymbol { undo, redo }
+
+enum PrismShape {
+  rectangular,
+  triangleUp,
+  triangleDown,
+  triangleLeft,
+  triangleRight,
+}
 
 /// Normalized stamped geometry shared by every Prism symbol renderer.
 abstract final class PrismSymbolGeometry {
@@ -44,6 +52,7 @@ abstract final class PrismSymbolGeometry {
 
 abstract final class PrismMetrics {
   static double height(PrismRole role) => switch (role) {
+    PrismRole.micro => 36,
     PrismRole.compact => 44,
     PrismRole.standard => 54,
     PrismRole.primary => 66,
@@ -52,6 +61,52 @@ abstract final class PrismMetrics {
   static double width(PrismRole role, PrismSpan span) {
     final height = PrismMetrics.height(role);
     return height * (1.18 + span.index);
+  }
+}
+
+abstract final class _PrismShapeGeometry {
+  static bool isTriangle(PrismShape shape) => shape != PrismShape.rectangular;
+
+  static Path path(Size size, PrismShape shape, {double inset = 0}) {
+    final left = inset;
+    final top = inset;
+    final right = size.width - inset;
+    final bottom = size.height - inset;
+    final centerX = size.width / 2;
+    final centerY = size.height / 2;
+    return switch (shape) {
+      PrismShape.rectangular =>
+        Path()..addRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTRB(left, top, right, bottom),
+            const Radius.circular(1.4),
+          ),
+        ),
+      PrismShape.triangleUp =>
+        Path()
+          ..moveTo(centerX, top)
+          ..lineTo(right, bottom)
+          ..lineTo(left, bottom)
+          ..close(),
+      PrismShape.triangleDown =>
+        Path()
+          ..moveTo(left, top)
+          ..lineTo(right, top)
+          ..lineTo(centerX, bottom)
+          ..close(),
+      PrismShape.triangleLeft =>
+        Path()
+          ..moveTo(left, centerY)
+          ..lineTo(right, top)
+          ..lineTo(right, bottom)
+          ..close(),
+      PrismShape.triangleRight =>
+        Path()
+          ..moveTo(right, centerY)
+          ..lineTo(left, top)
+          ..lineTo(left, bottom)
+          ..close(),
+    };
   }
 }
 
@@ -64,6 +119,7 @@ class PrismButton extends StatefulWidget {
     this.value,
     this.face,
     this.symbol,
+    this.shape = PrismShape.rectangular,
     this.lit = false,
     this.selected = false,
     this.enabled = true,
@@ -78,6 +134,7 @@ class PrismButton extends StatefulWidget {
   final String? value;
   final Widget? face;
   final PrismSymbol? symbol;
+  final PrismShape shape;
   final VfdPalette palette;
   final VoidCallback? onPressed;
   final bool lit;
@@ -151,6 +208,7 @@ class _PrismButtonState extends State<PrismButton> {
                         focused: _focused,
                         hovered: _hovered,
                         enabled: enabled,
+                        shape: widget.shape,
                       ),
                     ),
                   ),
@@ -171,6 +229,7 @@ class _PrismButtonState extends State<PrismButton> {
                             lit: widget.lit,
                             enabled: enabled,
                             pressProgress: pressProgress,
+                            shape: widget.shape,
                           ),
                           child: Padding(
                             padding: EdgeInsets.fromLTRB(
@@ -222,6 +281,7 @@ class _PrismButtonState extends State<PrismButton> {
           enabled: enabled,
           inactiveLuminosity: widget.style.inactiveLuminosity,
           size: switch (widget.role) {
+            PrismRole.micro => 10,
             PrismRole.compact => 12,
             PrismRole.standard => 14,
             PrismRole.primary => 16,
@@ -236,6 +296,7 @@ class _PrismButtonState extends State<PrismButton> {
             enabled: enabled,
             inactiveLuminosity: widget.style.inactiveLuminosity,
             size: switch (widget.role) {
+              PrismRole.micro => 8,
               PrismRole.compact => 9,
               PrismRole.standard => 11,
               PrismRole.primary => 13,
@@ -286,6 +347,7 @@ class PrismSymbolFace extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = switch (role) {
+      PrismRole.micro => const Size(18, 14),
       PrismRole.compact => const Size(21, 16),
       PrismRole.standard => const Size(24, 18),
       PrismRole.primary => const Size(28, 21),

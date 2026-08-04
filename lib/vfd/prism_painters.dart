@@ -42,6 +42,7 @@ class _PrismHousingPainter extends CustomPainter {
     required this.focused,
     required this.hovered,
     required this.enabled,
+    required this.shape,
   });
 
   final VfdPalette palette;
@@ -49,9 +50,16 @@ class _PrismHousingPainter extends CustomPainter {
   final bool focused;
   final bool hovered;
   final bool enabled;
+  final PrismShape shape;
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (_PrismShapeGeometry.isTriangle(shape)) {
+      _paintTriangle(canvas, size);
+      if (hovered && enabled) _drawHoverPath(canvas, size);
+      if (selected || focused) _drawShapeFocus(canvas, size);
+      return;
+    }
     final outer = RRect.fromRectAndRadius(
       Rect.fromLTRB(2, 2, size.width - 2, size.height - 2),
       const Radius.circular(1.4),
@@ -65,6 +73,50 @@ class _PrismHousingPainter extends CustomPainter {
     if (hovered && enabled) _drawHover(canvas, pocket);
     if (selected || focused) _drawLocators(canvas, size);
   }
+
+  void _paintTriangle(Canvas canvas, Size size) {
+    final outer = _PrismShapeGeometry.path(size, shape, inset: 2);
+    final pocket = _PrismShapeGeometry.path(size, shape, inset: 4.5);
+    canvas.drawPath(
+      outer,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[
+            Color(0x7A89938E),
+            Color(0x52313A36),
+            Color(0x8A101412),
+          ],
+        ).createShader(Offset.zero & size),
+    );
+    canvas.drawPath(pocket, Paint()..color = const Color(0xC5090B0A));
+    canvas.drawPath(
+      pocket,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.8
+        ..color = const Color(0x7A000000),
+    );
+  }
+
+  void _drawHoverPath(Canvas canvas, Size size) => canvas.drawPath(
+    _PrismShapeGeometry.path(size, shape, inset: 4.5),
+    Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.7
+      ..color = const Color(0xFFCED5D1).withValues(alpha: 0.16),
+  );
+
+  void _drawShapeFocus(Canvas canvas, Size size) => canvas.drawPath(
+    _PrismShapeGeometry.path(size, shape, inset: 0.5),
+    Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = focused ? 1.5 : 1
+      ..color = (focused ? palette.lit : palette.unlit).withValues(
+        alpha: focused ? 0.92 : 0.58,
+      ),
+  );
 
   void _drawOuterFrame(Canvas canvas, Size size, RRect outer, RRect pocket) {
     canvas.drawDRRect(
@@ -199,7 +251,8 @@ class _PrismHousingPainter extends CustomPainter {
       oldDelegate.selected != selected ||
       oldDelegate.focused != focused ||
       oldDelegate.hovered != hovered ||
-      oldDelegate.enabled != enabled;
+      oldDelegate.enabled != enabled ||
+      oldDelegate.shape != shape;
 }
 
 class _PrismCapPainter extends CustomPainter {
@@ -209,6 +262,7 @@ class _PrismCapPainter extends CustomPainter {
     required this.lit,
     required this.enabled,
     required this.pressProgress,
+    required this.shape,
   });
 
   final VfdPalette palette;
@@ -216,6 +270,7 @@ class _PrismCapPainter extends CustomPainter {
   final bool lit;
   final bool enabled;
   final double pressProgress;
+  final PrismShape shape;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -223,6 +278,7 @@ class _PrismCapPainter extends CustomPainter {
       size,
       style,
       pressProgress: pressProgress,
+      shape: shape,
     );
     _drawBody(canvas, size, geometry);
     _drawFace(canvas, geometry);
@@ -256,7 +312,7 @@ class _PrismCapPainter extends CustomPainter {
           0.0,
           1.0,
         );
-    canvas.drawRRect(
+    canvas.drawPath(
       geometry.face,
       Paint()
         ..shader = LinearGradient(
@@ -268,13 +324,13 @@ class _PrismCapPainter extends CustomPainter {
             const Color(0xFF101512).withValues(alpha: faceCoverage * 0.90),
           ],
           stops: const <double>[0, 0.44, 1],
-        ).createShader(geometry.face.outerRect),
+        ).createShader(geometry.faceBounds),
     );
   }
 
   void _drawBacklight(Canvas canvas, _PrismCapGeometry geometry) {
     final electricalLuminosity = enabled ? 1.0 : 0.48;
-    canvas.drawRRect(
+    canvas.drawPath(
       geometry.face,
       Paint()
         ..shader = RadialGradient(
@@ -289,14 +345,15 @@ class _PrismCapPainter extends CustomPainter {
             const Color(0x00000000),
           ],
           stops: const <double>[0, 0.58, 1],
-        ).createShader(geometry.face.outerRect),
+        ).createShader(geometry.faceBounds),
     );
   }
 
   void _drawEdges(Canvas canvas, Size size, _PrismCapGeometry geometry) {
     final face = geometry.face;
+    final bounds = geometry.faceBounds;
     final progress = pressProgress.clamp(0.0, 1.0);
-    canvas.drawRRect(
+    canvas.drawPath(
       face,
       Paint()
         ..style = PaintingStyle.stroke
@@ -305,7 +362,7 @@ class _PrismCapPainter extends CustomPainter {
           0xFF9EA7A2,
         ).withValues(alpha: 0.42 - progress * 0.24),
     );
-    canvas.drawRRect(
+    canvas.drawPath(
       face,
       Paint()
         ..style = PaintingStyle.stroke
@@ -314,9 +371,20 @@ class _PrismCapPainter extends CustomPainter {
           0xFF000000,
         ).withValues(alpha: 0.10 + progress * 0.34),
     );
+    if (geometry.isTriangle) {
+      canvas.drawPath(
+        face,
+        _edgePaint(
+          1.15 - progress * 0.45,
+          0.48 - progress * 0.28,
+          color: const Color(0xFFE0E4E1),
+        )..style = PaintingStyle.stroke,
+      );
+      return;
+    }
     canvas.drawLine(
-      Offset(face.left + 1, face.top),
-      Offset(face.right - 1, face.top),
+      Offset(bounds.left + 1, bounds.top),
+      Offset(bounds.right - 1, bounds.top),
       _edgePaint(
         1.15 - progress * 0.45,
         0.48 - progress * 0.28,
@@ -324,24 +392,24 @@ class _PrismCapPainter extends CustomPainter {
       ),
     );
     canvas.drawLine(
-      Offset(face.left, face.top + 1),
-      Offset(face.left, face.bottom - 1),
+      Offset(bounds.left, bounds.top + 1),
+      Offset(bounds.left, bounds.bottom - 1),
       _edgePaint(0.65, 0.24 - progress * 0.12, color: const Color(0xFFBFC6C2)),
     );
     canvas.drawLine(
-      Offset(face.left + size.width * 0.09, face.top + 1.4),
-      Offset(face.right - size.width * 0.24, face.top + 1.4),
+      Offset(bounds.left + size.width * 0.09, bounds.top + 1.4),
+      Offset(bounds.right - size.width * 0.24, bounds.top + 1.4),
       _edgePaint(0.55, 0.20 - progress * 0.10),
     );
     final directionalContactAlpha = 0.30 - progress * 0.12;
     canvas.drawLine(
-      Offset(face.left + 1, face.bottom),
-      Offset(face.right - 1, face.bottom),
+      Offset(bounds.left + 1, bounds.bottom),
+      Offset(bounds.right - 1, bounds.bottom),
       _edgePaint(0.8, directionalContactAlpha, color: const Color(0xFF000000)),
     );
     canvas.drawLine(
-      Offset(face.right, face.top + 1),
-      Offset(face.right, face.bottom - 1),
+      Offset(bounds.right, bounds.top + 1),
+      Offset(bounds.right, bounds.bottom - 1),
       _edgePaint(
         0.7,
         directionalContactAlpha * 0.72,
@@ -364,7 +432,8 @@ class _PrismCapPainter extends CustomPainter {
       oldDelegate.style != style ||
       oldDelegate.lit != lit ||
       oldDelegate.enabled != enabled ||
-      oldDelegate.pressProgress != pressProgress;
+      oldDelegate.pressProgress != pressProgress ||
+      oldDelegate.shape != shape;
 }
 
 double _prismFaceCoverage(double opticalDensity) {
@@ -375,12 +444,18 @@ double _prismFaceCoverage(double opticalDensity) {
 }
 
 class _PrismCapGeometry {
-  const _PrismCapGeometry({required this.body, required this.face});
+  const _PrismCapGeometry({
+    required this.body,
+    required this.face,
+    required this.faceBounds,
+    required this.isTriangle,
+  });
 
   factory _PrismCapGeometry.from(
     Size size,
     PrismStyle style, {
     required double pressProgress,
+    required PrismShape shape,
   }) {
     final progress = pressProgress.clamp(0.0, 1.0);
     final depthScale = (style.bevelDepth / 0.12).clamp(0.55, 1.45);
@@ -390,6 +465,20 @@ class _PrismCapGeometry {
     final top = size.height * 0.105;
     final bottom = size.height - size.height * 0.105;
     final corner = size.height * 0.055;
+    if (_PrismShapeGeometry.isTriangle(shape)) {
+      final body = _PrismShapeGeometry.path(size, shape, inset: left);
+      final face = _PrismShapeGeometry.path(
+        size,
+        shape,
+        inset: left + side * (0.50 - progress * 0.15),
+      );
+      return _PrismCapGeometry(
+        body: body,
+        face: face,
+        faceBounds: face.getBounds(),
+        isTriangle: true,
+      );
+    }
     final body = _bodyPath(
       left: left,
       right: right,
@@ -398,20 +487,31 @@ class _PrismCapGeometry {
       side: side,
       corner: corner,
     );
-    final face = RRect.fromRectAndRadius(
-      Rect.fromLTRB(
-        left + side * (0.50 - progress * 0.15),
-        top + side * (0.55 - progress * 0.17),
-        right - side * (0.50 - progress * 0.15),
-        bottom - side * (0.72 - progress * 0.22),
-      ),
-      Radius.circular(size.height * 0.018),
+    final faceBounds = Rect.fromLTRB(
+      left + side * (0.50 - progress * 0.15),
+      top + side * (0.55 - progress * 0.17),
+      right - side * (0.50 - progress * 0.15),
+      bottom - side * (0.72 - progress * 0.22),
     );
-    return _PrismCapGeometry(body: body, face: face);
+    final face = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          faceBounds,
+          Radius.circular(size.height * 0.018),
+        ),
+      );
+    return _PrismCapGeometry(
+      body: body,
+      face: face,
+      faceBounds: faceBounds,
+      isTriangle: false,
+    );
   }
 
   final Path body;
-  final RRect face;
+  final Path face;
+  final Rect faceBounds;
+  final bool isTriangle;
 
   static Path _bodyPath({
     required double left,

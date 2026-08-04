@@ -159,36 +159,47 @@ class _EditorPageState extends State<EditorPage> {
       _chromeSkin.surface(
         key: const ValueKey('editor-header-layer'),
         role: EditorChromeSurfaceRole.header,
-        padding: EdgeInsets.fromLTRB(
-          safeInsets.left + 4,
-          safeInsets.top + 2,
-          safeInsets.right + 4,
-          2,
-        ),
-        child: Row(
+        padding: EdgeInsets.zero,
+        child: Stack(
           children: <Widget>[
-            _chromeSkin.button(
-              key: const ValueKey('editor-back'),
-              label: 'Back',
-              compact: true,
-              onPressed: () => Navigator.of(context).maybePop(),
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: _chromeSkin.title(
-                _dashboard.name,
-                key: const ValueKey('editor-title'),
+            Positioned(
+              left: safeInsets.left + 4,
+              right:
+                  safeInsets.right +
+                  PrismMetrics.width(PrismRole.compact, PrismSpan.one) +
+                  12,
+              top: safeInsets.top + 2,
+              bottom: 2,
+              child: Row(
+                children: <Widget>[
+                  _chromeSkin.button(
+                    key: const ValueKey('editor-back'),
+                    label: 'Back',
+                    compact: true,
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _chromeSkin.title(
+                      _dashboard.name,
+                      key: const ValueKey('editor-title'),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const Spacer(),
-            const SizedBox(width: 8),
-            _chromeSkin.button(
-              key: const ValueKey('editor-console'),
-              label: 'Console',
-              compact: true,
-              lit: _drawerOpen,
-              selected: _drawerOpen,
-              onPressed: () => setState(() => _drawerOpen = !_drawerOpen),
+            Positioned(
+              right: safeInsets.right + 4,
+              top: safeInsets.top + 2,
+              bottom: 2,
+              child: _chromeSkin.button(
+                key: const ValueKey('editor-console'),
+                label: 'Console',
+                compact: true,
+                lit: _drawerOpen,
+                selected: _drawerOpen,
+                onPressed: () => setState(() => _drawerOpen = !_drawerOpen),
+              ),
             ),
           ],
         ),
@@ -2044,11 +2055,27 @@ class _PlacementPanel extends StatelessWidget {
     children: <Widget>[
       _dpadRow(
         null,
-        _move('Y+', placement, component, module, dy: _nudge),
+        _move(
+          'Move up',
+          placement,
+          component,
+          module,
+          dy: _nudge,
+          shape: PrismShape.triangleUp,
+          key: const ValueKey('placement-y+'),
+        ),
         null,
       ),
       _dpadRow(
-        _move('X-', placement, component, module, dx: -_nudge),
+        _move(
+          'Move left',
+          placement,
+          component,
+          module,
+          dx: -_nudge,
+          shape: PrismShape.triangleLeft,
+          key: const ValueKey('placement-x-'),
+        ),
         _button(
           'Center',
           () => _write(
@@ -2058,11 +2085,27 @@ class _PlacementPanel extends StatelessWidget {
           ),
           key: const ValueKey('placement-center'),
         ),
-        _move('X+', placement, component, module, dx: _nudge),
+        _move(
+          'Move right',
+          placement,
+          component,
+          module,
+          dx: _nudge,
+          shape: PrismShape.triangleRight,
+          key: const ValueKey('placement-x+'),
+        ),
       ),
       _dpadRow(
         null,
-        _move('Y-', placement, component, module, dy: -_nudge),
+        _move(
+          'Move down',
+          placement,
+          component,
+          module,
+          dy: -_nudge,
+          shape: PrismShape.triangleDown,
+          key: const ValueKey('placement-y-'),
+        ),
         null,
       ),
     ],
@@ -2085,10 +2128,14 @@ class _PlacementPanel extends StatelessWidget {
     VfdModule? module, {
     double dx = 0,
     double dy = 0,
+    required PrismShape shape,
+    required Key key,
   }) => _button(
     label,
     () => _write(component, module, nudgePlacement(placement, dx: dx, dy: dy)),
-    key: ValueKey('placement-${label.toLowerCase()}'),
+    key: key,
+    shape: shape,
+    face: const SizedBox.shrink(),
   );
 
   Widget _sizeRow(
@@ -2117,17 +2164,24 @@ class _PlacementPanel extends StatelessWidget {
     ],
   );
 
-  Widget _button(String label, VoidCallback onPressed, {Key? key}) =>
-      PrismButton(
-        key: key,
-        label: label,
-        palette: host.palette,
-        role: PrismRole.compact,
-        style: host.dashboard.settings.prismStyle,
-        soundEnabled: host.soundEnabled,
-        hapticsEnabled: host.hapticsEnabled,
-        onPressed: onPressed,
-      );
+  Widget _button(
+    String label,
+    VoidCallback onPressed, {
+    Key? key,
+    PrismShape shape = PrismShape.rectangular,
+    Widget? face,
+  }) => PrismButton(
+    key: key,
+    label: label,
+    face: face,
+    shape: shape,
+    palette: host.palette,
+    role: PrismRole.compact,
+    style: host.dashboard.settings.prismStyle,
+    soundEnabled: host.soundEnabled,
+    hapticsEnabled: host.hapticsEnabled,
+    onPressed: onPressed,
+  );
 
   void _resize(
     Placement placement,

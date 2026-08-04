@@ -637,11 +637,15 @@ void main() {
       tester
           .widget<PrismButton>(find.byKey(const ValueKey('canvas-center')))
           .role,
-      PrismRole.standard,
+      PrismRole.micro,
     );
     expect(
       tester.getRect(find.byKey(const ValueKey('canvas-undo'))).bottom,
       tester.getRect(find.byKey(const ValueKey('canvas-center'))).bottom,
+    );
+    expect(
+      tester.getRect(find.byKey(const ValueKey('canvas-center'))).height,
+      36,
     );
 
     final title = tester.widget<VfdLegend>(
@@ -763,7 +767,7 @@ void main() {
     );
     expect(
       tester.getRect(find.byKey(const ValueKey('editor-console'))).right,
-      lessThanOrEqualTo(viewport.width - safeInsets.right),
+      closeTo(viewport.width - safeInsets.right - 4, 0.001),
     );
     final dock = tester.getRect(
       find.byKey(const ValueKey('editor-command-dock')),
@@ -835,7 +839,7 @@ void main() {
     );
     expect(
       tester.getRect(find.byKey(const ValueKey('editor-console'))).right,
-      lessThanOrEqualTo(viewport.width - safeInsets.right),
+      closeTo(viewport.width - safeInsets.right - 4, 0.001),
     );
     final landscapeDock = tester.getRect(
       find.byKey(const ValueKey('editor-command-dock')),
@@ -1446,6 +1450,37 @@ void main() {
     expect(find.byKey(const ValueKey('placement-H-minus')), findsOneWidget);
     expect(find.byKey(const ValueKey('placement-H-plus')), findsOneWidget);
     expect(find.byKey(const ValueKey('placement-center')), findsOneWidget);
+    expect(
+      tester
+          .widget<PrismButton>(find.byKey(const ValueKey('placement-y+')))
+          .shape,
+      PrismShape.triangleUp,
+    );
+    expect(
+      tester
+          .widget<PrismButton>(find.byKey(const ValueKey('placement-x-')))
+          .shape,
+      PrismShape.triangleLeft,
+    );
+    expect(
+      tester
+          .widget<PrismButton>(find.byKey(const ValueKey('placement-x+')))
+          .shape,
+      PrismShape.triangleRight,
+    );
+    expect(
+      tester
+          .widget<PrismButton>(find.byKey(const ValueKey('placement-y-')))
+          .shape,
+      PrismShape.triangleDown,
+    );
+    expect(
+      tester
+          .widget<PrismButton>(find.byKey(const ValueKey('placement-center')))
+          .shape,
+      PrismShape.rectangular,
+    );
+    expect(find.text('Move up'), findsNothing);
 
     final before =
         dashboard.components.first.placements[DesignOrientation.landscape]!;

@@ -47,7 +47,7 @@ class _EditorCommandDockState extends State<EditorCommandDock>
   late EditorDockPlacement _displayPlacement = widget.placement;
   late final AnimationController _settleController = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 160),
+    duration: const Duration(milliseconds: 120),
   )..value = 1;
 
   Offset? _dragTopLeft;
@@ -72,64 +72,70 @@ class _EditorCommandDockState extends State<EditorCommandDock>
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final hostSize = Size(constraints.maxWidth, constraints.maxHeight);
-      final vertical = _displayPlacement.edge != EditorDockEdge.bottom;
-      final compact = vertical
-          ? hostSize.height - widget.headerExtent - widget.safeInsets.bottom <
-                300
-          : hostSize.width - widget.safeInsets.left - widget.safeInsets.right <
-                340;
+      final edge = _candidateEdge ?? _displayPlacement.edge;
+      final vertical = edge != EditorDockEdge.bottom;
       final axis = vertical ? Axis.vertical : Axis.horizontal;
       final dock = KeyedSubtree(
         key: _dockKey,
         child: widget.skin.surface(
           key: const ValueKey('editor-command-dock'),
           role: EditorChromeSurfaceRole.dock,
-          padding: _surfacePadding(_displayPlacement.edge),
-          child: Flex(
-            direction: axis,
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              _handle(axis),
-              _gap(axis, compact ? 3 : 5),
-              _button(
-                key: const ValueKey('canvas-undo'),
-                label: 'Undo',
-                symbol: EditorChromeSymbol.undo,
-                lit: widget.canUndo,
-                enabled: widget.canUndo,
-                onPressed: widget.canUndo ? widget.onUndo : null,
-                compact: compact,
-              ),
-              _gap(axis, compact ? 3 : 5),
-              _button(
-                key: const ValueKey('canvas-redo'),
-                label: 'Redo',
-                symbol: EditorChromeSymbol.redo,
-                lit: widget.canRedo,
-                enabled: widget.canRedo,
-                onPressed: widget.canRedo ? widget.onRedo : null,
-                compact: compact,
-              ),
-              _gap(axis, compact ? 5 : 8),
-              widget.skin.divider(axis: axis),
-              _gap(axis, compact ? 5 : 8),
-              _button(
-                key: const ValueKey('canvas-snap'),
-                label: 'Snap',
-                lit: widget.snapEnabled,
-                selected: widget.snapEnabled,
-                onPressed: widget.onToggleSnap,
-                compact: compact,
-              ),
-              _gap(axis, compact ? 3 : 5),
-              _button(
-                key: const ValueKey('canvas-center'),
-                label: 'Center',
-                onPressed: widget.onCenter,
-                compact: compact,
-              ),
-            ],
+          padding: _surfacePadding(edge),
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 110),
+            curve: Curves.easeOutCubic,
+            // Keep handle origin fixed while axis changes, so the pointer
+            // remains anchored to the same grab cell during live reflow.
+            alignment: Alignment.topLeft,
+            child: Flex(
+              direction: axis,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                _handle(axis),
+                _gap(axis, 2),
+                _button(
+                  key: const ValueKey('canvas-undo'),
+                  label: 'Undo',
+                  symbol: EditorChromeSymbol.undo,
+                  lit: widget.canUndo,
+                  enabled: widget.canUndo,
+                  onPressed: widget.canUndo ? widget.onUndo : null,
+                  compact: false,
+                  dense: true,
+                ),
+                _gap(axis, 2),
+                _button(
+                  key: const ValueKey('canvas-redo'),
+                  label: 'Redo',
+                  symbol: EditorChromeSymbol.redo,
+                  lit: widget.canRedo,
+                  enabled: widget.canRedo,
+                  onPressed: widget.canRedo ? widget.onRedo : null,
+                  compact: false,
+                  dense: true,
+                ),
+                _gap(axis, 2),
+                widget.skin.divider(axis: axis, dense: true),
+                _gap(axis, 2),
+                _button(
+                  key: const ValueKey('canvas-snap'),
+                  label: 'Snap',
+                  lit: widget.snapEnabled,
+                  selected: widget.snapEnabled,
+                  onPressed: widget.onToggleSnap,
+                  compact: false,
+                  dense: true,
+                ),
+                _gap(axis, 2),
+                _button(
+                  key: const ValueKey('canvas-center'),
+                  label: 'Center',
+                  onPressed: widget.onCenter,
+                  compact: false,
+                  dense: true,
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -162,22 +168,22 @@ class _EditorCommandDockState extends State<EditorCommandDock>
 
   EdgeInsets _surfacePadding(EditorDockEdge edge) => switch (edge) {
     EditorDockEdge.left => EdgeInsets.fromLTRB(
-      widget.safeInsets.left + 4,
-      4,
-      4,
-      4,
+      widget.safeInsets.left + 2,
+      2,
+      2,
+      2,
     ),
     EditorDockEdge.right => EdgeInsets.fromLTRB(
-      4,
-      4,
-      widget.safeInsets.right + 4,
-      4,
+      2,
+      2,
+      widget.safeInsets.right + 2,
+      2,
     ),
     EditorDockEdge.bottom => EdgeInsets.fromLTRB(
-      4,
-      4,
-      4,
-      widget.safeInsets.bottom + 4,
+      2,
+      2,
+      2,
+      widget.safeInsets.bottom + 2,
     ),
   };
 
@@ -193,8 +199,12 @@ class _EditorCommandDockState extends State<EditorCommandDock>
       onPanEnd: (_) => _endDrag(),
       onPanCancel: _cancelDrag,
       child: SizedBox.square(
-        dimension: 44,
-        child: widget.skin.dragHandle(axis: axis, active: _dragTopLeft != null),
+        dimension: 36,
+        child: widget.skin.dragHandle(
+          axis: axis,
+          active: _dragTopLeft != null,
+          dense: true,
+        ),
       ),
     ),
   );
@@ -204,6 +214,7 @@ class _EditorCommandDockState extends State<EditorCommandDock>
     required String label,
     required VoidCallback? onPressed,
     required bool compact,
+    required bool dense,
     EditorChromeSymbol? symbol,
     bool lit = false,
     bool selected = false,
@@ -216,6 +227,7 @@ class _EditorCommandDockState extends State<EditorCommandDock>
     selected: selected,
     enabled: enabled,
     compact: compact,
+    dense: dense,
     onPressed: onPressed,
   );
 
@@ -266,7 +278,7 @@ class _EditorCommandDockState extends State<EditorCommandDock>
         raw.dx.clamp(0.0, maxX),
         raw.dy.clamp(widget.headerExtent, maxY),
       );
-      _candidateEdge = _nearestEdge(pointer, host.size);
+      _candidateEdge = _dragEdge(pointer, host.size);
     });
   }
 
@@ -316,6 +328,22 @@ class _EditorCommandDockState extends State<EditorCommandDock>
     };
     return distances.entries.reduce((a, b) => a.value <= b.value ? a : b).key;
   }
+
+  EditorDockEdge _dragEdge(Offset point, Size size) {
+    final current = _candidateEdge ?? _displayPlacement.edge;
+    final next = _nearestEdge(point, size);
+    if (next == current) return current;
+    final currentDistance = _edgeDistance(current, point, size);
+    final nextDistance = _edgeDistance(next, point, size);
+    return currentDistance - nextDistance > 18 ? next : current;
+  }
+
+  double _edgeDistance(EditorDockEdge edge, Offset point, Size size) =>
+      switch (edge) {
+        EditorDockEdge.left => point.dx,
+        EditorDockEdge.right => size.width - point.dx,
+        EditorDockEdge.bottom => size.height - point.dy,
+      };
 
   double _alignmentFor(EditorDockEdge edge, Offset point, Size size) {
     if (edge == EditorDockEdge.bottom) {

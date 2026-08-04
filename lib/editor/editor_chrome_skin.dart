@@ -29,13 +29,14 @@ abstract interface class EditorChromeSkin {
     bool selected,
     bool enabled,
     bool compact,
+    bool dense,
   });
 
   Widget title(String text, {Key? key});
 
-  Widget divider({required Axis axis});
+  Widget divider({required Axis axis, bool dense});
 
-  Widget dragHandle({required Axis axis, required bool active});
+  Widget dragHandle({required Axis axis, required bool active, bool dense});
 
   Widget dockTargetIndicator({required Axis axis});
 
@@ -86,6 +87,7 @@ class VfdEditorChromeSkin implements EditorChromeSkin {
     bool selected = false,
     bool enabled = true,
     bool compact = false,
+    bool dense = false,
   }) => PrismButton(
     key: key,
     label: label,
@@ -95,7 +97,11 @@ class VfdEditorChromeSkin implements EditorChromeSkin {
       null => null,
     },
     palette: palette,
-    role: compact ? PrismRole.compact : PrismRole.standard,
+    role: dense
+        ? PrismRole.micro
+        : compact
+        ? PrismRole.compact
+        : PrismRole.standard,
     style: prismStyle,
     soundEnabled: soundEnabled,
     hapticsEnabled: hapticsEnabled,
@@ -119,21 +125,26 @@ class VfdEditorChromeSkin implements EditorChromeSkin {
   );
 
   @override
-  Widget divider({required Axis axis}) => ColoredBox(
+  Widget divider({required Axis axis, bool dense = false}) => ColoredBox(
     color: palette.unlit.withValues(alpha: 0.34),
     child: SizedBox(
       width: axis == Axis.horizontal ? 1 : 30,
-      height: axis == Axis.horizontal ? 30 : 1,
+      height: axis == Axis.horizontal ? (dense ? 24 : 30) : 1,
     ),
   );
 
   @override
-  Widget dragHandle({required Axis axis, required bool active}) => CustomPaint(
+  Widget dragHandle({
+    required Axis axis,
+    required bool active,
+    bool dense = false,
+  }) => CustomPaint(
     key: const ValueKey('editor-dock-handle-dots'),
     painter: _VfdDockHandlePainter(
       color: (active ? palette.lit : palette.unlit).withValues(
         alpha: active ? 0.92 : 0.62,
       ),
+      dense: dense,
     ),
   );
 
@@ -189,16 +200,17 @@ class VfdEditorChromeSkin implements EditorChromeSkin {
 }
 
 class _VfdDockHandlePainter extends CustomPainter {
-  const _VfdDockHandlePainter({required this.color});
+  const _VfdDockHandlePainter({required this.color, required this.dense});
 
   final Color color;
+  final bool dense;
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..color = color;
     const columns = 3;
     const rows = 2;
-    const spacing = 7.0;
+    final spacing = dense ? 5.5 : 7.0;
     final origin = Offset(
       (size.width - (columns - 1) * spacing) / 2,
       (size.height - (rows - 1) * spacing) / 2,
@@ -207,7 +219,7 @@ class _VfdDockHandlePainter extends CustomPainter {
       for (var column = 0; column < columns; column++) {
         canvas.drawCircle(
           origin + Offset(column * spacing, row * spacing),
-          1.7,
+          dense ? 1.35 : 1.7,
           paint,
         );
       }
@@ -216,5 +228,5 @@ class _VfdDockHandlePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _VfdDockHandlePainter oldDelegate) =>
-      oldDelegate.color != color;
+      oldDelegate.color != color || oldDelegate.dense != dense;
 }
