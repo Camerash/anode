@@ -271,7 +271,7 @@ class _EditorCommandDockState extends State<EditorCommandDock>
     final maxX = math.max(0.0, host.size.width - dock.size.width);
     final maxY = math.max(
       widget.headerExtent,
-      host.size.height - widget.safeInsets.bottom - dock.size.height,
+      host.size.height - dock.size.height,
     );
     setState(() {
       _dragTopLeft = Offset(
@@ -347,16 +347,9 @@ class _EditorCommandDockState extends State<EditorCommandDock>
 
   double _alignmentFor(EditorDockEdge edge, Offset point, Size size) {
     if (edge == EditorDockEdge.bottom) {
-      final span = math.max(
-        1.0,
-        size.width - widget.safeInsets.left - widget.safeInsets.right,
-      );
-      return ((point.dx - widget.safeInsets.left) / span).clamp(0.0, 1.0);
+      return (point.dx / math.max(1.0, size.width)).clamp(0.0, 1.0);
     }
-    final span = math.max(
-      1.0,
-      size.height - widget.headerExtent - widget.safeInsets.bottom,
-    );
+    final span = math.max(1.0, size.height - widget.headerExtent);
     return ((point.dy - widget.headerExtent) / span).clamp(0.0, 1.0);
   }
 }
@@ -390,7 +383,7 @@ class _DockLayoutDelegate extends SingleChildLayoutDelegate {
         0,
         _trackOffset(
           start: headerExtent,
-          end: size.height - safeInsets.bottom,
+          end: size.height,
           childExtent: childSize.height,
         ),
       ),
@@ -398,16 +391,12 @@ class _DockLayoutDelegate extends SingleChildLayoutDelegate {
         size.width - childSize.width,
         _trackOffset(
           start: headerExtent,
-          end: size.height - safeInsets.bottom,
+          end: size.height,
           childExtent: childSize.height,
         ),
       ),
       EditorDockEdge.bottom => Offset(
-        _trackOffset(
-          start: safeInsets.left,
-          end: size.width - safeInsets.right,
-          childExtent: childSize.width,
-        ),
+        _trackOffset(start: 0, end: size.width, childExtent: childSize.width),
         size.height - childSize.height,
       ),
     };

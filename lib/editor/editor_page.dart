@@ -120,13 +120,16 @@ class _EditorPageState extends State<EditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final safeInsets = _deviceSafeInsets;
-    final headerExtent = safeInsets.top + 48;
+    final physicalSafeInsets = _EditorSafeLayout.physicalInsets(
+      viewPadding: _deviceSafeInsets,
+      interfaceOrientation: widget.interfaceOrientation,
+    );
+    final headerExtent = _deviceSafeInsets.top + 48;
     final workspaceChromeInsets = EdgeInsets.fromLTRB(
-      safeInsets.left,
+      physicalSafeInsets.left,
       headerExtent,
-      safeInsets.right,
-      safeInsets.bottom,
+      physicalSafeInsets.right,
+      physicalSafeInsets.bottom,
     );
     return ColoredBox(
       color: const Color(0xFF050807),
@@ -148,7 +151,15 @@ class _EditorPageState extends State<EditorPage> {
             top: 0,
             right: 0,
             height: headerExtent,
-            child: _topChrome(context, safeInsets),
+            child: _topChrome(
+              context,
+              EdgeInsets.fromLTRB(
+                physicalSafeInsets.left,
+                _deviceSafeInsets.top,
+                physicalSafeInsets.right,
+                0,
+              ),
+            ),
           ),
         ],
       ),
@@ -724,6 +735,23 @@ class _EditorSafeLayout {
   final EdgeInsets frameInset;
   final EdgeInsets dockSafeInsets;
 
+  /// Safe side ownership follows physical interface direction. Landscape
+  /// padding on the opposite side belongs to the other pane, not both panes.
+  static EdgeInsets physicalInsets({
+    required EdgeInsets viewPadding,
+    required PhysicalInterfaceOrientation interfaceOrientation,
+  }) => switch (interfaceOrientation) {
+    PhysicalInterfaceOrientation.landscapeLeft => EdgeInsets.only(
+      left: viewPadding.left,
+      bottom: viewPadding.bottom,
+    ),
+    PhysicalInterfaceOrientation.landscapeRight => EdgeInsets.only(
+      right: viewPadding.right,
+      bottom: viewPadding.bottom,
+    ),
+    _ => viewPadding,
+  };
+
   static _EditorSafeLayout resolve({
     required EdgeInsets chromeInsets,
     required PhysicalInterfaceOrientation interfaceOrientation,
@@ -747,7 +775,7 @@ class _EditorSafeLayout {
       frameInset: EdgeInsets.only(left: frameLeft),
       dockSafeInsets: EdgeInsets.fromLTRB(
         chromeInsets.left,
-        chromeInsets.top,
+        0,
         canvasRight,
         canvasBottom,
       ),
@@ -1988,12 +2016,16 @@ class _PlacementPanel extends StatelessWidget {
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final dpadWidth = math.min(138.0, constraints.maxWidth * 0.48);
+                final dpadSize = math.min(
+                  138.0,
+                  math.min(constraints.maxWidth * 0.48, constraints.maxHeight),
+                );
                 return Row(
                   children: <Widget>[
                     SizedBox(
                       key: const ValueKey('placement-dpad'),
-                      width: dpadWidth,
+                      width: dpadSize,
+                      height: dpadSize,
                       child: _dpad(placement, component, module),
                     ),
                     const SizedBox(width: 8),
@@ -2084,6 +2116,8 @@ class _PlacementPanel extends StatelessWidget {
             placement.copyWith(center: Offset.zero),
           ),
           key: const ValueKey('placement-center'),
+          symbol: PrismSymbol.center,
+          square: true,
         ),
         _move(
           'Move right',
@@ -2170,11 +2204,15 @@ class _PlacementPanel extends StatelessWidget {
     Key? key,
     PrismShape shape = PrismShape.rectangular,
     Widget? face,
+    PrismSymbol? symbol,
+    bool square = false,
   }) => PrismButton(
     key: key,
     label: label,
     face: face,
+    symbol: symbol,
     shape: shape,
+    square: square,
     palette: host.palette,
     role: PrismRole.compact,
     style: host.dashboard.settings.prismStyle,

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -11,7 +13,7 @@ enum PrismRole { micro, compact, standard, primary }
 
 enum PrismSpan { one, two, three }
 
-enum PrismSymbol { undo, redo }
+enum PrismSymbol { undo, redo, center }
 
 enum PrismShape {
   rectangular,
@@ -26,7 +28,37 @@ abstract final class PrismSymbolGeometry {
   static Path path(PrismSymbol symbol, Size size) {
     return switch (symbol) {
       PrismSymbol.undo || PrismSymbol.redo => _historyPath(symbol, size),
+      PrismSymbol.center => _centerPath(size),
     };
+  }
+
+  static Path _centerPath(Size size) {
+    final w = size.width;
+    final h = size.height;
+    final arm = math.min(w, h) * 0.32;
+    final thickness = math.min(w, h) * 0.15;
+    final path = Path();
+    void addCorner({
+      required double x,
+      required double y,
+      required bool right,
+      required bool down,
+    }) {
+      final horizontalX = right ? x : x - arm;
+      final verticalY = down ? y : y - arm;
+      path
+        ..addRect(Rect.fromLTWH(horizontalX, y, arm, thickness))
+        ..addRect(Rect.fromLTWH(x, verticalY, thickness, arm));
+    }
+
+    addCorner(x: w * 0.2, y: h * 0.2, right: true, down: true);
+    addCorner(x: w * 0.8, y: h * 0.2, right: false, down: true);
+    addCorner(x: w * 0.2, y: h * 0.8, right: true, down: false);
+    addCorner(x: w * 0.8, y: h * 0.8, right: false, down: false);
+    path.addOval(
+      Rect.fromCircle(center: Offset(w / 2, h / 2), radius: thickness * 0.8),
+    );
+    return path;
   }
 
   static Path _historyPath(PrismSymbol symbol, Size size) {
@@ -120,6 +152,7 @@ class PrismButton extends StatefulWidget {
     this.face,
     this.symbol,
     this.shape = PrismShape.rectangular,
+    this.square = false,
     this.lit = false,
     this.selected = false,
     this.enabled = true,
@@ -135,6 +168,7 @@ class PrismButton extends StatefulWidget {
   final Widget? face;
   final PrismSymbol? symbol;
   final PrismShape shape;
+  final bool square;
   final VfdPalette palette;
   final VoidCallback? onPressed;
   final bool lit;
@@ -194,7 +228,9 @@ class _PrismButtonState extends State<PrismButton> {
             onTap: enabled ? _activate : null,
             child: SizedBox(
               key: const ValueKey('prism-housing'),
-              width: PrismMetrics.width(widget.role, widget.span),
+              width: widget.square
+                  ? PrismMetrics.height(widget.role)
+                  : PrismMetrics.width(widget.role, widget.span),
               height: PrismMetrics.height(widget.role),
               child: Stack(
                 fit: StackFit.expand,

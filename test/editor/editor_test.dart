@@ -767,7 +767,7 @@ void main() {
     );
     expect(
       tester.getRect(find.byKey(const ValueKey('editor-console'))).right,
-      closeTo(viewport.width - safeInsets.right - 4, 0.001),
+      closeTo(viewport.width - 4, 0.001),
     );
     final dock = tester.getRect(
       find.byKey(const ValueKey('editor-command-dock')),
@@ -839,7 +839,7 @@ void main() {
     );
     expect(
       tester.getRect(find.byKey(const ValueKey('editor-console'))).right,
-      closeTo(viewport.width - safeInsets.right - 4, 0.001),
+      closeTo(viewport.width - 4, 0.001),
     );
     final landscapeDock = tester.getRect(
       find.byKey(const ValueKey('editor-command-dock')),
@@ -871,7 +871,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 90));
     expect(
       tester.getRect(find.byKey(const ValueKey('orientation-landscape'))).right,
-      lessThanOrEqualTo(viewport.width - safeInsets.right),
+      lessThanOrEqualTo(viewport.width),
     );
     final openLeftFrame = tester.getRect(
       find.byKey(const ValueKey('editor-authored-frame')),
@@ -900,26 +900,20 @@ void main() {
     expect(drawerEnvironment.right, viewport.width);
     expect(drawerEnvironment.bottom, viewport.height);
     expect(drawerContent.top, greaterThanOrEqualTo(header.bottom));
-    expect(
-      drawerContent.right,
-      lessThanOrEqualTo(viewport.width - safeInsets.right),
-    );
+    expect(drawerContent.right, lessThanOrEqualTo(viewport.width));
     expect(
       drawerContent.bottom,
       lessThanOrEqualTo(viewport.height - safeInsets.bottom),
     );
     final lookTab = find.byKey(const ValueKey('editor-service-section-look'));
-    expect(
-      tester.getRect(lookTab).right,
-      lessThanOrEqualTo(viewport.width - safeInsets.right),
-    );
+    expect(tester.getRect(lookTab).right, lessThanOrEqualTo(viewport.width));
     await tester.tap(lookTab);
     await tester.pump();
     expect(
       tester
           .getRect(find.byKey(const ValueKey('mechanical-drawer-safe-content')))
           .right,
-      lessThanOrEqualTo(viewport.width - safeInsets.right),
+      lessThanOrEqualTo(viewport.width),
     );
     expect(
       _canvasAspect(tester, key: const ValueKey('editor-authored-frame')),
@@ -1029,6 +1023,50 @@ void main() {
     await gesture.up();
     expect(resized, isNotNull);
     expect(resized!.size.width, greaterThan(edgePlacement.size.width));
+  });
+
+  testWidgets('landscape dock owns only its physical unsafe edge', (
+    tester,
+  ) async {
+    const viewport = Size(874, 402);
+    const safeInsets = EdgeInsets.fromLTRB(59, 0, 59, 21);
+    const dockPreferences = EditorDockPreferences(
+      landscape: EditorDockPlacement(edge: EditorDockEdge.left, alignment: 0.5),
+    );
+
+    Future<Rect> pumpFor(PhysicalInterfaceOrientation orientation) async {
+      await _setViewport(tester, viewport);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: viewport,
+              padding: safeInsets,
+              viewPadding: safeInsets,
+            ),
+            child: EditorPage(
+              dashboard: Dashboard.forkFrom(
+                developmentPreset(),
+                id: 'dock-$orientation',
+              ),
+              interfaceOrientation: orientation,
+              dockPreferences: dockPreferences,
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+      );
+      return tester.getRect(find.byKey(const ValueKey('canvas-undo')));
+    }
+
+    final leftIsland = await pumpFor(
+      PhysicalInterfaceOrientation.landscapeLeft,
+    );
+    final rightIsland = await pumpFor(
+      PhysicalInterfaceOrientation.landscapeRight,
+    );
+    expect(leftIsland.left, closeTo(safeInsets.left + 2, 0.001));
+    expect(rightIsland.left, closeTo(2, 0.001));
   });
 
   testWidgets('ADD catalogue direct drag shows ghost and places a part', (
@@ -1480,6 +1518,21 @@ void main() {
           .shape,
       PrismShape.rectangular,
     );
+    expect(
+      tester
+          .widget<PrismButton>(find.byKey(const ValueKey('placement-center')))
+          .symbol,
+      PrismSymbol.center,
+    );
+    expect(
+      tester
+          .widget<PrismButton>(find.byKey(const ValueKey('placement-center')))
+          .square,
+      isTrue,
+    );
+    final dpad = tester.getRect(find.byKey(const ValueKey('placement-dpad')));
+    expect(dpad.width, closeTo(dpad.height, 0.001));
+    expect(find.byKey(const ValueKey('prism-symbol-center')), findsOneWidget);
     expect(find.text('Move up'), findsNothing);
 
     final before =
