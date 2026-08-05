@@ -839,7 +839,7 @@ void main() {
     );
     expect(
       tester.getRect(find.byKey(const ValueKey('editor-console'))).right,
-      closeTo(viewport.width - 4, 0.001),
+      closeTo(viewport.width - safeInsets.right - 4, 0.001),
     );
     final landscapeDock = tester.getRect(
       find.byKey(const ValueKey('editor-command-dock')),

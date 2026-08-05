@@ -156,7 +156,7 @@ class _EditorPageState extends State<EditorPage> {
               EdgeInsets.fromLTRB(
                 physicalSafeInsets.left,
                 _deviceSafeInsets.top,
-                physicalSafeInsets.right,
+                _deviceSafeInsets.right,
                 0,
               ),
             ),
