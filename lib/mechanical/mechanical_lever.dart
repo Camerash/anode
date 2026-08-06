@@ -59,6 +59,7 @@ class _MechanicalLeverState extends State<MechanicalLever> {
   bool _dragging = false;
   bool _focused = false;
   double _grabOffsetX = 0;
+  double? _dragFraction;
   int? _feedbackDetent;
 
   bool get _enabled => widget.onChanged != null;
@@ -114,7 +115,7 @@ class _MechanicalLeverState extends State<MechanicalLever> {
           final size = Size(constraints.maxWidth, _height);
           final geometry = _LeverGeometry.from(
             size,
-            fraction: _fraction,
+            fraction: _dragFraction ?? _fraction,
             leading: widget.leading != null,
           );
           return Listener(
@@ -228,6 +229,7 @@ class _MechanicalLeverState extends State<MechanicalLever> {
     if (!geometry.thumbHitRect.contains(local)) return;
     _dragging = true;
     _grabOffsetX = local.dx - geometry.thumbCenter.dx;
+    _dragFraction = _fraction;
     _feedbackDetent = _detentFor(widget.value);
     setState(() {});
   }
@@ -239,12 +241,18 @@ class _MechanicalLeverState extends State<MechanicalLever> {
       0.0,
       1.0,
     );
+    if (_dragFraction != fraction) {
+      setState(() => _dragFraction = fraction);
+    }
     _change(widget.min + fraction * (widget.max - widget.min));
   }
 
   void _endDrag() {
     if (!_dragging) return;
-    setState(() => _dragging = false);
+    setState(() {
+      _dragging = false;
+      _dragFraction = null;
+    });
   }
 
   void _change(double raw) {
@@ -408,15 +416,19 @@ class _LeverFacePainter extends CustomPainter {
     for (var i = 0; i < detentFractions.length; i++) {
       final x = geometry.trackLeft + geometry.trackWidth * detentFractions[i];
       final isReference = i == referenceDetent;
-      canvas.drawLine(
-        Offset(x, isReference ? 22 : 25),
-        Offset(x, 34),
-        i == currentDetent ? active : inactive,
-      );
       if (isReference) {
+        final marker = i == currentDetent ? active : inactive;
+        for (final offset in const <double>[-2, 2]) {
+          canvas.drawLine(
+            Offset(x + offset, 22),
+            Offset(x + offset, 34),
+            marker,
+          );
+        }
+      } else {
         canvas.drawLine(
-          Offset(x + 3, 22),
-          Offset(x + 3, 34),
+          Offset(x, 25),
+          Offset(x, 34),
           i == currentDetent ? active : inactive,
         );
       }

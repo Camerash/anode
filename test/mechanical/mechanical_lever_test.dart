@@ -86,6 +86,24 @@ void main() {
     expect(find.text('OFF · 0.00'), findsOneWidget);
   });
 
+  testWidgets('thumb follows pointer between committed detents', (
+    tester,
+  ) async {
+    final harness = await pumpLever(tester, initial: 0.7);
+    final thumb = find.byKey(const ValueKey('mechanical-lever-thumb'));
+    final start = tester.getCenter(thumb);
+    final gesture = await tester.startGesture(start);
+    await gesture.moveBy(const Offset(6, 0));
+    await tester.pump();
+
+    expect(harness.value, closeTo(0.7, 1e-9));
+    expect(tester.getCenter(thumb).dx, closeTo(start.dx + 6, 0.5));
+
+    await gesture.up();
+    await tester.pump();
+    expect(tester.getCenter(thumb).dx, closeTo(start.dx, 0.5));
+  });
+
   testWidgets('semantics, keyboard, and wheel move one physical detent', (
     tester,
   ) async {
