@@ -16,31 +16,35 @@ void main() {
     double initial = 0.72,
     ValueChanged<double>? observe,
     bool enabled = true,
+    bool disableAnimations = false,
   }) async {
     final harness = _LeverHarness(initial);
     await tester.pumpWidget(
       MaterialApp(
-        home: Center(
-          child: SizedBox(
-            width: 360,
-            child: StatefulBuilder(
-              builder: (context, setState) => MechanicalLever(
-                label: 'Bloom strength',
-                value: harness.value,
-                min: 0,
-                max: 2,
-                referenceValue: 1,
-                offAtMinimum: true,
-                palette: palette,
-                prismStyle: const PrismStyle(),
-                soundEnabled: false,
-                hapticsEnabled: false,
-                onChanged: enabled
-                    ? (value) {
-                        observe?.call(value);
-                        setState(() => harness.value = value);
-                      }
-                    : null,
+        home: MediaQuery(
+          data: MediaQueryData(disableAnimations: disableAnimations),
+          child: Center(
+            child: SizedBox(
+              width: 360,
+              child: StatefulBuilder(
+                builder: (context, setState) => MechanicalLever(
+                  label: 'Bloom strength',
+                  value: harness.value,
+                  min: 0,
+                  max: 2,
+                  referenceValue: 1,
+                  offAtMinimum: true,
+                  palette: palette,
+                  prismStyle: const PrismStyle(),
+                  soundEnabled: false,
+                  hapticsEnabled: false,
+                  onChanged: enabled
+                      ? (value) {
+                          observe?.call(value);
+                          setState(() => harness.value = value);
+                        }
+                      : null,
+                ),
               ),
             ),
           ),
@@ -86,9 +90,7 @@ void main() {
     expect(find.text('OFF · 0.00'), findsOneWidget);
   });
 
-  testWidgets('thumb follows pointer between committed detents', (
-    tester,
-  ) async {
+  testWidgets('thumb animates between committed detents', (tester) async {
     final harness = await pumpLever(tester, initial: 0.7);
     final thumb = find.byKey(const ValueKey('mechanical-lever-thumb'));
     final start = tester.getCenter(thumb);
@@ -97,11 +99,66 @@ void main() {
     await tester.pump();
 
     expect(harness.value, closeTo(0.7, 1e-9));
-    expect(tester.getCenter(thumb).dx, closeTo(start.dx + 6, 0.5));
+    expect(tester.getCenter(thumb).dx, closeTo(start.dx, 0.5));
+
+    await gesture.moveBy(const Offset(12, 0));
+    await tester.pump();
+    expect(harness.value, closeTo(0.8, 1e-9));
+    final target = start.dx + 15.8;
+    await tester.pump(const Duration(milliseconds: 35));
+    final midpoint = tester.getCenter(thumb).dx;
+    expect(midpoint, greaterThan(start.dx));
+    expect(midpoint, lessThan(target));
+
+    await tester.pump(const Duration(milliseconds: 35));
+    expect(tester.getCenter(thumb).dx, closeTo(target, 0.7));
 
     await gesture.up();
     await tester.pump();
-    expect(tester.getCenter(thumb).dx, closeTo(start.dx, 0.5));
+    expect(tester.getCenter(thumb).dx, closeTo(target, 0.7));
+  });
+
+  testWidgets('rapid detent changes retarget latest position', (tester) async {
+    final harness = await pumpLever(tester, initial: 0.7);
+    final thumb = find.byKey(const ValueKey('mechanical-lever-thumb'));
+    final gesture = await tester.startGesture(tester.getCenter(thumb));
+
+    await gesture.moveBy(const Offset(20, 0));
+    await tester.pump();
+    expect(harness.value, closeTo(0.8, 1e-9));
+    await gesture.moveBy(const Offset(27, 0));
+    await tester.pump();
+    expect(harness.value, closeTo(1.0, 1e-9));
+
+    await tester.pump(const Duration(milliseconds: 70));
+    final lever = tester.getRect(
+      find.byKey(const ValueKey('mechanical-lever')),
+    );
+    final expected = lever.left + 22 + (lever.width - 44) * 0.5;
+    expect(tester.getCenter(thumb).dx, closeTo(expected, 0.7));
+    await gesture.up();
+  });
+
+  testWidgets('reduced motion resolves detent transition immediately', (
+    tester,
+  ) async {
+    final harness = await pumpLever(
+      tester,
+      initial: 0.7,
+      disableAnimations: true,
+    );
+    final thumb = find.byKey(const ValueKey('mechanical-lever-thumb'));
+    final gesture = await tester.startGesture(tester.getCenter(thumb));
+    await gesture.moveBy(const Offset(18, 0));
+    await tester.pump();
+
+    expect(harness.value, closeTo(0.8, 1e-9));
+    final lever = tester.getRect(
+      find.byKey(const ValueKey('mechanical-lever')),
+    );
+    final expected = lever.left + 22 + (lever.width - 44) * 0.4;
+    expect(tester.getCenter(thumb).dx, closeTo(expected, 0.7));
+    await gesture.up();
   });
 
   testWidgets('semantics, keyboard, and wheel move one physical detent', (

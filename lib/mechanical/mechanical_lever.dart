@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -50,16 +51,20 @@ class MechanicalLever extends StatefulWidget {
   State<MechanicalLever> createState() => _MechanicalLeverState();
 }
 
-class _MechanicalLeverState extends State<MechanicalLever> {
+class _MechanicalLeverState extends State<MechanicalLever>
+    with SingleTickerProviderStateMixin {
   static const double _height = 94;
   static const double _thumbVisualWidth = 28;
   static const double _thumbVisualHeight = 34;
   static const double _thumbHitExtent = 44;
+  static const Duration _thumbMotionDuration = Duration(milliseconds: 70);
 
+  late final AnimationController _thumbController;
   bool _dragging = false;
   bool _focused = false;
   double _grabOffsetX = 0;
-  double? _dragFraction;
+  late double _thumbFrom;
+  late double _thumbTo;
   int? _feedbackDetent;
 
   bool get _enabled => widget.onChanged != null;
@@ -71,6 +76,27 @@ class _MechanicalLeverState extends State<MechanicalLever> {
   );
   double get _fraction =>
       ((widget.value - widget.min) / (widget.max - widget.min)).clamp(0, 1);
+  double get _thumbFraction =>
+      lerpDouble(
+        _thumbFrom,
+        _thumbTo,
+        Curves.easeOutCubic.transform(_thumbController.value),
+      ) ??
+      _thumbTo;
+  bool get _reduceMotion =>
+      MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+  @override
+  void initState() {
+    super.initState();
+    _thumbFrom = _fraction;
+    _thumbTo = _fraction;
+    _thumbController = AnimationController(
+      vsync: this,
+      duration: _thumbMotionDuration,
+      value: 1,
+    )..addListener(_tick);
+  }
 
   @override
   void didUpdateWidget(covariant MechanicalLever oldWidget) {
@@ -81,6 +107,19 @@ class _MechanicalLeverState extends State<MechanicalLever> {
         oldWidget.referenceValue != widget.referenceValue) {
       _feedbackDetent = null;
     }
+    if (oldWidget.value != widget.value ||
+        oldWidget.min != widget.min ||
+        oldWidget.max != widget.max) {
+      _retargetThumb(widget.value);
+    }
+  }
+
+  @override
+  void dispose() {
+    _thumbController
+      ..removeListener(_tick)
+      ..dispose();
+    super.dispose();
   }
 
   @override
@@ -115,7 +154,7 @@ class _MechanicalLeverState extends State<MechanicalLever> {
           final size = Size(constraints.maxWidth, _height);
           final geometry = _LeverGeometry.from(
             size,
-            fraction: _dragFraction ?? _fraction,
+            fraction: _thumbFraction,
             leading: widget.leading != null,
           );
           return Listener(
@@ -229,7 +268,6 @@ class _MechanicalLeverState extends State<MechanicalLever> {
     if (!geometry.thumbHitRect.contains(local)) return;
     _dragging = true;
     _grabOffsetX = local.dx - geometry.thumbCenter.dx;
-    _dragFraction = _fraction;
     _feedbackDetent = _detentFor(widget.value);
     setState(() {});
   }
@@ -241,18 +279,12 @@ class _MechanicalLeverState extends State<MechanicalLever> {
       0.0,
       1.0,
     );
-    if (_dragFraction != fraction) {
-      setState(() => _dragFraction = fraction);
-    }
     _change(widget.min + fraction * (widget.max - widget.min));
   }
 
   void _endDrag() {
     if (!_dragging) return;
-    setState(() {
-      _dragging = false;
-      _dragFraction = null;
-    });
+    setState(() => _dragging = false);
   }
 
   void _change(double raw) {
@@ -267,7 +299,27 @@ class _MechanicalLeverState extends State<MechanicalLever> {
         hapticsEnabled: widget.hapticsEnabled,
       );
     }
+    _retargetThumb(next);
     widget.onChanged?.call(next);
+  }
+
+  void _retargetThumb(double value) {
+    final target = ((value - widget.min) / (widget.max - widget.min)).clamp(
+      0.0,
+      1.0,
+    );
+    if ((_thumbTo - target).abs() < 1e-9) return;
+    _thumbFrom = _thumbFraction;
+    _thumbTo = target;
+    if (_reduceMotion || (_thumbFrom - target).abs() < 1e-9) {
+      _thumbController.value = 1;
+    } else {
+      _thumbController.forward(from: 0);
+    }
+  }
+
+  void _tick() {
+    if (mounted) setState(() {});
   }
 
   double _adjacentValue(int direction) {
