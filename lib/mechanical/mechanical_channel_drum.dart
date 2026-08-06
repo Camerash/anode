@@ -139,20 +139,28 @@ class _MechanicalCarouselState<T> extends State<MechanicalCarousel<T>>
           height: 76,
           child: Row(
             children: <Widget>[
-              _stepButton(
-                key: widget.previousKey,
-                label: 'Previous',
-                enabled: _canPrevious,
-                onPressed: () => widget.onChanged(widget.index - 1),
-              ),
-              const SizedBox(width: 5),
               Expanded(child: _face()),
               const SizedBox(width: 5),
-              _stepButton(
-                key: widget.nextKey,
-                label: 'Next',
-                enabled: _canNext,
-                onPressed: () => widget.onChanged(widget.index + 1),
+              SizedBox(
+                width: PrismMetrics.width(PrismRole.micro, PrismSpan.one),
+                height: 76,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: <Widget>[
+                    _stepButton(
+                      key: widget.previousKey,
+                      label: 'Previous',
+                      enabled: _canPrevious,
+                      onPressed: () => widget.onChanged(widget.index - 1),
+                    ),
+                    _stepButton(
+                      key: widget.nextKey,
+                      label: 'Next',
+                      enabled: _canNext,
+                      onPressed: () => widget.onChanged(widget.index + 1),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -221,7 +229,7 @@ class _MechanicalCarouselState<T> extends State<MechanicalCarousel<T>>
     label: label,
     palette: widget.palette,
     enabled: enabled,
-    role: PrismRole.compact,
+    role: PrismRole.micro,
     style: widget.prismStyle,
     soundEnabled: widget.soundEnabled,
     hapticsEnabled: widget.hapticsEnabled,
