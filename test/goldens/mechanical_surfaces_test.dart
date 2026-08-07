@@ -104,7 +104,7 @@ void main() {
     );
   });
 
-  testWidgets('LOOK fascia and service hatch baselines', (tester) async {
+  testWidgets('effect tuning phosphor and channel baselines', (tester) async {
     await tester.binding.setSurfaceSize(const Size(700, 500));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final profile = OpticalProfile(
@@ -137,42 +137,11 @@ void main() {
       find.byKey(const ValueKey('surface')),
       matchesGoldenFile('baselines/effect_closed.png'),
     );
-    await tester.tap(find.byKey(const ValueKey('look-tune')));
+    await tester.tap(find.byKey(const ValueKey('service-effect-next')));
     await tester.pumpAndSettle();
     await expectLater(
       find.byKey(const ValueKey('surface')),
       matchesGoldenFile('baselines/effect_open.png'),
-    );
-  });
-
-  testWidgets('LOOK service shutter travel baseline', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(700, 500));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final profile = OpticalProfile();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: RepaintBoundary(
-          key: const ValueKey('surface'),
-          child: EffectPanel(
-            title: 'Design effects',
-            dashboardProfile: profile,
-            baseProfile: profile,
-            scope: EffectScope.dashboard,
-            prismStyle: const PrismStyle(),
-            soundEnabled: false,
-            hapticsEnabled: false,
-            onProfileChanged: (_) {},
-          ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.byKey(const ValueKey('look-tune')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 75));
-    await expectLater(
-      find.byKey(const ValueKey('surface')),
-      matchesGoldenFile('baselines/effect_transition.png'),
     );
   });
 

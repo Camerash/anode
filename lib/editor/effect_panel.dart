@@ -2,7 +2,6 @@ import 'package:flutter/widgets.dart';
 
 import '../mechanical/mechanical_channel_drum.dart';
 import '../mechanical/mechanical_lever.dart';
-import '../mechanical/mechanical_service_hatch.dart';
 import '../mechanical/prism_selector_bank.dart';
 import '../model/optical_profile.dart';
 import '../vfd/prism_widgets.dart';
@@ -45,7 +44,19 @@ class EffectPanel extends StatefulWidget {
 }
 
 class _EffectPanelState extends State<EffectPanel> {
-  _EffectPanelFace _face = _EffectPanelFace.fascia;
+  static const _phosphorChannelId = '__phosphor__';
+  static const _phosphorChannel = EffectSpec(
+    id: _phosphorChannelId,
+    label: 'Phosphor',
+    description: 'Color of the emitted phosphor coating.',
+    pictogramId: _phosphorChannelId,
+    scopes: <EffectScope>{
+      EffectScope.dashboard,
+      EffectScope.module,
+      EffectScope.component,
+    },
+  );
+
   int _serviceIndex = 0;
 
   OpticalProfile get _effective =>
@@ -56,6 +67,7 @@ class _EffectPanelState extends State<EffectPanel> {
   List<EffectSpec> get _effectSpecs {
     final known = EffectSpecs.forScope(widget.scope);
     return <EffectSpec>[
+      _phosphorChannel,
       ...known,
       for (final id in _unknownEffectIds) EffectSpecs.storageSpec(id),
     ];
@@ -75,114 +87,7 @@ class _EffectPanelState extends State<EffectPanel> {
   Widget build(BuildContext context) => PrismPanel(
     palette: _palette,
     padding: const EdgeInsets.all(4),
-    child: MechanicalServiceHatch(
-      open: _face == _EffectPanelFace.service,
-      front: _frontFace(),
-      service: _serviceFace(),
-      soundEnabled: widget.soundEnabled,
-      hapticsEnabled: widget.hapticsEnabled,
-    ),
-  );
-
-  Widget _frontFace() => ColoredBox(
-    color: const Color(0xFF090D0C),
-    child: Padding(
-      padding: const EdgeInsets.all(6),
-      child: _face == _EffectPanelFace.phosphor
-          ? _phosphorFace()
-          : _fasciaFace(),
-    ),
-  );
-
-  Widget _fasciaFace() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: <Widget>[
-      VfdLegend(widget.title, palette: _palette, lit: true, size: 11),
-      const SizedBox(height: 8),
-      Row(
-        children: <Widget>[
-          VfdLegend('Phosphor', palette: _palette, size: 9),
-          const SizedBox(width: 6),
-          Expanded(
-            child: _fitButton(
-              key: const ValueKey('look-phosphor'),
-              label: _effective.phosphorName,
-              lit: true,
-              span: PrismSpan.two,
-              onPressed: () =>
-                  setState(() => _face = _EffectPanelFace.phosphor),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: _fitButton(
-              key: const ValueKey('look-tune'),
-              label: 'Tune',
-              lit: false,
-              span: PrismSpan.two,
-              onPressed: () => setState(() => _face = _EffectPanelFace.service),
-            ),
-          ),
-        ],
-      ),
-      const Spacer(),
-    ],
-  );
-
-  Widget _phosphorFace() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: <Widget>[
-      Row(
-        children: <Widget>[
-          _fitButton(
-            key: const ValueKey('phosphor-back'),
-            label: 'Back',
-            onPressed: () => setState(() => _face = _EffectPanelFace.fascia),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: VfdLegend(
-              widget.local ? 'Phosphor · local' : 'Phosphor · design',
-              palette: _palette,
-              lit: true,
-              size: 11,
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 8),
-      Row(
-        children: <Widget>[
-          if (widget.local) ...<Widget>[
-            Expanded(
-              child: _phosphorButton(
-                key: const ValueKey('phosphor-use-design'),
-                label: 'Use design',
-                value: null,
-                selected: widget.overrides?.phosphorName == null,
-              ),
-            ),
-            const SizedBox(width: 4),
-          ],
-          for (var index = 0; index < Phosphor.all.length; index++) ...<Widget>[
-            if (index > 0) const SizedBox(width: 4),
-            Expanded(
-              child: _phosphorButton(
-                key: ValueKey('phosphor-${Phosphor.all[index].name}'),
-                label: Phosphor.all[index].name,
-                value: Phosphor.all[index].name,
-                selected:
-                    _effective.phosphorName == Phosphor.all[index].name &&
-                    (!widget.local ||
-                        widget.overrides?.phosphorName ==
-                            Phosphor.all[index].name),
-              ),
-            ),
-          ],
-        ],
-      ),
-      const Spacer(),
-    ],
+    child: _serviceFace(),
   );
 
   Widget _phosphorButton({
@@ -202,9 +107,12 @@ class _EffectPanelState extends State<EffectPanel> {
     final specs = _effectSpecs;
     final index = _serviceIndex.clamp(0, specs.length - 1);
     final spec = specs[index];
-    final known = EffectSpecs.byId(spec.id) != null;
+    final isPhosphor = spec.id == _phosphorChannelId;
+    final known = isPhosphor || EffectSpecs.byId(spec.id) != null;
     final overridden = widget.overrides?.overrides(spec.id) ?? false;
-    final editable = known && widget.editable && (!widget.local || overridden);
+    final editable = isPhosphor
+        ? widget.editable
+        : known && widget.editable && (!widget.local || overridden);
     final setting = _effective.effect(spec.id);
     return ColoredBox(
       color: const Color(0xFF050706),
@@ -227,13 +135,6 @@ class _EffectPanelState extends State<EffectPanel> {
                     onChanged: (value) => setState(() => _serviceIndex = value),
                   ),
                 ),
-                const SizedBox(width: 5),
-                _serviceButton(
-                  key: const ValueKey('service-hatch-close'),
-                  label: 'Close',
-                  onPressed: () =>
-                      setState(() => _face = _EffectPanelFace.fascia),
-                ),
               ],
             ),
             const SizedBox(height: 5),
@@ -246,13 +147,13 @@ class _EffectPanelState extends State<EffectPanel> {
                     height: 40,
                     child: _icon(
                       spec.pictogramId,
-                      lit: setting.enabled,
+                      lit: isPhosphor || setting.enabled,
                       enabled: known,
                     ),
                   ),
                   const SizedBox(width: 7),
                   Expanded(child: _serviceIdentity(spec, index, specs.length)),
-                  if (widget.local && known) ...<Widget>[
+                  if (widget.local && known && !isPhosphor) ...<Widget>[
                     const SizedBox(width: 5),
                     _serviceButton(
                       key: ValueKey('effect-override-${spec.id}'),
@@ -267,30 +168,90 @@ class _EffectPanelState extends State<EffectPanel> {
             ),
             const SizedBox(height: 5),
             Expanded(
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: MechanicalLever(
-                  key: ValueKey('effect-lever-${spec.id}'),
-                  label: '${spec.label} strength',
-                  value: setting.strength,
-                  min: 0,
-                  max: spec.maxStrength,
-                  precision: spec.precision,
-                  tickCount: 21,
-                  referenceValue: spec.defaultStrength,
-                  offAtMinimum: true,
-                  palette: _palette,
-                  prismStyle: widget.prismStyle,
-                  soundEnabled: widget.soundEnabled,
-                  hapticsEnabled: widget.hapticsEnabled,
-                  onChanged: editable
-                      ? (value) =>
-                            _setEffect(spec, setting.withStrength(value, spec))
-                      : null,
-                ),
-              ),
+              child: isPhosphor
+                  ? _phosphorChoices()
+                  : Align(
+                      alignment: Alignment.topCenter,
+                      child: MechanicalLever(
+                        key: ValueKey('effect-lever-${spec.id}'),
+                        label: '${spec.label} strength',
+                        value: setting.strength,
+                        min: 0,
+                        max: spec.maxStrength,
+                        precision: spec.precision,
+                        tickCount: 21,
+                        referenceValue: spec.defaultStrength,
+                        offAtMinimum: true,
+                        palette: _palette,
+                        prismStyle: widget.prismStyle,
+                        soundEnabled: widget.soundEnabled,
+                        hapticsEnabled: widget.hapticsEnabled,
+                        onChanged: editable
+                            ? (value) => _setEffect(
+                                spec,
+                                setting.withStrength(value, spec),
+                              )
+                            : null,
+                      ),
+                    ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _phosphorChoices() {
+    final selected = _effective.phosphorName;
+    return LayoutBuilder(
+      builder: (context, constraints) => FittedBox(
+        alignment: Alignment.topCenter,
+        fit: BoxFit.scaleDown,
+        child: SizedBox(
+          width: constraints.maxWidth,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              VfdLegend(
+                'Phosphor color',
+                palette: _palette,
+                lit: true,
+                size: 9,
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: <Widget>[
+                  for (var index = 0; index < Phosphor.all.length; index++) ...[
+                    if (index > 0) const SizedBox(width: 4),
+                    Expanded(
+                      child: _phosphorButton(
+                        key: ValueKey(
+                          'service-effect-phosphor-${Phosphor.all[index].name}',
+                        ),
+                        label: Phosphor.all[index].name,
+                        value: Phosphor.all[index].name,
+                        selected:
+                            selected == Phosphor.all[index].name &&
+                            (!widget.local ||
+                                widget.overrides?.phosphorName ==
+                                    Phosphor.all[index].name),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              if (widget.local) ...<Widget>[
+                const SizedBox(height: 6),
+                _phosphorButton(
+                  key: const ValueKey('service-effect-phosphor-use-design'),
+                  label: 'Use design',
+                  value: null,
+                  selected: widget.overrides?.phosphorName == null,
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
@@ -392,8 +353,6 @@ class _EffectPanelState extends State<EffectPanel> {
   void _setOverrides(OpticalOverrides value) =>
       widget.onOverridesChanged?.call(value);
 }
-
-enum _EffectPanelFace { fascia, phosphor, service }
 
 class PrismStyleEditor extends StatefulWidget {
   const PrismStyleEditor({

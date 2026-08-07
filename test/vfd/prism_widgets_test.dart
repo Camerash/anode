@@ -485,7 +485,7 @@ void main() {
     await gesture.up();
   });
 
-  testWidgets('LOOK fascia exposes only phosphor and TUNE', (tester) async {
+  testWidgets('effect tuning opens on phosphor channel', (tester) async {
     final profile = OpticalProfile(
       effects: <String, EffectSetting>{
         EffectIds.emission: const EffectSetting(
@@ -494,7 +494,6 @@ void main() {
         ),
       },
     );
-    var changes = 0;
     await tester.pumpWidget(
       MaterialApp(
         home: SizedBox(
@@ -508,35 +507,48 @@ void main() {
             prismStyle: const PrismStyle(),
             soundEnabled: false,
             hapticsEnabled: false,
-            onProfileChanged: (_) => changes++,
+            onProfileChanged: (_) {},
           ),
         ),
       ),
     );
 
-    final footprint = tester.getSize(
-      find.byKey(const ValueKey('mechanical-service-hatch')),
+    expect(
+      find.byKey(const ValueKey('service-effect-previous')),
+      findsOneWidget,
     );
-    expect(find.byKey(const ValueKey('look-phosphor')), findsOneWidget);
-    expect(find.byKey(const ValueKey('look-tune')), findsOneWidget);
-    expect(find.byType(EffectPictogram), findsNothing);
+    expect(find.byKey(const ValueKey('service-effect-next')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('service-effect-phosphor-Cyan-green')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('service-effect-phosphor-Amber')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('service-effect-phosphor-Red')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('service-hatch-close')), findsNothing);
+    expect(find.byType(EffectPictogram), findsOneWidget);
     expect(find.byType(MechanicalLever), findsNothing);
     expect(find.byKey(const ValueKey('pager-detent-rail')), findsNothing);
     expect(find.text('0.72'), findsNothing);
 
-    await tester.tap(find.byKey(const ValueKey('look-tune')));
-    await tester.pumpAndSettle();
-
     expect(
-      tester.getSize(find.byKey(const ValueKey('mechanical-service-hatch'))),
-      footprint,
+      tester
+          .widget<PrismButton>(
+            find.byKey(const ValueKey('service-effect-previous')),
+          )
+          .enabled,
+      isFalse,
     );
-    expect(changes, 0);
+    await tester.tap(find.byKey(const ValueKey('service-effect-next')));
+    await tester.pump();
     expect(find.textContaining('EMISSION'), findsOneWidget);
     expect(find.text('0.72'), findsOneWidget);
-    expect(find.byType(EffectPictogram), findsOneWidget);
     expect(find.byType(MechanicalLever), findsOneWidget);
-    expect(find.byKey(const ValueKey('pager-detent-rail')), findsNothing);
   });
 
   testWidgets('service lever writes only visible detent values', (
@@ -571,7 +583,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('look-tune')));
+    await tester.tap(find.byKey(const ValueKey('service-effect-next')));
     await tester.pumpAndSettle();
     await tester.drag(
       find.descendant(
@@ -612,20 +624,15 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('look-tune')));
-    await tester.pumpAndSettle();
     final previous = tester.widget<PrismButton>(
       find.byKey(const ValueKey('service-effect-previous')),
     );
     expect(previous.enabled, isFalse);
 
     await tester.tap(find.byKey(const ValueKey('service-effect-next')));
-    await tester.pump();
-    expect(find.textContaining('BLOOM'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('service-hatch-close')));
     await tester.pumpAndSettle();
-    expect(find.byType(MechanicalLever), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('look-tune')));
+    expect(find.textContaining('EMISSION'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('service-effect-next')));
     await tester.pumpAndSettle();
     expect(find.textContaining('BLOOM'), findsOneWidget);
   });
@@ -660,15 +667,13 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('look-tune')));
-    await tester.pumpAndSettle();
     for (
       var index = 0;
-      index < EffectSpecs.forScope(EffectScope.dashboard).length;
+      index < EffectSpecs.forScope(EffectScope.dashboard).length + 1;
       index++
     ) {
       await tester.tap(find.byKey(const ValueKey('service-effect-next')));
-      await tester.pump();
+      await tester.pumpAndSettle();
     }
 
     final lever = find.byKey(const ValueKey('effect-lever-futureScatter'));
@@ -713,10 +718,25 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('look-tune')));
+    expect(
+      find.byKey(const ValueKey('service-effect-phosphor-use-design')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('service-effect-phosphor-Amber')),
+    );
+    await tester.pump();
+    expect(changed?.phosphorName, 'Amber');
+    await tester.tap(
+      find.byKey(const ValueKey('service-effect-phosphor-use-design')),
+    );
+    await tester.pump();
+    expect(changed?.phosphorName, isNull);
+
+    await tester.tap(find.byKey(const ValueKey('service-effect-next')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('service-effect-next')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(
       tester
           .getSemantics(find.byKey(const ValueKey('effect-lever-bloom')))
@@ -760,14 +780,12 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('look-phosphor')));
-    await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('phosphor-Red')));
+    await tester.tap(find.byKey(const ValueKey('service-effect-phosphor-Red')));
     await tester.pump();
     expect(changed?.phosphorName, 'Red');
   });
 
-  testWidgets('local service face fits minimum side-bay footprint', (
+  testWidgets('local effect face fits minimum side-bay footprint', (
     tester,
   ) async {
     final profile = OpticalProfile();
@@ -794,10 +812,10 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('look-tune')));
-    await tester.pumpAndSettle();
-
     expect(tester.takeException(), isNull);
-    expect(find.byType(MechanicalLever), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('service-effect-phosphor-Cyan-green')),
+      findsOneWidget,
+    );
   });
 }
