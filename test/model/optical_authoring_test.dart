@@ -17,6 +17,34 @@ Map<String, Object?> _reencode(Map<String, Object?> json) =>
     jsonDecode(jsonEncode(json)) as Map<String, Object?>;
 
 void main() {
+  test('effect descriptions use clear operator instructions', () {
+    expect(
+      <String, String>{
+        for (final spec in EffectSpecs.all) spec.id: spec.description,
+      },
+      <String, String>{
+        EffectIds.emission: 'Set the light output of powered VFD segments.',
+        EffectIds.bloom: 'Add a soft light halo around powered segments.',
+        EffectIds.phosphorTexture:
+            'Add small output differences across the phosphor layer.',
+        EffectIds.gridMesh: 'Show the control-grid mesh in the VFD light.',
+        EffectIds.unlitPhosphor:
+            'Show the phosphor layer in segments that have no power.',
+        EffectIds.phosphorDecay:
+            'Keep a short afterglow when a segment powers down.',
+        EffectIds.glassGrain:
+            'Add fine glass and sensor noise across the VFD module.',
+        EffectIds.filamentWires:
+            'Show the cathode wires across the VFD module.',
+        EffectIds.tiltParallax: 'Move the glass layer when the device tilts.',
+      },
+    );
+    expect(
+      EffectSpecs.storageSpec('future').description,
+      'This effect is not available in this Anode version.',
+    );
+  });
+
   test('effect power preserves last non-zero strength', () {
     final spec = EffectSpecs.byId(EffectIds.bloom)!;
     final enabled = EffectSetting.at(1.42, spec);

@@ -50,7 +50,7 @@ class _EffectPanelState extends State<EffectPanel> {
   static const _phosphorChannel = EffectSpec(
     id: _phosphorChannelId,
     label: 'Phosphor',
-    description: 'Color of the emitted phosphor coating.',
+    description: 'Select the phosphor color for the VFD light.',
     pictogramId: _phosphorChannelId,
     scopes: <EffectScope>{
       EffectScope.dashboard,
@@ -172,32 +172,12 @@ class _EffectPanelState extends State<EffectPanel> {
             ),
             const SizedBox(height: 5),
             Expanded(
-              child: isPhosphor
-                  ? _phosphorChoices(enabled: editable)
-                  : Align(
-                      alignment: Alignment.topCenter,
-                      child: MechanicalLever(
-                        key: ValueKey('effect-lever-${spec.id}'),
-                        label: '${spec.label} strength',
-                        value: setting.strength,
-                        min: 0,
-                        max: spec.maxStrength,
-                        precision: spec.precision,
-                        tickCount: 21,
-                        referenceValue: spec.defaultStrength,
-                        offAtMinimum: true,
-                        palette: _palette,
-                        prismStyle: widget.prismStyle,
-                        soundEnabled: widget.soundEnabled,
-                        hapticsEnabled: widget.hapticsEnabled,
-                        onChanged: editable
-                            ? (value) => _setEffect(
-                                spec,
-                                setting.withStrength(value, spec),
-                              )
-                            : null,
-                      ),
-                    ),
+              child: _controlDeck(
+                spec: spec,
+                setting: setting,
+                isPhosphor: isPhosphor,
+                editable: editable,
+              ),
             ),
           ],
         ),
@@ -213,7 +193,7 @@ class _EffectPanelState extends State<EffectPanel> {
     final isPhosphor = spec.id == _phosphorChannelId;
     final known = isPhosphor || EffectSpecs.byId(spec.id) != null;
     final setting = _effective.effect(spec.id);
-    final iconSize = selected ? 26.0 : 16.0;
+    final iconSize = selected ? 20.0 : 12.0;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 7),
@@ -224,6 +204,7 @@ class _EffectPanelState extends State<EffectPanel> {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               SizedBox(
+                key: ValueKey('effect-carousel-icon-${spec.id}'),
                 width: iconSize,
                 height: iconSize,
                 child: _icon(
@@ -247,6 +228,60 @@ class _EffectPanelState extends State<EffectPanel> {
       ),
     );
   }
+
+  Widget _controlDeck({
+    required EffectSpec spec,
+    required EffectSetting setting,
+    required bool isPhosphor,
+    required bool editable,
+  }) => LayoutBuilder(
+    key: ValueKey('effect-control-deck-${spec.id}'),
+    builder: (context, constraints) {
+      final controlHeight = isPhosphor
+          ? PrismMetrics.height(PrismRole.compact)
+          : 94.0;
+      return Center(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: SizedBox(
+            key: ValueKey('effect-control-${spec.id}'),
+            width: constraints.maxWidth,
+            height: controlHeight,
+            child: isPhosphor
+                ? _phosphorChoices(enabled: editable)
+                : _strengthControl(
+                    spec: spec,
+                    setting: setting,
+                    editable: editable,
+                  ),
+          ),
+        ),
+      );
+    },
+  );
+
+  Widget _strengthControl({
+    required EffectSpec spec,
+    required EffectSetting setting,
+    required bool editable,
+  }) => MechanicalLever(
+    key: ValueKey('effect-lever-${spec.id}'),
+    label: '${spec.label} strength',
+    value: setting.strength,
+    min: 0,
+    max: spec.maxStrength,
+    precision: spec.precision,
+    tickCount: 21,
+    referenceValue: spec.defaultStrength,
+    offAtMinimum: true,
+    palette: _palette,
+    prismStyle: widget.prismStyle,
+    soundEnabled: widget.soundEnabled,
+    hapticsEnabled: widget.hapticsEnabled,
+    onChanged: editable
+        ? (value) => _setEffect(spec, setting.withStrength(value, spec))
+        : null,
+  );
 
   Widget _phosphorChoices({required bool enabled}) {
     final selected = _effective.phosphorName;

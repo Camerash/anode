@@ -548,12 +548,32 @@ void main() {
       find.byKey(const ValueKey('effect-carousel-option-__phosphor__')),
     );
     expect(phosphorOption.center.dx, closeTo(carouselFace.center.dx, 0.5));
+    expect(
+      tester.getSize(
+        find.byKey(const ValueKey('effect-carousel-icon-__phosphor__')),
+      ),
+      const Size.square(20),
+    );
+    expect(
+      tester.getSize(
+        find.byKey(const ValueKey('effect-carousel-icon-emission')),
+      ),
+      const Size.square(12),
+    );
+    final phosphorDeck = tester.getRect(
+      find.byKey(const ValueKey('effect-control-deck-__phosphor__')),
+    );
+    final phosphorControl = tester.getRect(
+      find.byKey(const ValueKey('effect-control-__phosphor__')),
+    );
+    expect(phosphorControl.center.dy, closeTo(phosphorDeck.center.dy, 0.5));
     final description = tester.widget<VfdLegend>(
       find.descendant(
         of: find.byKey(const ValueKey('effect-description-__phosphor__')),
         matching: find.byType(VfdLegend),
       ),
     );
+    expect(description.text, 'Select the phosphor color for the VFD light.');
     expect(description.size, 11);
     expect(description.lit, isTrue);
     expect(description.maxLines, 2);
@@ -576,10 +596,17 @@ void main() {
       isFalse,
     );
     await tester.tap(find.byKey(const ValueKey('service-effect-next')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.textContaining('EMISSION'), findsOneWidget);
     expect(find.text('0.72'), findsOneWidget);
     expect(find.byType(MechanicalLever), findsOneWidget);
+    final emissionDeck = tester.getRect(
+      find.byKey(const ValueKey('effect-control-deck-emission')),
+    );
+    final emissionControl = tester.getRect(
+      find.byKey(const ValueKey('effect-control-emission')),
+    );
+    expect(emissionControl.center.dy, closeTo(emissionDeck.center.dy, 0.5));
   });
 
   testWidgets('service lever writes only visible detent values', (

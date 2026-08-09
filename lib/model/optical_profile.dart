@@ -55,7 +55,7 @@ abstract final class EffectSpecs {
     EffectSpec(
       id: EffectIds.emission,
       label: 'Emission',
-      description: 'Electron energy converted into visible phosphor light.',
+      description: 'Set the light output of powered VFD segments.',
       scopes: <EffectScope>{
         EffectScope.dashboard,
         EffectScope.module,
@@ -65,7 +65,7 @@ abstract final class EffectSpecs {
     EffectSpec(
       id: EffectIds.bloom,
       label: 'Bloom',
-      description: 'Glass scatter around lit phosphor.',
+      description: 'Add a soft light halo around powered segments.',
       scopes: <EffectScope>{
         EffectScope.dashboard,
         EffectScope.module,
@@ -76,7 +76,7 @@ abstract final class EffectSpecs {
       id: EffectIds.phosphorTexture,
       label: 'Phosphor texture',
       controlLabel: 'Texture',
-      description: 'Local irregularity in the deposited phosphor coating.',
+      description: 'Add small output differences across the phosphor layer.',
       scopes: <EffectScope>{
         EffectScope.dashboard,
         EffectScope.module,
@@ -87,7 +87,7 @@ abstract final class EffectSpecs {
     EffectSpec(
       id: EffectIds.gridMesh,
       label: 'Grid',
-      description: 'Control-grid mesh modulating emitted light.',
+      description: 'Show the control-grid mesh in the VFD light.',
       scopes: <EffectScope>{
         EffectScope.dashboard,
         EffectScope.module,
@@ -98,7 +98,7 @@ abstract final class EffectSpecs {
       id: EffectIds.unlitPhosphor,
       label: 'Unlit',
       controlLabel: 'Unlit',
-      description: 'Visible phosphor coating on unpowered segments.',
+      description: 'Show the phosphor layer in segments that have no power.',
       scopes: <EffectScope>{
         EffectScope.dashboard,
         EffectScope.module,
@@ -108,7 +108,7 @@ abstract final class EffectSpecs {
     EffectSpec(
       id: EffectIds.phosphorDecay,
       label: 'Decay',
-      description: 'Brief afterglow as powered segments switch off.',
+      description: 'Keep a short afterglow when a segment powers down.',
       scopes: <EffectScope>{
         EffectScope.dashboard,
         EffectScope.module,
@@ -119,20 +119,20 @@ abstract final class EffectSpecs {
       id: EffectIds.glassGrain,
       label: 'Glass grain',
       controlLabel: 'Grain',
-      description: 'Glass and sensor noise across a physical VFD module.',
+      description: 'Add fine glass and sensor noise across the VFD module.',
       scopes: <EffectScope>{EffectScope.dashboard, EffectScope.module},
     ),
     EffectSpec(
       id: EffectIds.filamentWires,
       label: 'Filaments',
       controlLabel: 'Filament',
-      description: 'Cathode wires stretched across a physical VFD module.',
+      description: 'Show the cathode wires across the VFD module.',
       scopes: <EffectScope>{EffectScope.dashboard, EffectScope.module},
     ),
     EffectSpec(
       id: EffectIds.tiltParallax,
       label: 'Parallax',
-      description: 'Whole-dashboard glass depth responding to device tilt.',
+      description: 'Move the glass layer when the device tilts.',
       scopes: <EffectScope>{EffectScope.dashboard},
     ),
   ];
@@ -156,7 +156,7 @@ abstract final class EffectSpecs {
         label: id,
         controlLabel: id,
         pictogramId: 'unknown',
-        description: 'Unavailable effect from another Anode version.',
+        description: 'This effect is not available in this Anode version.',
         scopes: const <EffectScope>{
           EffectScope.dashboard,
           EffectScope.module,
