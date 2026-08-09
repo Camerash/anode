@@ -531,10 +531,33 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('service-hatch-close')), findsNothing);
-    expect(find.byType(EffectPictogram), findsOneWidget);
+    expect(find.byType(EffectPictogram), findsNWidgets(2));
     expect(find.byType(MechanicalLever), findsNothing);
     expect(find.byKey(const ValueKey('pager-detent-rail')), findsNothing);
     expect(find.text('0.72'), findsNothing);
+    expect(find.textContaining('CHANNEL'), findsNothing);
+    expect(find.text('PHOSPHOR COLOR'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('effect-override-__phosphor__')),
+      findsNothing,
+    );
+    final description = tester.widget<VfdLegend>(
+      find.descendant(
+        of: find.byKey(const ValueKey('effect-description-__phosphor__')),
+        matching: find.byType(VfdLegend),
+      ),
+    );
+    expect(description.size, 10);
+    expect(description.maxLines, 2);
+    expect(description.overflow, TextOverflow.ellipsis);
+    expect(
+      tester
+          .widget<PrismButton>(
+            find.byKey(const ValueKey('service-effect-phosphor-Amber')),
+          )
+          .enabled,
+      isTrue,
+    );
 
     expect(
       tester
@@ -696,42 +719,57 @@ void main() {
         ),
       },
     );
-    OpticalOverrides? changed;
+    var overrides = OpticalOverrides();
 
     await tester.pumpWidget(
       MaterialApp(
-        home: SizedBox(
-          width: 700,
-          height: 1100,
-          child: EffectPanel(
-            title: 'Local effects',
-            dashboardProfile: profile,
-            baseProfile: profile,
-            overrides: OpticalOverrides(),
-            scope: EffectScope.component,
-            prismStyle: const PrismStyle(),
-            soundEnabled: false,
-            hapticsEnabled: false,
-            onOverridesChanged: (value) => changed = value,
+        home: StatefulBuilder(
+          builder: (context, rebuild) => SizedBox(
+            width: 700,
+            height: 1100,
+            child: EffectPanel(
+              title: 'Local effects',
+              dashboardProfile: profile,
+              baseProfile: profile,
+              overrides: overrides,
+              scope: EffectScope.component,
+              prismStyle: const PrismStyle(),
+              soundEnabled: false,
+              hapticsEnabled: false,
+              onOverridesChanged: (value) => rebuild(() => overrides = value),
+            ),
           ),
         ),
       ),
     );
 
     expect(
-      find.byKey(const ValueKey('service-effect-phosphor-use-design')),
+      find.byKey(const ValueKey('effect-override-__phosphor__')),
       findsOneWidget,
     );
+    expect(
+      tester
+          .widget<PrismButton>(
+            find.byKey(const ValueKey('service-effect-phosphor-Amber')),
+          )
+          .enabled,
+      isFalse,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('effect-override-__phosphor__')),
+    );
+    await tester.pump();
+    expect(overrides.phosphorName, profile.phosphorName);
     await tester.tap(
       find.byKey(const ValueKey('service-effect-phosphor-Amber')),
     );
     await tester.pump();
-    expect(changed?.phosphorName, 'Amber');
+    expect(overrides.phosphorName, 'Amber');
     await tester.tap(
-      find.byKey(const ValueKey('service-effect-phosphor-use-design')),
+      find.byKey(const ValueKey('effect-override-__phosphor__')),
     );
     await tester.pump();
-    expect(changed?.phosphorName, isNull);
+    expect(overrides.phosphorName, isNull);
 
     await tester.tap(find.byKey(const ValueKey('service-effect-next')));
     await tester.pumpAndSettle();
@@ -755,7 +793,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('effect-override-bloom')));
     await tester.pump();
 
-    expect(changed?.effects[EffectIds.bloom]?.strength, 1.27);
+    expect(overrides.effects[EffectIds.bloom]?.strength, 1.27);
   });
 
   testWidgets('phosphor hard-cut changes profile live', (tester) async {

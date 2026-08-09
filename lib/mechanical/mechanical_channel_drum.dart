@@ -9,6 +9,8 @@ import '../vfd/prism_widgets.dart';
 import '../vfd/vfd_widgets.dart';
 
 typedef MechanicalCarouselLabel<T> = String Function(T item);
+typedef MechanicalCarouselItemBuilder<T> =
+    Widget Function(BuildContext context, T item, bool selected, double size);
 
 /// Reusable indexed mechanical carousel with visible neighbouring detents.
 class MechanicalCarousel<T> extends StatefulWidget {
@@ -26,6 +28,7 @@ class MechanicalCarousel<T> extends StatefulWidget {
     this.duration = const Duration(milliseconds: 180),
     this.previousKey = const ValueKey('mechanical-carousel-previous'),
     this.nextKey = const ValueKey('mechanical-carousel-next'),
+    this.itemBuilder,
   }) : assert(items.length > 0),
        assert(index >= 0),
        assert(index < items.length);
@@ -42,6 +45,7 @@ class MechanicalCarousel<T> extends StatefulWidget {
   final Duration duration;
   final Key previousKey;
   final Key nextKey;
+  final MechanicalCarouselItemBuilder<T>? itemBuilder;
 
   @override
   State<MechanicalCarousel<T>> createState() => _MechanicalCarouselState<T>();
@@ -201,19 +205,28 @@ class _MechanicalCarouselState<T> extends State<MechanicalCarousel<T>>
     final absolute = distance.abs();
     final opacity = (1 - absolute * 0.68).clamp(0.0, 1.0);
     final size = lerpDouble(13, 8, math.min(1, absolute))!;
-    return Align(
-      alignment: Alignment.center,
+    final item = widget.items[index];
+    return Positioned.fill(
       child: Transform.translate(
         offset: Offset(0, distance * 22),
         child: Opacity(
           key: ValueKey('mechanical-carousel-item-$index'),
           opacity: opacity,
-          child: VfdLegend(
-            widget.labelFor(widget.items[index]),
-            palette: widget.palette,
-            lit: index == widget.index,
-            size: size,
-          ),
+          child:
+              widget.itemBuilder?.call(
+                context,
+                item,
+                index == widget.index,
+                size,
+              ) ??
+              Center(
+                child: VfdLegend(
+                  widget.labelFor(item),
+                  palette: widget.palette,
+                  lit: index == widget.index,
+                  size: size,
+                ),
+              ),
         ),
       ),
     );
