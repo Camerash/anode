@@ -153,7 +153,7 @@ class _EditorPageState extends State<EditorPage> {
             child: _topChrome(
               context,
               EdgeInsets.fromLTRB(
-                physicalSafeInsets.left,
+                _deviceSafeInsets.left,
                 _deviceSafeInsets.top,
                 _deviceSafeInsets.right,
                 0,
@@ -893,7 +893,7 @@ class _EditorServicePanelState extends State<_EditorServicePanel> {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(8),
+    padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
     child: Builder(
       builder: (context) {
         final sections = _sections;

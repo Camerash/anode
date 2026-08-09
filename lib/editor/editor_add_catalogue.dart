@@ -95,7 +95,7 @@ class _EditorAddCatalogueState extends State<EditorAddCatalogue> {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.fromLTRB(8, 8, 8, 8 + widget.safeInsets.bottom),
+    padding: EdgeInsets.fromLTRB(8, 8, 8, widget.safeInsets.bottom),
     child: Column(
       children: <Widget>[
         Row(

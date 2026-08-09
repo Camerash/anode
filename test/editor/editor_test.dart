@@ -1199,6 +1199,19 @@ void main() {
     );
     expect(removeRect.bottom, lessThanOrEqualTo(controlsRect.top));
     expect(removeRect.right, greaterThan(controlsRect.center.dx));
+    expect(
+      tester
+          .getRect(
+            find
+                .ancestor(
+                  of: find.byKey(const ValueKey('part-controls-speed')),
+                  matching: find.byType(PrismPanel),
+                )
+                .first,
+          )
+          .bottom,
+      closeTo(500, 0.001),
+    );
     expect(find.byKey(const ValueKey('pager-detent-rail')), findsNothing);
     expect(find.byKey(const ValueKey('param-digits-cell-strip')), findsNothing);
     expect(find.text('SPEED DIGITS'), findsWidgets);
