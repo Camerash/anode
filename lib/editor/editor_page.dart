@@ -305,6 +305,7 @@ class _EditorPageState extends State<EditorPage> {
                     hapticsEnabled: widget.hapticsEnabled,
                     dashboard: _dashboard,
                     renderAssets: widget.renderAssets,
+                    safeInsets: _deviceSafeInsets,
                     onClose: () => setState(() => _addCatalogueOpen = false),
                     onDragEnded: _clearDropPreview,
                     onDragUpdated: _updateDropPreview,
@@ -343,6 +344,7 @@ class _EditorPageState extends State<EditorPage> {
     hapticsEnabled: widget.hapticsEnabled,
     actionRegistry: widget.actionRegistry ?? ActionRegistry.forAuthoring(),
     renderAssets: widget.renderAssets,
+    safeInsets: _deviceSafeInsets,
     onOpenAddCatalogue: _openAddCatalogue,
     onPreviewOrientationChanged: _setPreviewOrientation,
     onSelectComponent: _selectComponent,
@@ -796,6 +798,7 @@ class _EditorServicePanel extends StatefulWidget {
     required this.hapticsEnabled,
     required this.actionRegistry,
     required this.renderAssets,
+    required this.safeInsets,
     required this.onOpenAddCatalogue,
     required this.onPreviewOrientationChanged,
     required this.onSelectComponent,
@@ -826,6 +829,7 @@ class _EditorServicePanel extends StatefulWidget {
   final bool hapticsEnabled;
   final ActionRegistry actionRegistry;
   final VfdRenderAssets? renderAssets;
+  final EdgeInsets safeInsets;
   final VoidCallback onOpenAddCatalogue;
   final ValueChanged<DesignOrientation> onPreviewOrientationChanged;
   final ValueChanged<String?> onSelectComponent;
@@ -958,6 +962,7 @@ class _EditorServicePanelState extends State<_EditorServicePanel> {
       style: widget.dashboard.settings.prismStyle,
       soundEnabled: widget.soundEnabled,
       hapticsEnabled: widget.hapticsEnabled,
+      contentSafeInsets: widget.safeInsets,
       onChanged: (style) => widget.onDashboardChanged(
         widget.dashboard.copyWith(
           settings: widget.dashboard.settings.copyWith(prismStyle: style),
@@ -984,6 +989,7 @@ class _EditorServicePanelState extends State<_EditorServicePanel> {
         prismStyle: widget.dashboard.settings.prismStyle,
         soundEnabled: widget.soundEnabled,
         hapticsEnabled: widget.hapticsEnabled,
+        contentSafeInsets: widget.safeInsets,
         onOverridesChanged: (value) =>
             widget.onComponentChanged(component.withOpticalOverrides(value)),
       );
@@ -1289,7 +1295,7 @@ class _DesignPanel extends StatelessWidget {
     final spec = host.dashboard.frameSpec(preview);
     return PrismPanel(
       palette: host.palette,
-      padding: const EdgeInsets.all(8),
+      padding: EdgeInsets.fromLTRB(8, 8, 8, 8 + host.safeInsets.bottom),
       child: LayoutBuilder(
         builder: (context, constraints) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1453,25 +1459,30 @@ class _PartPanelState extends State<_PartPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          VfdLegend(
-            type.displayName,
-            palette: host.palette,
-            lit: true,
-            size: 12,
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: VfdLegend(
+                  type.displayName,
+                  palette: host.palette,
+                  lit: true,
+                  size: 12,
+                ),
+              ),
+              _GuardedRemove(
+                itemName: type.displayName,
+                prismStyle: host.dashboard.settings.prismStyle,
+                soundEnabled: host.soundEnabled,
+                hapticsEnabled: host.hapticsEnabled,
+                onRemove: () => host.onRemoveComponent(component),
+              ),
+            ],
           ),
           const SizedBox(height: 7),
           Expanded(
             child: _controlId == null
                 ? _controlList(component, type)
                 : _detail(component, type, _controlId!),
-          ),
-          const SizedBox(height: 6),
-          _GuardedRemove(
-            itemName: type.displayName,
-            prismStyle: host.dashboard.settings.prismStyle,
-            soundEnabled: host.soundEnabled,
-            hapticsEnabled: host.hapticsEnabled,
-            onRemove: () => host.onRemoveComponent(component),
           ),
         ],
       ),
@@ -1521,6 +1532,7 @@ class _PartPanelState extends State<_PartPanel> {
     ];
     return SingleChildScrollView(
       key: ValueKey('part-controls-${component.id}'),
+      padding: EdgeInsets.only(bottom: host.safeInsets.bottom),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
@@ -1870,10 +1882,30 @@ class _ModulePanel extends StatelessWidget {
     }
     return PrismPanel(
       palette: host.palette,
+      padding: EdgeInsets.fromLTRB(14, 14, 14, 14 + host.safeInsets.bottom),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          VfdLegend(module.name, palette: host.palette, lit: true, size: 12),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: VfdLegend(
+                  module.name,
+                  palette: host.palette,
+                  lit: true,
+                  size: 12,
+                ),
+              ),
+              if (module.id != kMainVfdModuleId)
+                _GuardedRemove(
+                  itemName: module.name,
+                  prismStyle: host.dashboard.settings.prismStyle,
+                  soundEnabled: host.soundEnabled,
+                  hapticsEnabled: host.hapticsEnabled,
+                  onRemove: () => host.onRemoveModule(module),
+                ),
+            ],
+          ),
           const SizedBox(height: 10),
           PrismSelectorBank<VariantReference>(
             choices: <PrismSelectorChoice<VariantReference>>[
@@ -1903,16 +1935,6 @@ class _ModulePanel extends StatelessWidget {
               ),
             ),
           ),
-          if (module.id != kMainVfdModuleId) ...<Widget>[
-            const Spacer(),
-            _GuardedRemove(
-              itemName: module.name,
-              prismStyle: host.dashboard.settings.prismStyle,
-              soundEnabled: host.soundEnabled,
-              hapticsEnabled: host.hapticsEnabled,
-              onRemove: () => host.onRemoveModule(module),
-            ),
-          ],
         ],
       ),
     );

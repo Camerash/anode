@@ -185,13 +185,10 @@ class VfdEditorChromeSkin implements EditorChromeSkin {
         MechanicalDrawerEdge.right => EdgeInsets.only(
           top: safeInsets.top,
           right: safeInsets.right,
-          bottom: safeInsets.bottom,
         ),
-        MechanicalDrawerEdge.bottom => EdgeInsets.fromLTRB(
-          safeInsets.left,
-          0,
-          safeInsets.right,
-          safeInsets.bottom,
+        MechanicalDrawerEdge.bottom => EdgeInsets.only(
+          left: safeInsets.left,
+          right: safeInsets.right,
         ),
       },
       child: child,

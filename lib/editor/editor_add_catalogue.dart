@@ -44,6 +44,7 @@ class EditorAddCatalogue extends StatefulWidget {
     required this.hapticsEnabled,
     required this.onClose,
     required this.dashboard,
+    this.safeInsets = EdgeInsets.zero,
     this.renderAssets,
     this.onDragEnded,
     this.onDragUpdated,
@@ -55,6 +56,7 @@ class EditorAddCatalogue extends StatefulWidget {
   final bool hapticsEnabled;
   final VoidCallback onClose;
   final Dashboard dashboard;
+  final EdgeInsets safeInsets;
   final VfdRenderAssets? renderAssets;
   final VoidCallback? onDragEnded;
   final void Function(EditorAddRequest request, Offset globalPosition)?
@@ -93,7 +95,7 @@ class _EditorAddCatalogueState extends State<EditorAddCatalogue> {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(8),
+    padding: EdgeInsets.fromLTRB(8, 8, 8, 8 + widget.safeInsets.bottom),
     child: Column(
       children: <Widget>[
         Row(

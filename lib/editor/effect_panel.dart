@@ -19,6 +19,7 @@ class EffectPanel extends StatefulWidget {
     required this.prismStyle,
     required this.soundEnabled,
     required this.hapticsEnabled,
+    this.contentSafeInsets = EdgeInsets.zero,
     this.overrides,
     this.onProfileChanged,
     this.onOverridesChanged,
@@ -33,6 +34,7 @@ class EffectPanel extends StatefulWidget {
   final PrismStyle prismStyle;
   final bool soundEnabled;
   final bool hapticsEnabled;
+  final EdgeInsets contentSafeInsets;
   final bool editable;
   final ValueChanged<OpticalProfile>? onProfileChanged;
   final ValueChanged<OpticalOverrides>? onOverridesChanged;
@@ -86,7 +88,7 @@ class _EffectPanelState extends State<EffectPanel> {
   @override
   Widget build(BuildContext context) => PrismPanel(
     palette: _palette,
-    padding: const EdgeInsets.all(4),
+    padding: EdgeInsets.fromLTRB(4, 4, 4, 4 + widget.contentSafeInsets.bottom),
     child: _serviceFace(),
   );
 
@@ -361,6 +363,7 @@ class PrismStyleEditor extends StatefulWidget {
     required this.style,
     required this.soundEnabled,
     required this.hapticsEnabled,
+    this.contentSafeInsets = EdgeInsets.zero,
     required this.onChanged,
   });
 
@@ -368,6 +371,7 @@ class PrismStyleEditor extends StatefulWidget {
   final PrismStyle style;
   final bool soundEnabled;
   final bool hapticsEnabled;
+  final EdgeInsets contentSafeInsets;
   final ValueChanged<PrismStyle> onChanged;
 
   @override
@@ -389,7 +393,12 @@ class _PrismStyleEditorState extends State<PrismStyleEditor> {
   @override
   Widget build(BuildContext context) => PrismPanel(
     palette: _palette,
-    padding: const EdgeInsets.all(10),
+    padding: EdgeInsets.fromLTRB(
+      10,
+      10,
+      10,
+      10 + widget.contentSafeInsets.bottom,
+    ),
     child: _selected == null ? _overview() : _detail(),
   );
 

@@ -901,10 +901,7 @@ void main() {
     expect(drawerEnvironment.bottom, viewport.height);
     expect(drawerContent.top, greaterThanOrEqualTo(header.bottom));
     expect(drawerContent.right, lessThanOrEqualTo(viewport.width));
-    expect(
-      drawerContent.bottom,
-      lessThanOrEqualTo(viewport.height - safeInsets.bottom),
-    );
+    expect(drawerContent.bottom, closeTo(viewport.height, 0.001));
     final lookTab = find.byKey(const ValueKey('editor-service-section-look'));
     expect(tester.getRect(lookTab).right, lessThanOrEqualTo(viewport.width));
     await tester.tap(lookTab);
@@ -1196,6 +1193,12 @@ void main() {
       ),
       isNotNull,
     );
+    final removeRect = tester.getRect(find.byKey(const ValueKey('remove-arm')));
+    final controlsRect = tester.getRect(
+      find.byKey(const ValueKey('part-controls-speed')),
+    );
+    expect(removeRect.bottom, lessThanOrEqualTo(controlsRect.top));
+    expect(removeRect.right, greaterThan(controlsRect.center.dx));
     expect(find.byKey(const ValueKey('pager-detent-rail')), findsNothing);
     expect(find.byKey(const ValueKey('param-digits-cell-strip')), findsNothing);
     expect(find.text('SPEED DIGITS'), findsWidgets);
