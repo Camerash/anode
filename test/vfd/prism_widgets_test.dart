@@ -547,7 +547,8 @@ void main() {
         matching: find.byType(VfdLegend),
       ),
     );
-    expect(description.size, 10);
+    expect(description.size, 11);
+    expect(description.lit, isTrue);
     expect(description.maxLines, 2);
     expect(description.overflow, TextOverflow.ellipsis);
     expect(

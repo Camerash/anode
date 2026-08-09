@@ -141,15 +141,33 @@ class _EffectPanelState extends State<EffectPanel> {
             SizedBox(
               key: ValueKey('effect-description-${spec.id}'),
               height: 44,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: VfdLegend(
-                  spec.description,
-                  palette: _palette,
-                  size: 10,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: VfdLegend(
+                        spec.description,
+                        palette: _palette,
+                        lit: true,
+                        size: 11,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  if (widget.local && known) ...<Widget>[
+                    const SizedBox(width: 5),
+                    _serviceButton(
+                      key: ValueKey('effect-override-${spec.id}'),
+                      label: 'Override',
+                      lit: _isOverridden(spec),
+                      enabled: widget.editable,
+                      onPressed: () =>
+                          _toggleOverride(spec, _isOverridden(spec)),
+                    ),
+                  ],
+                ],
               ),
             ),
             const SizedBox(height: 5),
@@ -194,7 +212,6 @@ class _EffectPanelState extends State<EffectPanel> {
   }) {
     final isPhosphor = spec.id == _phosphorChannelId;
     final known = isPhosphor || EffectSpecs.byId(spec.id) != null;
-    final overridden = _isOverridden(spec);
     final setting = _effective.effect(spec.id);
     final iconSize = selected ? 26.0 : 16.0;
     return Padding(
@@ -221,18 +238,6 @@ class _EffectPanelState extends State<EffectPanel> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (selected && widget.local && known) ...<Widget>[
-            const SizedBox(width: 4),
-            _serviceButton(
-              key: ValueKey('effect-override-${spec.id}'),
-              label: 'Override',
-              lit: overridden,
-              enabled: widget.editable,
-              role: PrismRole.micro,
-              span: PrismSpan.two,
-              onPressed: () => _toggleOverride(spec, overridden),
-            ),
-          ],
         ],
       ),
     );
@@ -279,16 +284,13 @@ class _EffectPanelState extends State<EffectPanel> {
     required VoidCallback onPressed,
     bool enabled = true,
     bool lit = false,
-    PrismRole role = PrismRole.compact,
-    PrismSpan span = PrismSpan.one,
   }) => PrismButton(
     key: key,
     label: label,
     palette: _palette,
     lit: lit,
     enabled: enabled,
-    role: role,
-    span: span,
+    role: PrismRole.compact,
     style: widget.prismStyle,
     soundEnabled: widget.soundEnabled,
     hapticsEnabled: widget.hapticsEnabled,
