@@ -325,6 +325,26 @@ void main() {
       expect(find.text('EMISSION'), findsOneWidget);
       expect(find.text('BLOOM'), findsOneWidget);
       expect(find.text('GRID'), findsOneWidget);
+      final previous = tester.widget<PrismButton>(
+        find.byKey(const ValueKey('service-effect-previous')),
+      );
+      final next = tester.widget<PrismButton>(
+        find.byKey(const ValueKey('service-effect-next')),
+      );
+      expect(previous.shape, PrismShape.triangleUp);
+      expect(previous.square, isTrue);
+      expect(previous.face, isA<SizedBox>());
+      expect(next.shape, PrismShape.triangleDown);
+      expect(next.square, isTrue);
+      expect(next.face, isA<SizedBox>());
+      expect(
+        tester.getSize(find.byKey(const ValueKey('service-effect-previous'))),
+        const Size(36, 36),
+      );
+      expect(
+        tester.getSize(find.byKey(const ValueKey('service-effect-next'))),
+        const Size(36, 36),
+      );
       await tester.tap(find.byKey(const ValueKey('service-effect-next')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 90));

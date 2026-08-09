@@ -214,31 +214,36 @@ class _EffectPanelState extends State<EffectPanel> {
     final known = isPhosphor || EffectSpecs.byId(spec.id) != null;
     final setting = _effective.effect(spec.id);
     final iconSize = selected ? 26.0 : 16.0;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 7),
-      child: Row(
-        children: <Widget>[
-          SizedBox(
-            width: iconSize,
-            height: iconSize,
-            child: _icon(
-              spec.pictogramId,
-              lit: selected && (isPhosphor || setting.enabled),
-              enabled: known,
-            ),
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 7),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            key: ValueKey('effect-carousel-option-${spec.id}'),
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              SizedBox(
+                width: iconSize,
+                height: iconSize,
+                child: _icon(
+                  spec.pictogramId,
+                  lit: selected && (isPhosphor || setting.enabled),
+                  enabled: known,
+                ),
+              ),
+              const SizedBox(width: 5),
+              VfdLegend(
+                spec.label,
+                palette: _palette,
+                lit: selected,
+                size: size,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
-          const SizedBox(width: 5),
-          Expanded(
-            child: VfdLegend(
-              spec.label,
-              palette: _palette,
-              lit: selected,
-              size: size,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

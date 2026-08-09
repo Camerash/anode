@@ -541,6 +541,13 @@ void main() {
       find.byKey(const ValueKey('effect-override-__phosphor__')),
       findsNothing,
     );
+    final carouselFace = tester.getRect(
+      find.byKey(const ValueKey('mechanical-carousel-face')),
+    );
+    final phosphorOption = tester.getRect(
+      find.byKey(const ValueKey('effect-carousel-option-__phosphor__')),
+    );
+    expect(phosphorOption.center.dx, closeTo(carouselFace.center.dx, 0.5));
     final description = tester.widget<VfdLegend>(
       find.descendant(
         of: find.byKey(const ValueKey('effect-description-__phosphor__')),

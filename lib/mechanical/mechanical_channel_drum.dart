@@ -146,7 +146,7 @@ class _MechanicalCarouselState<T> extends State<MechanicalCarousel<T>>
               Expanded(child: _face()),
               const SizedBox(width: 5),
               SizedBox(
-                width: PrismMetrics.width(PrismRole.micro, PrismSpan.one),
+                width: PrismMetrics.height(PrismRole.micro),
                 height: 76,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -154,12 +154,14 @@ class _MechanicalCarouselState<T> extends State<MechanicalCarousel<T>>
                     _stepButton(
                       key: widget.previousKey,
                       label: 'Previous',
+                      shape: PrismShape.triangleUp,
                       enabled: _canPrevious,
                       onPressed: () => widget.onChanged(widget.index - 1),
                     ),
                     _stepButton(
                       key: widget.nextKey,
                       label: 'Next',
+                      shape: PrismShape.triangleDown,
                       enabled: _canNext,
                       onPressed: () => widget.onChanged(widget.index + 1),
                     ),
@@ -174,6 +176,7 @@ class _MechanicalCarouselState<T> extends State<MechanicalCarousel<T>>
   );
 
   Widget _face() => DecoratedBox(
+    key: const ValueKey('mechanical-carousel-face'),
     decoration: BoxDecoration(
       color: const Color(0xFF030504),
       border: Border.all(color: widget.palette.unlit.withValues(alpha: 0.52)),
@@ -235,11 +238,15 @@ class _MechanicalCarouselState<T> extends State<MechanicalCarousel<T>>
   Widget _stepButton({
     required Key key,
     required String label,
+    required PrismShape shape,
     required bool enabled,
     required VoidCallback onPressed,
   }) => PrismButton(
     key: key,
     label: label,
+    face: const SizedBox.shrink(),
+    shape: shape,
+    square: true,
     palette: widget.palette,
     enabled: enabled,
     role: PrismRole.micro,
