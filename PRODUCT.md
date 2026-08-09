@@ -52,13 +52,19 @@ purpose-built.
 Editor structure is stable across visual families: full-width document header,
 movable command dock, contextual Console, safe-area behavior, semantics, and
 accessibility do not change. A skin supplies materials, typography, colour,
-motion, backgrounds, and cutout treatment without owning editor layout or
-authored renderer geometry.
+motion, backgrounds, cutout treatment, control implementation, and interaction
+feedback without owning editor layout or authored renderer geometry.
 
 VFD is the first interface skin, not a permanent universal shell. Future
 families include Outrun, Cyberpunk, and Vintage Orange. New skins must preserve
 control location, meaning, hit targets, and interaction so changing appearance
 never means relearning the editor.
+
+Each family owns its button class and its press/release sound profile. VFD uses
+Prism switchgear; Outrun, Cyberpunk, and Vintage Orange can use different
+physical controls without adding theme modes to `PrismButton`. Sounds belong to
+the interface skin, not a dashboard, optical profile, or saved design. Global
+sound and haptic settings remain master switches.
 
 ## Accessibility & Inclusion
 

@@ -114,9 +114,9 @@ class _MechanicalPagerState extends State<MechanicalPager> {
                 role: PrismRole.micro,
                 style: widget.prismStyle,
                 enabled: _page > 0,
-                soundEnabled: false,
-                hapticsEnabled: false,
-                onPressed: _page > 0 ? () => _setPage(_page - 1) : null,
+                onPressed: _page > 0
+                    ? () => _setPage(_page - 1, feedback: false)
+                    : null,
               ),
             ),
           Expanded(child: _rail(context)),
@@ -133,10 +133,8 @@ class _MechanicalPagerState extends State<MechanicalPager> {
                 role: PrismRole.micro,
                 style: widget.prismStyle,
                 enabled: _page < widget.pages.length - 1,
-                soundEnabled: false,
-                hapticsEnabled: false,
                 onPressed: _page < widget.pages.length - 1
-                    ? () => _setPage(_page + 1)
+                    ? () => _setPage(_page + 1, feedback: false)
                     : null,
               ),
             ),

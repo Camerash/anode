@@ -332,8 +332,6 @@ class _EffectPanelState extends State<EffectPanel> {
     enabled: enabled,
     role: PrismRole.compact,
     style: widget.prismStyle,
-    soundEnabled: widget.soundEnabled,
-    hapticsEnabled: widget.hapticsEnabled,
     onPressed: enabled ? onPressed : null,
   );
 
@@ -357,8 +355,6 @@ class _EffectPanelState extends State<EffectPanel> {
       role: PrismRole.compact,
       span: span,
       style: widget.prismStyle,
-      soundEnabled: widget.soundEnabled,
-      hapticsEnabled: widget.hapticsEnabled,
       onPressed: enabled ? onPressed : null,
     ),
   );
@@ -498,8 +494,6 @@ class _PrismStyleEditorState extends State<PrismStyleEditor> {
               role: PrismRole.standard,
               span: PrismSpan.two,
               style: widget.style,
-              soundEnabled: widget.soundEnabled,
-              hapticsEnabled: widget.hapticsEnabled,
               onPressed: () => setState(() => _selected = null),
             ),
             const SizedBox(width: 8),

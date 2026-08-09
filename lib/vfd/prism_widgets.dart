@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../interface/button_actuation_feedback.dart';
 import '../model/optical_profile.dart';
 import 'prism_glyphs.dart';
 import 'vfd_widgets.dart';
@@ -159,8 +160,6 @@ class PrismButton extends StatefulWidget {
     this.role = PrismRole.standard,
     this.span = PrismSpan.one,
     this.style = const PrismStyle(),
-    this.soundEnabled = true,
-    this.hapticsEnabled = true,
   }) : assert(face == null || symbol == null);
 
   final String label;
@@ -177,8 +176,6 @@ class PrismButton extends StatefulWidget {
   final PrismRole role;
   final PrismSpan span;
   final PrismStyle style;
-  final bool soundEnabled;
-  final bool hapticsEnabled;
 
   @override
   State<PrismButton> createState() => _PrismButtonState();
@@ -188,6 +185,27 @@ class _PrismButtonState extends State<PrismButton> {
   bool _pressed = false;
   bool _focused = false;
   bool _hovered = false;
+  int? _activePointer;
+  ButtonActuationFeedback? _activeFeedback;
+  ButtonPressSession? _pressSession;
+  ButtonActuationFeedback? _pointerActivationFeedback;
+  Timer? _syntheticActivationTimer;
+
+  @override
+  void didUpdateWidget(PrismButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if ((!widget.enabled || widget.onPressed == null) &&
+        _pressSession != null) {
+      _cancelPress();
+    }
+  }
+
+  @override
+  void dispose() {
+    _syntheticActivationTimer?.cancel();
+    _pressSession?.release();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -220,9 +238,9 @@ class _PrismButtonState extends State<PrismButton> {
           ),
         },
         child: Listener(
-          onPointerDown: enabled ? (_) => _setPressed(true) : null,
-          onPointerUp: enabled ? (_) => _setPressed(false) : null,
-          onPointerCancel: enabled ? (_) => _setPressed(false) : null,
+          onPointerDown: enabled ? _handlePointerDown : null,
+          onPointerUp: enabled ? _handlePointerUp : null,
+          onPointerCancel: enabled ? _handlePointerCancel : null,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: enabled ? _activate : null,
@@ -348,15 +366,77 @@ class _PrismButtonState extends State<PrismButton> {
     setState(() => _pressed = value);
   }
 
-  void _activate() {
+  void _handlePointerDown(PointerDownEvent event) {
+    if (_pressSession != null) return;
+    final feedback = ButtonFeedbackScope.of(context);
+    _activePointer = event.pointer;
+    _activeFeedback = feedback;
+    _pressSession = feedback.beginPress();
+    _setPressed(true);
+  }
+
+  void _handlePointerUp(PointerUpEvent event) {
+    if (_activePointer != event.pointer) return;
+    final feedback = _activeFeedback;
+    _releasePress();
+    _pointerActivationFeedback = feedback;
+    scheduleMicrotask(() {
+      if (_pointerActivationFeedback == feedback) {
+        _pointerActivationFeedback = null;
+      }
+    });
+  }
+
+  void _handlePointerCancel(PointerCancelEvent event) {
+    if (_activePointer != event.pointer) return;
+    _cancelPress();
+  }
+
+  void _releasePress() {
+    _pressSession?.release();
+    _pressSession = null;
+    _activePointer = null;
+    _activeFeedback = null;
     _setPressed(false);
-    if (widget.soundEnabled) {
-      SystemSound.play(SystemSoundType.click);
+  }
+
+  void _cancelPress() {
+    _syntheticActivationTimer?.cancel();
+    _syntheticActivationTimer = null;
+    _pointerActivationFeedback = null;
+    _releasePress();
+  }
+
+  void _activate() {
+    final pointerFeedback = _pointerActivationFeedback;
+    if (pointerFeedback != null) {
+      _pointerActivationFeedback = null;
+      pointerFeedback.activate();
+      widget.onPressed?.call();
+      return;
     }
-    if (widget.hapticsEnabled) {
-      HapticFeedback.lightImpact();
-    }
-    widget.onPressed?.call();
+    if (_pressSession != null || _syntheticActivationTimer != null) return;
+
+    final feedback = ButtonFeedbackScope.of(context);
+    final session = feedback.beginPress();
+    _activeFeedback = feedback;
+    _pressSession = session;
+    _setPressed(true);
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final hold = reduceMotion
+        ? Duration.zero
+        : const Duration(milliseconds: 45);
+    _syntheticActivationTimer = Timer(hold, () {
+      _syntheticActivationTimer = null;
+      if (_pressSession == session) {
+        _releasePress();
+      } else {
+        session.release();
+      }
+      if (!mounted) return;
+      feedback.activate();
+      widget.onPressed?.call();
+    });
   }
 }
 

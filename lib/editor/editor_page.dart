@@ -84,8 +84,6 @@ class _EditorPageState extends State<EditorPage> {
   EditorChromeSkin get _chromeSkin => VfdEditorChromeSkin(
     palette: _palette,
     prismStyle: _dashboard.settings.prismStyle,
-    soundEnabled: widget.soundEnabled,
-    hapticsEnabled: widget.hapticsEnabled,
   );
   DesignOrientation get _layoutOrientation =>
       _dashboard.layoutForViewport(_orientation);
@@ -936,8 +934,6 @@ class _EditorServicePanelState extends State<_EditorServicePanel> {
                   enabled: !widget.layoutInherited,
                   role: PrismRole.compact,
                   style: widget.dashboard.settings.prismStyle,
-                  soundEnabled: widget.soundEnabled,
-                  hapticsEnabled: widget.hapticsEnabled,
                   onPressed: widget.layoutInherited
                       ? null
                       : widget.onOpenAddCatalogue,
@@ -1208,8 +1204,6 @@ class _RackPanelState extends State<_RackPanel> {
             lit: lit,
             role: PrismRole.compact,
             style: host.dashboard.settings.prismStyle,
-            soundEnabled: host.soundEnabled,
-            hapticsEnabled: host.hapticsEnabled,
             onPressed: onPressed,
           ),
         ),
@@ -1225,8 +1219,6 @@ class _RackPanelState extends State<_RackPanel> {
       role: PrismRole.compact,
       span: PrismSpan.two,
       style: host.dashboard.settings.prismStyle,
-      soundEnabled: host.soundEnabled,
-      hapticsEnabled: host.hapticsEnabled,
       onPressed: () => setState(() {
         _addingComponent = component && !_addingComponent;
         _addingModule = !component && !_addingModule;
@@ -1393,8 +1385,6 @@ class _DesignPanel extends StatelessWidget {
                       palette: host.palette,
                       role: PrismRole.compact,
                       style: host.dashboard.settings.prismStyle,
-                      soundEnabled: host.soundEnabled,
-                      hapticsEnabled: host.hapticsEnabled,
                       onPressed: host.onRemoveLayout,
                     ),
                   ],
@@ -1410,8 +1400,6 @@ class _DesignPanel extends StatelessWidget {
                   role: PrismRole.compact,
                   span: PrismSpan.three,
                   style: host.dashboard.settings.prismStyle,
-                  soundEnabled: host.soundEnabled,
-                  hapticsEnabled: host.hapticsEnabled,
                   onPressed: host.onCreateLayout,
                 ),
               ),
@@ -1571,8 +1559,6 @@ class _PartPanelState extends State<_PartPanel> {
           role: PrismRole.compact,
           span: PrismSpan.two,
           style: host.dashboard.settings.prismStyle,
-          soundEnabled: host.soundEnabled,
-          hapticsEnabled: host.hapticsEnabled,
           onPressed: onPressed,
         ),
       ),
@@ -1607,8 +1593,6 @@ class _PartPanelState extends State<_PartPanel> {
               palette: host.palette,
               role: PrismRole.compact,
               style: host.dashboard.settings.prismStyle,
-              soundEnabled: host.soundEnabled,
-              hapticsEnabled: host.hapticsEnabled,
               onPressed: () => setState(() => _controlId = null),
             ),
             const SizedBox(width: 7),
@@ -1693,8 +1677,6 @@ class _PartPanelState extends State<_PartPanel> {
           role: PrismRole.compact,
           span: PrismSpan.three,
           style: host.dashboard.settings.prismStyle,
-          soundEnabled: host.soundEnabled,
-          hapticsEnabled: host.hapticsEnabled,
           onPressed: () => _resetSize(component, type),
         ),
       ],
@@ -1973,8 +1955,6 @@ class _GuardedRemove extends StatelessWidget {
         lit: true,
         role: PrismRole.compact,
         style: prismStyle,
-        soundEnabled: soundEnabled,
-        hapticsEnabled: hapticsEnabled,
         onPressed: onRemove,
       ),
     ),
@@ -2224,8 +2204,6 @@ class _PlacementPanel extends StatelessWidget {
     palette: host.palette,
     role: PrismRole.compact,
     style: host.dashboard.settings.prismStyle,
-    soundEnabled: host.soundEnabled,
-    hapticsEnabled: host.hapticsEnabled,
     onPressed: onPressed,
   );
 

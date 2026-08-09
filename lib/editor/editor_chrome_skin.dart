@@ -48,17 +48,10 @@ abstract interface class EditorChromeSkin {
 }
 
 class VfdEditorChromeSkin implements EditorChromeSkin {
-  const VfdEditorChromeSkin({
-    required this.palette,
-    required this.prismStyle,
-    required this.soundEnabled,
-    required this.hapticsEnabled,
-  });
+  const VfdEditorChromeSkin({required this.palette, required this.prismStyle});
 
   final VfdPalette palette;
   final PrismStyle prismStyle;
-  final bool soundEnabled;
-  final bool hapticsEnabled;
 
   @override
   Widget surface({
@@ -103,8 +96,6 @@ class VfdEditorChromeSkin implements EditorChromeSkin {
         ? PrismRole.compact
         : PrismRole.standard,
     style: prismStyle,
-    soundEnabled: soundEnabled,
-    hapticsEnabled: hapticsEnabled,
     lit: lit,
     selected: selected,
     enabled: enabled,

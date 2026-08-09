@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:anode/editor/effect_pictogram.dart';
 import 'package:anode/editor/effect_panel.dart';
+import 'package:anode/interface/button_actuation_feedback.dart';
 import 'package:anode/mechanical/mechanical_lever.dart';
 import 'package:anode/model/optical_profile.dart';
 import 'package:anode/vfd/prism_glyphs.dart';
@@ -64,8 +65,6 @@ void main() {
             label: 'Undo',
             symbol: PrismSymbol.undo,
             palette: palette,
-            soundEnabled: false,
-            hapticsEnabled: false,
             onPressed: () => activations++,
           ),
         ),
@@ -84,7 +83,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 45));
     await tester.tap(find.byKey(const ValueKey('symbol-button')));
     expect(activations, 2);
   });
@@ -102,8 +101,6 @@ void main() {
             palette: palette,
             lit: true,
             selected: true,
-            soundEnabled: false,
-            hapticsEnabled: false,
             onPressed: () => activations++,
           ),
         ),
@@ -154,8 +151,6 @@ void main() {
                 palette: palette,
                 role: PrismRole.compact,
                 span: span,
-                soundEnabled: false,
-                hapticsEnabled: false,
                 onPressed: () {},
               ),
           ],
@@ -210,8 +205,6 @@ void main() {
             face: const SizedBox.shrink(),
             palette: palette,
             style: PrismStyle(faceOpacity: opticalDensity),
-            soundEnabled: false,
-            hapticsEnabled: false,
             onPressed: () {},
           ),
         ),
@@ -229,8 +222,6 @@ void main() {
                 symbol: PrismSymbol.redo,
                 palette: palette,
                 enabled: enabled,
-                soundEnabled: false,
-                hapticsEnabled: false,
                 onPressed: enabled ? () {} : null,
               ),
             ),
@@ -285,8 +276,6 @@ void main() {
               palette: palette,
               lit: true,
               selected: false,
-              soundEnabled: false,
-              hapticsEnabled: false,
               onPressed: () => activations++,
             ),
           ),
@@ -301,7 +290,7 @@ void main() {
       await tester.pump();
       expect(FocusManager.instance.primaryFocus, isNotNull);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 45));
       expect(activations, 1);
 
       await tester.pumpWidget(
@@ -311,8 +300,6 @@ void main() {
               label: 'Reset',
               palette: palette,
               enabled: false,
-              soundEnabled: false,
-              hapticsEnabled: false,
               onPressed: null,
             ),
           ),
@@ -334,8 +321,6 @@ void main() {
             child: PrismButton(
               label: 'Reset',
               palette: palette,
-              soundEnabled: false,
-              hapticsEnabled: false,
               onPressed: () {},
             ),
           ),
@@ -358,49 +343,110 @@ void main() {
     await gesture.up();
   });
 
-  testWidgets('sound and haptics obey app preferences', (tester) async {
-    final calls = <MethodCall>[];
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
-      (call) async {
-        calls.add(call);
-        return null;
-      },
-    );
-    addTearDown(
-      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        null,
+  testWidgets('pointer press emits paired physical feedback', (tester) async {
+    final events = <String>[];
+    final feedback = _RecordingButtonFeedback(events);
+    await tester.pumpWidget(
+      ButtonFeedbackScope(
+        feedback: feedback,
+        child: MaterialApp(
+          home: Center(
+            child: PrismButton(
+              label: 'Reset',
+              palette: palette,
+              onPressed: () => events.add('action'),
+            ),
+          ),
+        ),
       ),
     );
 
-    Future<void> pumpButton({required bool sound, required bool haptics}) =>
-        tester.pumpWidget(
-          MaterialApp(
-            home: Center(
-              child: PrismButton(
-                label: 'Reset',
-                palette: palette,
-                soundEnabled: sound,
-                hapticsEnabled: haptics,
-                onPressed: () {},
-              ),
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(PrismButton)),
+    );
+    await tester.pump();
+    expect(events, <String>['down']);
+    await gesture.up();
+    await tester.pump();
+    expect(events, <String>['down', 'up', 'activate', 'action']);
+  });
+
+  testWidgets('canceled pointer still emits one release', (tester) async {
+    final events = <String>[];
+    await tester.pumpWidget(
+      ButtonFeedbackScope(
+        feedback: _RecordingButtonFeedback(events),
+        child: MaterialApp(
+          home: Center(
+            child: PrismButton(
+              label: 'Reset',
+              palette: palette,
+              onPressed: () => events.add('action'),
             ),
           ),
-        );
+        ),
+      ),
+    );
 
-    await pumpButton(sound: false, haptics: false);
-    calls.clear();
-    await tester.tap(find.byType(PrismButton));
-    expect(calls, isEmpty);
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(PrismButton)),
+    );
+    await gesture.moveBy(const Offset(120, 0));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+    expect(events, <String>['down', 'up']);
+  });
 
-    await pumpButton(sound: true, haptics: true);
-    calls.clear();
+  testWidgets('keyboard activation holds cap before release and action', (
+    tester,
+  ) async {
+    final events = <String>[];
+    await tester.pumpWidget(
+      ButtonFeedbackScope(
+        feedback: _RecordingButtonFeedback(events),
+        child: MaterialApp(
+          home: Center(
+            child: PrismButton(
+              label: 'Reset',
+              palette: palette,
+              onPressed: () => events.add('action'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(events, <String>['down']);
+    await tester.pump(const Duration(milliseconds: 44));
+    expect(events, <String>['down']);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(events, <String>['down', 'up', 'activate', 'action']);
+  });
+
+  testWidgets('disabled Prism button does not start feedback', (tester) async {
+    final events = <String>[];
+    await tester.pumpWidget(
+      ButtonFeedbackScope(
+        feedback: _RecordingButtonFeedback(events),
+        child: const MaterialApp(
+          home: Center(
+            child: PrismButton(
+              label: 'Reset',
+              palette: palette,
+              enabled: false,
+              onPressed: null,
+            ),
+          ),
+        ),
+      ),
+    );
+
     await tester.tap(find.byType(PrismButton));
-    expect(calls.map((call) => call.method), <String>[
-      'SystemSound.play',
-      'HapticFeedback.vibrate',
-    ]);
+    expect(events, isEmpty);
   });
 
   testWidgets('Prism switchgear state matrix matches golden', (tester) async {
@@ -418,19 +464,11 @@ void main() {
                 spacing: 12,
                 runSpacing: 14,
                 children: <Widget>[
-                  PrismButton(
-                    label: 'E/M',
-                    palette: palette,
-                    soundEnabled: false,
-                    hapticsEnabled: false,
-                    onPressed: () {},
-                  ),
+                  PrismButton(label: 'E/M', palette: palette, onPressed: () {}),
                   PrismButton(
                     label: 'Reset',
                     palette: palette,
                     lit: true,
-                    soundEnabled: false,
-                    hapticsEnabled: false,
                     onPressed: () {},
                   ),
                   PrismButton(
@@ -439,8 +477,6 @@ void main() {
                     palette: palette,
                     lit: true,
                     selected: true,
-                    soundEnabled: false,
-                    hapticsEnabled: false,
                     onPressed: () {},
                   ),
                   const PrismButton(
@@ -455,16 +491,12 @@ void main() {
                     palette: palette,
                     lit: true,
                     span: PrismSpan.two,
-                    soundEnabled: false,
-                    hapticsEnabled: false,
                     onPressed: () {},
                   ),
                   PrismButton(
                     label: 'Library',
                     palette: palette,
                     span: PrismSpan.three,
-                    soundEnabled: false,
-                    hapticsEnabled: false,
                     onPressed: () {},
                   ),
                 ],
@@ -891,4 +923,36 @@ void main() {
       findsOneWidget,
     );
   });
+}
+
+class _RecordingButtonFeedback implements ButtonActuationFeedback {
+  _RecordingButtonFeedback(this.events);
+
+  final List<String> events;
+
+  @override
+  ButtonPressSession beginPress() {
+    events.add('down');
+    return _RecordingPressSession(events);
+  }
+
+  @override
+  void activate() => events.add('activate');
+
+  @override
+  Future<void> dispose() async {}
+}
+
+class _RecordingPressSession implements ButtonPressSession {
+  _RecordingPressSession(this.events);
+
+  final List<String> events;
+  bool _released = false;
+
+  @override
+  void release() {
+    if (_released) return;
+    _released = true;
+    events.add('up');
+  }
 }

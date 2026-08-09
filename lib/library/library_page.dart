@@ -155,8 +155,6 @@ class _LibraryPageState extends State<LibraryPage> {
           palette: _palette,
           role: PrismRole.compact,
           style: widget.state.activeDesign.renderSettings.prismStyle,
-          soundEnabled: widget.state.globalSettings.soundEnabled,
-          hapticsEnabled: widget.state.globalSettings.hapticsEnabled,
           onPressed: () => Navigator.of(context).maybePop(),
         ),
         const SizedBox(width: 10),
@@ -425,8 +423,6 @@ class _DesignCard extends StatelessWidget {
     palette: palette,
     role: PrismRole.compact,
     style: prismStyle,
-    soundEnabled: soundEnabled,
-    hapticsEnabled: hapticsEnabled,
     onPressed: callback,
   );
 }
@@ -514,8 +510,6 @@ class _ClonePromptPageState extends State<_ClonePromptPage> {
         lit: lit,
         role: PrismRole.standard,
         style: widget.prismStyle,
-        soundEnabled: widget.soundEnabled,
-        hapticsEnabled: widget.hapticsEnabled,
         onPressed: callback,
       );
 }
@@ -583,8 +577,6 @@ class _SettingsBank extends StatelessWidget {
               role: PrismRole.standard,
               span: PrismSpan.two,
               style: state.activeDesign.renderSettings.prismStyle,
-              soundEnabled: state.globalSettings.soundEnabled,
-              hapticsEnabled: state.globalSettings.hapticsEnabled,
               onPressed: () => Navigator.of(context).pushNamed<void>('/debug'),
             ),
           ],

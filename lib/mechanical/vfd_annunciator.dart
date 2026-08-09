@@ -43,8 +43,6 @@ class VfdAnnunciator extends StatelessWidget {
               palette: palette,
               role: PrismRole.compact,
               style: prismStyle,
-              soundEnabled: soundEnabled,
-              hapticsEnabled: hapticsEnabled,
               onPressed: onAcknowledge,
             ),
           ],

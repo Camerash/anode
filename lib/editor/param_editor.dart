@@ -65,8 +65,6 @@ class ParamControlRow extends StatelessWidget {
         selected: selected,
         role: PrismRole.compact,
         style: prismStyle,
-        soundEnabled: soundEnabled,
-        hapticsEnabled: hapticsEnabled,
         onPressed: () => onChanged(!selected),
       ),
     );
@@ -169,8 +167,6 @@ class ParamControlRow extends StatelessWidget {
     palette: palette,
     role: PrismRole.compact,
     style: prismStyle,
-    soundEnabled: soundEnabled,
-    hapticsEnabled: hapticsEnabled,
     onPressed: () => onChanged(
       integer ? (spec.coerce(next) as num).round() : spec.coerce(next),
     ),

@@ -262,8 +262,6 @@ class _MechanicalCarouselState<T> extends State<MechanicalCarousel<T>>
     enabled: enabled,
     role: PrismRole.micro,
     style: widget.prismStyle,
-    soundEnabled: widget.soundEnabled,
-    hapticsEnabled: widget.hapticsEnabled,
     onPressed: enabled ? onPressed : null,
   );
 

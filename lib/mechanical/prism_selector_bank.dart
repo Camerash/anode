@@ -164,8 +164,6 @@ class _ChoicePage<T> extends StatelessWidget {
           role: role,
           span: PrismSpan.two,
           style: prismStyle,
-          soundEnabled: soundEnabled,
-          hapticsEnabled: hapticsEnabled,
           onPressed: choice.enabled ? () => onSelected(choice.value) : null,
         ),
       ),

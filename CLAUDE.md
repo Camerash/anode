@@ -510,6 +510,13 @@ tube rendering, and VFD-specific `PrismStyle`, which controls Prism material.
 Do not add a dashboard schema field for editor skin selection until multiple
 skins exist.
 
+Button classes stay skin-specific. VFD uses `PrismButton`; later families add
+their own control classes and skin implementations instead of adding theme
+branches to Prism. All button classes use the shared
+`ButtonActuationFeedback` phase contract. `ButtonFeedbackScope` supplies the
+active skin profile, while the app owns preload and disposal. Skin sound assets
+are interface resources, never dashboard data.
+
 Current VFD-skinned user-facing controls are drawn in the tube's visual
 language, not Material's. A stock switch or filled chip sitting on substrate
 breaks the illusion exactly as a crisp vector gear does.
@@ -554,14 +561,17 @@ breaks the illusion exactly as a crisp vector gear does.
   bezel depth, grouping, spacing, label scale, and controlled luminous
   intensity. Reserve a consistent light treatment for state so hierarchy never
   makes an inactive control look active.
-- Sound and haptics are app preferences. One low-latency physical click and one
-  actuation haptic are enough initially; no per-design sound packs.
+- Sound and haptics are app preferences and remain global master switches. A
+  VFD Prism press plays one low-latency down sample on accepted pointer-down and
+  one up sample on release or cancel. Valid activation adds one haptic. Keyboard
+  and accessibility activation synthesize the same paired phases. Future skins
+  supply their own paired sound profile; designs do not contain sound packs.
 
 Use shared button semantics with two renderers:
 
 - `PrismButton` is the Flutter control used by panels, navigation, and the
   editor. It owns focus, semantics, keyboard/pointer input, press animation,
-  sound, and haptics.
+  and feedback phase dispatch. Theme-owned feedback owns sound and haptics.
 - A prism design component is data-driven geometry inside the existing shared
   VFD render pass. It receives state through the controller/data texture so its
   light compounds correctly with neighbouring emission. Its Barlow legend

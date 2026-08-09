@@ -133,8 +133,6 @@ class _EditorAddCatalogueState extends State<EditorAddCatalogue> {
               palette: widget.palette,
               role: PrismRole.compact,
               style: widget.prismStyle,
-              soundEnabled: widget.soundEnabled,
-              hapticsEnabled: widget.hapticsEnabled,
               onPressed: widget.onClose,
             ),
           ],
