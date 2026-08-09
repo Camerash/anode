@@ -1190,6 +1190,13 @@ void main() {
       find.byKey(const ValueKey('part-control-param:digits')),
       findsOneWidget,
     );
+    expect(
+      tester.widget<SingleChildScrollView>(
+        find.byKey(const ValueKey('part-controls-speed')),
+      ),
+      isNotNull,
+    );
+    expect(find.byKey(const ValueKey('pager-detent-rail')), findsNothing);
     expect(find.byKey(const ValueKey('param-digits-cell-strip')), findsNothing);
     expect(find.text('SPEED DIGITS'), findsWidgets);
     expect(find.byKey(const ValueKey('part-control-back')), findsNothing);

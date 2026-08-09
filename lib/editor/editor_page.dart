@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../actions/action_registry.dart';
-import '../mechanical/mechanical_pager.dart';
 import '../mechanical/mechanical_push_drawer.dart';
 import '../mechanical/prism_selector_bank.dart';
 import '../mechanical/vfd_editable_field.dart';
@@ -1520,30 +1519,17 @@ class _PartPanelState extends State<_PartPanel> {
               host.onComponentChanged(component.withParam(spec.key, value)),
         ),
     ];
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final rows = (constraints.maxHeight / 54).floor().clamp(1, 4);
-        final pageRows = paginateCompleteRows(controls, columns: 1, rows: rows);
-        return MechanicalPager(
-          key: ValueKey('part-controls-${component.id}'),
-          pages: <Widget>[
-            for (final page in pageRows)
-              Column(
-                children: <Widget>[
-                  for (var index = 0; index < page.length; index++) ...<Widget>[
-                    Expanded(child: page[index]),
-                    if (index + 1 < page.length) const SizedBox(height: 4),
-                  ],
-                ],
-              ),
+    return SingleChildScrollView(
+      key: ValueKey('part-controls-${component.id}'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          for (var index = 0; index < controls.length; index++) ...<Widget>[
+            controls[index],
+            if (index + 1 < controls.length) const SizedBox(height: 4),
           ],
-          palette: host.palette,
-          prismStyle: host.dashboard.settings.prismStyle,
-          soundEnabled: host.soundEnabled,
-          hapticsEnabled: host.hapticsEnabled,
-          semanticLabel: 'Part control register',
-        );
-      },
+        ],
+      ),
     );
   }
 
