@@ -102,37 +102,43 @@ class _MechanicalPagerState extends State<MechanicalPager> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           if (buttons)
-            PrismButton(
-              key: const ValueKey('pager-previous'),
-              label: 'Previous page',
-              face: const SizedBox.shrink(),
-              shape: PrismShape.triangleUp,
-              square: true,
-              palette: widget.palette,
-              role: PrismRole.micro,
-              style: widget.prismStyle,
-              enabled: _page > 0,
-              soundEnabled: false,
-              hapticsEnabled: false,
-              onPressed: _page > 0 ? () => _setPage(_page - 1) : null,
+            Transform.scale(
+              scale: 0.78,
+              child: PrismButton(
+                key: const ValueKey('pager-previous'),
+                label: 'Previous page',
+                face: const SizedBox.shrink(),
+                shape: PrismShape.triangleUp,
+                square: true,
+                palette: widget.palette,
+                role: PrismRole.micro,
+                style: widget.prismStyle,
+                enabled: _page > 0,
+                soundEnabled: false,
+                hapticsEnabled: false,
+                onPressed: _page > 0 ? () => _setPage(_page - 1) : null,
+              ),
             ),
           Expanded(child: _rail(context)),
           if (buttons)
-            PrismButton(
-              key: const ValueKey('pager-next'),
-              label: 'Next page',
-              face: const SizedBox.shrink(),
-              shape: PrismShape.triangleDown,
-              square: true,
-              palette: widget.palette,
-              role: PrismRole.micro,
-              style: widget.prismStyle,
-              enabled: _page < widget.pages.length - 1,
-              soundEnabled: false,
-              hapticsEnabled: false,
-              onPressed: _page < widget.pages.length - 1
-                  ? () => _setPage(_page + 1)
-                  : null,
+            Transform.scale(
+              scale: 0.78,
+              child: PrismButton(
+                key: const ValueKey('pager-next'),
+                label: 'Next page',
+                face: const SizedBox.shrink(),
+                shape: PrismShape.triangleDown,
+                square: true,
+                palette: widget.palette,
+                role: PrismRole.micro,
+                style: widget.prismStyle,
+                enabled: _page < widget.pages.length - 1,
+                soundEnabled: false,
+                hapticsEnabled: false,
+                onPressed: _page < widget.pages.length - 1
+                    ? () => _setPage(_page + 1)
+                    : null,
+              ),
             ),
         ],
       );
