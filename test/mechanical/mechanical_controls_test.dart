@@ -55,9 +55,19 @@ void main() {
     );
     expect(
       tester
+          .widget<PrismButton>(find.byKey(const ValueKey('pager-previous')))
+          .role,
+      PrismRole.micro,
+    );
+    expect(
+      tester
           .widget<PrismButton>(find.byKey(const ValueKey('pager-next')))
           .shape,
       PrismShape.triangleDown,
+    );
+    expect(
+      tester.widget<PrismButton>(find.byKey(const ValueKey('pager-next'))).role,
+      PrismRole.micro,
     );
     expect(
       tester.widget<PrismButton>(find.byKey(const ValueKey('pager-next'))).face,
