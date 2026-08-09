@@ -303,7 +303,7 @@ void main() {
   });
 
   testWidgets(
-    'channel carousel linearly rotates and fades between hard steps',
+    'channel carousel rotates one cylindrical drum between hard steps',
     (tester) async {
       var index = 1;
       await tester.pumpWidget(
@@ -345,9 +345,43 @@ void main() {
         tester.getSize(find.byKey(const ValueKey('service-effect-next'))),
         const Size(36, 36),
       );
+      final centerTransform = tester.widget<Transform>(
+        find.byKey(const ValueKey('mechanical-carousel-transform-1')),
+      );
+      final upperTransform = tester.widget<Transform>(
+        find.byKey(const ValueKey('mechanical-carousel-transform-0')),
+      );
+      final lowerTransform = tester.widget<Transform>(
+        find.byKey(const ValueKey('mechanical-carousel-transform-2')),
+      );
+      expect(centerTransform.transform.storage[13], closeTo(0, 1e-9));
+      expect(centerTransform.transform.storage[5], closeTo(1, 1e-9));
+      expect(
+        upperTransform.transform.storage[13],
+        closeTo(-lowerTransform.transform.storage[13], 1e-9),
+      );
+      expect(
+        upperTransform.transform.storage[6],
+        closeTo(-lowerTransform.transform.storage[6], 1e-9),
+      );
+      expect(
+        tester
+            .widget<Opacity>(
+              find.byKey(const ValueKey('mechanical-carousel-item-0')),
+            )
+            .opacity,
+        closeTo(
+          tester
+              .widget<Opacity>(
+                find.byKey(const ValueKey('mechanical-carousel-item-2')),
+              )
+              .opacity,
+          1e-9,
+        ),
+      );
       await tester.tap(find.byKey(const ValueKey('service-effect-next')));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 90));
+      await tester.pump(const Duration(milliseconds: 37));
       expect(index, 2);
       final outgoing = tester.widget<Opacity>(
         find.byKey(const ValueKey('mechanical-carousel-item-1')),
@@ -355,9 +389,15 @@ void main() {
       final incoming = tester.widget<Opacity>(
         find.byKey(const ValueKey('mechanical-carousel-item-2')),
       );
-      expect(outgoing.opacity, inExclusiveRange(0.32, 1));
-      expect(incoming.opacity, inExclusiveRange(0.32, 1));
-      await tester.pump(const Duration(milliseconds: 90));
+      expect(outgoing.opacity, closeTo(incoming.opacity, 0.03));
+      final faceLabels = tester.widgetList<VfdLegend>(
+        find.descendant(
+          of: find.byKey(const ValueKey('mechanical-carousel-face')),
+          matching: find.byType(VfdLegend),
+        ),
+      );
+      expect(faceLabels.every((label) => label.size == 13), isTrue);
+      await tester.pump(const Duration(milliseconds: 143));
       expect(
         tester
             .widget<Opacity>(
@@ -376,6 +416,49 @@ void main() {
       );
     },
   );
+
+  testWidgets('channel carousel retargets without a visual jump', (
+    tester,
+  ) async {
+    var index = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, rebuild) => MechanicalChannelDrum(
+            labels: const <String>['EMISSION', 'BLOOM', 'GRID'],
+            index: index,
+            palette: palette,
+            prismStyle: const PrismStyle(),
+            soundEnabled: false,
+            hapticsEnabled: false,
+            onChanged: (value) => rebuild(() => index = value),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('service-effect-next')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 30));
+    final before = tester
+        .widget<Transform>(
+          find.byKey(const ValueKey('mechanical-carousel-transform-1')),
+        )
+        .transform
+        .storage
+        .toList();
+    await tester.tap(find.byKey(const ValueKey('service-effect-next')));
+    await tester.pump();
+    final after = tester
+        .widget<Transform>(
+          find.byKey(const ValueKey('mechanical-carousel-transform-1')),
+        )
+        .transform
+        .storage;
+    for (var entry = 0; entry < before.length; entry++) {
+      expect(after[entry], closeTo(before[entry], 1e-9));
+    }
+  });
 
   testWidgets('channel carousel resolves immediately for reduced motion', (
     tester,

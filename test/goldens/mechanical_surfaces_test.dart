@@ -173,7 +173,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('service-effect-next')));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 90));
+    await tester.pump(const Duration(milliseconds: 37));
     await expectLater(
       find.byKey(const ValueKey('surface')),
       matchesGoldenFile('baselines/carousel_midpoint.png'),

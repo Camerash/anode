@@ -65,7 +65,13 @@ class _MechanicalCarouselState<T> extends State<MechanicalCarousel<T>>
   bool get _canPrevious => widget.index > 0;
   bool get _canNext => widget.index + 1 < widget.items.length;
 
-  double get _position => lerpDouble(_from, _to, _controller.value) ?? _to;
+  double get _position =>
+      lerpDouble(
+        _from,
+        _to,
+        Curves.easeOutCubic.transform(_controller.value),
+      ) ??
+      _to;
 
   @override
   void didUpdateWidget(covariant MechanicalCarousel<T> oldWidget) {
@@ -199,35 +205,40 @@ class _MechanicalCarouselState<T> extends State<MechanicalCarousel<T>>
             ),
           ),
         ),
+        const Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(painter: _CarouselAperturePainter()),
+          ),
+        ),
       ],
     ),
   );
 
   Widget _carouselLabel(int index) {
     final distance = index - _position;
-    final absolute = distance.abs();
-    final opacity = (1 - absolute * 0.68).clamp(0.0, 1.0);
-    final size = lerpDouble(13, 8, math.min(1, absolute))!;
+    final geometry = _CarouselDrumGeometry.fromDistance(distance);
     final item = widget.items[index];
     return Positioned.fill(
-      child: Transform.translate(
-        offset: Offset(0, distance * 22),
+      child: Transform(
+        key: ValueKey('mechanical-carousel-transform-$index'),
+        alignment: Alignment.center,
+        transform: geometry.transform,
         child: Opacity(
           key: ValueKey('mechanical-carousel-item-$index'),
-          opacity: opacity,
+          opacity: geometry.opacity,
           child:
               widget.itemBuilder?.call(
                 context,
                 item,
                 index == widget.index,
-                size,
+                13,
               ) ??
               Center(
                 child: VfdLegend(
                   widget.labelFor(item),
                   palette: widget.palette,
                   lit: index == widget.index,
-                  size: size,
+                  size: 13,
                 ),
               ),
         ),
@@ -259,6 +270,57 @@ class _MechanicalCarouselState<T> extends State<MechanicalCarousel<T>>
   void _tick() {
     if (mounted) setState(() {});
   }
+}
+
+class _CarouselDrumGeometry {
+  const _CarouselDrumGeometry({required this.transform, required this.opacity});
+
+  static const _detentAngle = math.pi / 3;
+  static const _radius = 26.0;
+  static const _perspective = 0.003;
+
+  factory _CarouselDrumGeometry.fromDistance(double distance) {
+    final angle = (distance * _detentAngle).clamp(-math.pi / 2, math.pi / 2);
+    final cosine = math.cos(angle).clamp(0.0, 1.0);
+    final verticalOffset = math.sin(angle) * _radius;
+    final depth = (1 - cosine) * _radius;
+    final transform = Matrix4.identity()
+      ..setEntry(3, 2, _perspective)
+      ..translateByDouble(0, verticalOffset, depth, 1)
+      ..rotateX(-angle);
+    return _CarouselDrumGeometry(
+      transform: transform,
+      opacity: math.pow(cosine, 1.15).toDouble(),
+    );
+  }
+
+  final Matrix4 transform;
+  final double opacity;
+}
+
+class _CarouselAperturePainter extends CustomPainter {
+  const _CarouselAperturePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bounds = Offset.zero & size;
+    final paint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[
+          Color(0xB8030504),
+          Color(0x00030504),
+          Color(0x00030504),
+          Color(0xB8030504),
+        ],
+        stops: <double>[0, 0.28, 0.72, 1],
+      ).createShader(bounds);
+    canvas.drawRect(bounds, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _CarouselAperturePainter oldDelegate) => false;
 }
 
 /// Effect-channel compatibility surface with stable test and semantics keys.

@@ -193,7 +193,7 @@ class _EffectPanelState extends State<EffectPanel> {
     final isPhosphor = spec.id == _phosphorChannelId;
     final known = isPhosphor || EffectSpecs.byId(spec.id) != null;
     final setting = _effective.effect(spec.id);
-    final iconSize = selected ? 20.0 : 12.0;
+    const iconSize = 20.0;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 7),

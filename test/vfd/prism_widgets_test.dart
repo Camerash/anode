@@ -558,7 +558,7 @@ void main() {
       tester.getSize(
         find.byKey(const ValueKey('effect-carousel-icon-emission')),
       ),
-      const Size.square(12),
+      const Size.square(20),
     );
     final phosphorDeck = tester.getRect(
       find.byKey(const ValueKey('effect-control-deck-__phosphor__')),
