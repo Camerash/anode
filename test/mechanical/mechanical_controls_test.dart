@@ -47,6 +47,22 @@ void main() {
     final semantics = tester.getSemantics(rail);
     expect(semantics.flagsCollection.isSlider, isTrue);
     expect(semantics.value, '1 of 3');
+    expect(
+      tester
+          .widget<PrismButton>(find.byKey(const ValueKey('pager-previous')))
+          .shape,
+      PrismShape.triangleUp,
+    );
+    expect(
+      tester
+          .widget<PrismButton>(find.byKey(const ValueKey('pager-next')))
+          .shape,
+      PrismShape.triangleDown,
+    );
+    expect(
+      tester.widget<PrismButton>(find.byKey(const ValueKey('pager-next'))).face,
+      isA<SizedBox>(),
+    );
 
     final gesture = await tester.startGesture(
       tester.getRect(rail).bottomCenter - const Offset(0, 2),

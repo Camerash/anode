@@ -104,7 +104,10 @@ class _MechanicalPagerState extends State<MechanicalPager> {
           if (buttons)
             PrismButton(
               key: const ValueKey('pager-previous'),
-              label: '-',
+              label: 'Previous page',
+              face: const SizedBox.shrink(),
+              shape: PrismShape.triangleUp,
+              square: true,
               palette: widget.palette,
               role: PrismRole.compact,
               style: widget.prismStyle,
@@ -117,7 +120,10 @@ class _MechanicalPagerState extends State<MechanicalPager> {
           if (buttons)
             PrismButton(
               key: const ValueKey('pager-next'),
-              label: '+',
+              label: 'Next page',
+              face: const SizedBox.shrink(),
+              shape: PrismShape.triangleDown,
+              square: true,
               palette: widget.palette,
               role: PrismRole.compact,
               style: widget.prismStyle,
