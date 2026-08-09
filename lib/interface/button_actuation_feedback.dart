@@ -1,26 +1,23 @@
 import 'dart:async';
 
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+
+import 'interface_audio_mixer.dart';
 
 /// Theme-owned audio data for one physical button mechanism.
 @immutable
 class ButtonActuationProfile {
   const ButtonActuationProfile({
     required this.downAsset,
-    required this.downDuration,
     required this.upAsset,
-    required this.upDuration,
     this.downVolume = 1,
     this.upVolume = 1,
   });
 
   final String downAsset;
-  final Duration downDuration;
   final double downVolume;
   final String upAsset;
-  final Duration upDuration;
   final double upVolume;
 }
 
@@ -33,12 +30,6 @@ abstract interface class ButtonActuationFeedback {
   ButtonPressSession beginPress();
 
   void activate();
-
-  Future<void> dispose();
-}
-
-abstract interface class ButtonAudioCue {
-  void play();
 
   Future<void> dispose();
 }
@@ -99,27 +90,26 @@ class ConfiguredButtonActuationFeedback implements ButtonActuationFeedback {
 
   final bool Function() soundEnabled;
   final bool Function() hapticsEnabled;
-  final ButtonAudioCue? downCue;
-  final ButtonAudioCue? upCue;
+  final InterfaceAudioCue? downCue;
+  final InterfaceAudioCue? upCue;
   final Future<void> Function() _haptic;
   bool _disposed = false;
 
   static Future<ConfiguredButtonActuationFeedback> load({
     required ButtonActuationProfile profile,
+    required InterfaceAudioMixer? mixer,
     required bool Function() soundEnabled,
     required bool Function() hapticsEnabled,
   }) async {
-    ButtonAudioCue? downCue;
-    ButtonAudioCue? upCue;
+    InterfaceAudioCue? downCue;
+    InterfaceAudioCue? upCue;
     try {
-      downCue = await _PooledButtonAudioCue.load(
+      downCue = await mixer?.loadCue(
         asset: profile.downAsset,
-        duration: profile.downDuration,
         volume: profile.downVolume,
       );
-      upCue = await _PooledButtonAudioCue.load(
+      upCue = await mixer?.loadCue(
         asset: profile.upAsset,
-        duration: profile.upDuration,
         volume: profile.upVolume,
       );
     } catch (error) {
@@ -153,7 +143,7 @@ class ConfiguredButtonActuationFeedback implements ButtonActuationFeedback {
     if (playSound && !_disposed) _playCue(upCue, phase: 'release');
   }
 
-  void _playCue(ButtonAudioCue? cue, {required String phase}) {
+  void _playCue(InterfaceAudioCue? cue, {required String phase}) {
     try {
       cue?.play();
     } catch (error) {
@@ -184,82 +174,5 @@ class _ConfiguredButtonPressSession implements ButtonPressSession {
     if (_released) return;
     _released = true;
     _feedback._release(playSound: playSound);
-  }
-}
-
-class _PooledButtonAudioCue implements ButtonAudioCue {
-  _PooledButtonAudioCue._({
-    required AudioPool pool,
-    required this.duration,
-    required this.volume,
-  }) : _pool = pool;
-
-  final AudioPool _pool;
-  final Duration duration;
-  final double volume;
-  final Set<Timer> _cleanupTimers = <Timer>{};
-  bool _disposed = false;
-
-  static Future<_PooledButtonAudioCue> load({
-    required String asset,
-    required Duration duration,
-    required double volume,
-  }) async {
-    final pool = await AudioPool.create(
-      source: AssetSource(asset),
-      minPlayers: 2,
-      maxPlayers: 4,
-      playerMode: PlayerMode.lowLatency,
-      audioContext: AudioContext(
-        android: const AudioContextAndroid(
-          contentType: AndroidContentType.sonification,
-          usageType: AndroidUsageType.assistanceSonification,
-          audioFocus: AndroidAudioFocus.none,
-        ),
-        iOS: AudioContextIOS(category: AVAudioSessionCategory.ambient),
-      ),
-    );
-    return _PooledButtonAudioCue._(
-      pool: pool,
-      duration: duration,
-      volume: volume,
-    );
-  }
-
-  @override
-  void play() {
-    if (_disposed) return;
-    unawaited(() async {
-      try {
-        final stop = await _pool.start(volume: volume);
-        if (_disposed) {
-          await stop();
-          return;
-        }
-        late final Timer timer;
-        timer = Timer(duration + const Duration(milliseconds: 24), () {
-          _cleanupTimers.remove(timer);
-          unawaited(
-            stop().catchError((Object error, StackTrace stackTrace) {
-              debugPrint('Button audio cleanup failed: $error');
-            }),
-          );
-        });
-        _cleanupTimers.add(timer);
-      } catch (error) {
-        debugPrint('Button audio playback failed: $error');
-      }
-    }());
-  }
-
-  @override
-  Future<void> dispose() async {
-    if (_disposed) return;
-    _disposed = true;
-    for (final timer in _cleanupTimers) {
-      timer.cancel();
-    }
-    _cleanupTimers.clear();
-    await _pool.dispose();
   }
 }

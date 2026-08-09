@@ -11,6 +11,7 @@ import 'app_state.dart';
 import 'data/design_repository.dart';
 import 'debug/debug_workbench_page.dart';
 import 'interface/button_actuation_feedback.dart';
+import 'interface/interface_audio_mixer.dart';
 import 'library/library_page.dart';
 import 'mechanical/hard_cut_route.dart';
 import 'model/dev_design.dart';
@@ -33,8 +34,10 @@ Future<void> main() async {
     repository: repository,
     presets: [developmentPreset()],
   );
+  final interfaceAudioMixer = await SoLoudInterfaceAudioMixer.initialize();
   final buttonFeedback = await ConfiguredButtonActuationFeedback.load(
     profile: VfdInterfaceFeedback.buttonActuation,
+    mixer: interfaceAudioMixer,
     soundEnabled: () => state.globalSettings.soundEnabled,
     hapticsEnabled: () => state.globalSettings.hapticsEnabled,
   );
@@ -43,6 +46,7 @@ Future<void> main() async {
       renderAssets: renderAssets,
       state: state,
       buttonFeedback: buttonFeedback,
+      interfaceAudioMixer: interfaceAudioMixer,
     ),
   );
 }
@@ -53,11 +57,13 @@ class AnodeApp extends StatefulWidget {
     required this.renderAssets,
     required this.state,
     this.buttonFeedback = SilentButtonActuationFeedback.instance,
+    this.interfaceAudioMixer,
   });
 
   final VfdRenderAssets renderAssets;
   final AnodeState state;
   final ButtonActuationFeedback buttonFeedback;
+  final InterfaceAudioMixer? interfaceAudioMixer;
 
   @override
   State<AnodeApp> createState() => _AnodeAppState();
@@ -114,8 +120,13 @@ class _AnodeAppState extends State<AnodeApp> {
   void dispose() {
     widget.state.dispose();
     widget.renderAssets.dispose();
-    unawaited(widget.buttonFeedback.dispose());
+    unawaited(_disposeInterfaceAudio());
     super.dispose();
+  }
+
+  Future<void> _disposeInterfaceAudio() async {
+    await widget.buttonFeedback.dispose();
+    await widget.interfaceAudioMixer?.dispose();
   }
 }
 
