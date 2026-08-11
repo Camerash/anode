@@ -202,11 +202,17 @@ class _EditorPageState extends State<EditorPage> {
   Dashboard get _canvasDashboard {
     final draft = _layoutDraft;
     if (draft == null) return _dashboard;
-    return _dashboard.withLayout(
-      id: draft.id,
-      aspect: draft.aspect,
-      sourceLayoutId: draft.sourceLayoutId,
-    );
+    return switch (draft.mode) {
+      _LayoutDraftMode.add => _dashboard.withLayout(
+        id: draft.id,
+        aspect: draft.aspect,
+        sourceLayoutId: draft.sourceLayoutId,
+      ),
+      _LayoutDraftMode.modify => _dashboard.withLayoutAspect(
+        draft.id,
+        draft.aspect,
+      ),
+    };
   }
 
   String get _canvasLayoutId => _layoutDraft?.id ?? _layoutId;
@@ -230,12 +236,19 @@ class _EditorPageState extends State<EditorPage> {
     snapEnabled: _snapEnabled,
   );
 
-  void _selectLayout(String layoutId) => setState(() {
-    _layoutId = layoutId;
-    _layoutDraft = null;
-    _selectedId = null;
-    _selectedModuleId = null;
-  });
+  void _selectLayout(String layoutId) {
+    final setup = _dashboard.screenSetup;
+    if (setup.behavior == ScreenBehavior.lock &&
+        setup.lockedLayoutId != layoutId) {
+      return;
+    }
+    setState(() {
+      _layoutId = layoutId;
+      _layoutDraft = null;
+      _selectedId = null;
+      _selectedModuleId = null;
+    });
+  }
 
   Widget _workspace(
     BoxConstraints constraints, {
@@ -351,14 +364,13 @@ class _EditorPageState extends State<EditorPage> {
     onVisibilityChanged: _setVisibility,
     onComponentChanged: _replaceComponent,
     onDashboardChanged: _replaceDashboard,
-    onLayoutAspectChanged: _setLayoutAspect,
     onBeginLayoutDraft: _beginLayoutDraft,
+    onBeginLayoutModification: _beginLayoutModification,
     onLayoutDraftAspectChanged: _setLayoutDraftAspect,
     onCancelLayoutDraft: _cancelLayoutDraft,
-    onCreateLayout: _createLayout,
+    onCommitLayoutDraft: _commitLayoutDraft,
     onRemoveLayout: _removeLayout,
-    onSetAdaptiveScreen: _setAdaptiveScreen,
-    onLockCurrentLayout: _lockCurrentLayout,
+    onToggleScreenLock: _toggleScreenLock,
     onPlacementChanged: _setPlacement,
     onModulePlacementChanged: _setModulePlacement,
   );
@@ -447,15 +459,24 @@ class _EditorPageState extends State<EditorPage> {
     );
   }
 
-  void _setLayoutAspect(double aspect) =>
-      _replaceDashboard(_dashboard.withLayoutAspect(_layoutId, aspect));
-
   void _beginLayoutDraft() => setState(() {
     final sourceAspect = _dashboard.frameAspect(_layoutId);
     _layoutDraft = _LayoutDraft(
+      mode: _LayoutDraftMode.add,
       id: _nextLayoutId(),
       sourceLayoutId: _layoutId,
       aspect: sourceAspect >= 1 ? 9 / 16 : 16 / 9,
+    );
+    _selectedId = null;
+    _selectedModuleId = null;
+  });
+
+  void _beginLayoutModification() => setState(() {
+    _layoutDraft = _LayoutDraft(
+      mode: _LayoutDraftMode.modify,
+      id: _layoutId,
+      sourceLayoutId: _layoutId,
+      aspect: _dashboard.frameAspect(_layoutId),
     );
     _selectedId = null;
     _selectedModuleId = null;
@@ -469,42 +490,59 @@ class _EditorPageState extends State<EditorPage> {
 
   void _cancelLayoutDraft() => setState(() => _layoutDraft = null);
 
-  void _createLayout() {
+  void _commitLayoutDraft() {
     final draft = _layoutDraft;
-    if (draft == null || _hasLayoutAspect(draft.aspect)) return;
-    final next = _canvasDashboard;
+    if (draft == null || _hasLayoutAspect(draft.aspect, excluding: draft)) {
+      return;
+    }
+    var next = _canvasDashboard;
+    final locked = next.screenSetup.behavior == ScreenBehavior.lock;
+    if (draft.mode == _LayoutDraftMode.modify &&
+        next.screenSetup.lockedLayoutId == draft.id) {
+      next = next.copyWith(
+        screenSetup: _lockedScreenSetup(draft.id, draft.aspect),
+      );
+    }
     setState(() {
       _layoutDraft = null;
-      _layoutId = draft.id;
+      if (draft.mode == _LayoutDraftMode.add && !locked) {
+        _layoutId = draft.id;
+      }
     });
     _replaceDashboard(next);
   }
 
   void _removeLayout(String layoutId) {
-    _replaceDashboard(_dashboard.withoutLayout(layoutId));
-    if (_layoutId == layoutId) _selectLayout(_dashboard.baseLayoutId);
+    final next = _dashboard.withoutLayout(layoutId);
+    if (identical(next, _dashboard)) return;
+    _replaceDashboard(next);
   }
 
-  void _setAdaptiveScreen() => _replaceDashboard(
-    _dashboard.copyWith(screenSetup: const ScreenSetup.adapt()),
-  );
+  void _toggleScreenLock() {
+    if (_dashboard.screenSetup.behavior == ScreenBehavior.lock) {
+      _replaceDashboard(
+        _dashboard.copyWith(screenSetup: const ScreenSetup.adapt()),
+      );
+      return;
+    }
+    _lockCurrentLayout();
+  }
 
   void _lockCurrentLayout() {
     final aspect = _dashboard.frameAspect(_layoutId);
+    _replaceDashboard(
+      _dashboard.copyWith(screenSetup: _lockedScreenSetup(_layoutId, aspect)),
+    );
+  }
+
+  ScreenSetup _lockedScreenSetup(String layoutId, double aspect) {
     final current = ViewportOrientation.fromSize(_deviceViewportSize);
     final orientation = aspect > 1
         ? ViewportOrientation.landscape
         : aspect < 1
         ? ViewportOrientation.portrait
         : current;
-    _replaceDashboard(
-      _dashboard.copyWith(
-        screenSetup: ScreenSetup.lock(
-          layoutId: _layoutId,
-          orientation: orientation,
-        ),
-      ),
-    );
+    return ScreenSetup.lock(layoutId: layoutId, orientation: orientation);
   }
 
   void _setPlacement(String id, Placement placement) {
@@ -650,8 +688,14 @@ class _EditorPageState extends State<EditorPage> {
   }
 
   void _clearInvalidSelection(Dashboard dashboard) {
-    if (!dashboard.layouts.any((layout) => layout.id == _layoutId) ||
-        (_selectedId != null &&
+    if (!dashboard.layouts.any((layout) => layout.id == _layoutId)) {
+      _layoutId = dashboard.baseLayoutId;
+      _layoutDraft = null;
+      _selectedId = null;
+      _selectedModuleId = null;
+      return;
+    }
+    if ((_selectedId != null &&
             _componentIn(dashboard, _selectedId!) == null) ||
         (_selectedModuleId != null &&
             _moduleIn(dashboard, _selectedModuleId!) == null)) {
@@ -690,9 +734,13 @@ class _EditorPageState extends State<EditorPage> {
     return candidate;
   }
 
-  bool _hasLayoutAspect(double aspect) => _dashboard.layouts.any(
-    (layout) => (math.log(layout.aspect / aspect)).abs() < 0.001,
-  );
+  bool _hasLayoutAspect(double aspect, {required _LayoutDraft excluding}) =>
+      _dashboard.layouts.any(
+        (layout) =>
+            !(excluding.mode == _LayoutDraftMode.modify &&
+                layout.id == excluding.id) &&
+            (math.log(layout.aspect / aspect)).abs() < 0.001,
+      );
 }
 
 @immutable
@@ -714,19 +762,24 @@ class _WorkspaceDropPreview {
       Object.hash(request.kind, request.componentType?.id, rect);
 }
 
+enum _LayoutDraftMode { add, modify }
+
 @immutable
 class _LayoutDraft {
   const _LayoutDraft({
+    required this.mode,
     required this.id,
     required this.sourceLayoutId,
     required this.aspect,
   });
 
+  final _LayoutDraftMode mode;
   final String id;
   final String sourceLayoutId;
   final double aspect;
 
   _LayoutDraft copyWith({double? aspect}) => _LayoutDraft(
+    mode: mode,
     id: id,
     sourceLayoutId: sourceLayoutId,
     aspect: aspect ?? this.aspect,
@@ -863,14 +916,13 @@ class _EditorServicePanel extends StatefulWidget {
     required this.onVisibilityChanged,
     required this.onComponentChanged,
     required this.onDashboardChanged,
-    required this.onLayoutAspectChanged,
     required this.onBeginLayoutDraft,
+    required this.onBeginLayoutModification,
     required this.onLayoutDraftAspectChanged,
     required this.onCancelLayoutDraft,
-    required this.onCreateLayout,
+    required this.onCommitLayoutDraft,
     required this.onRemoveLayout,
-    required this.onSetAdaptiveScreen,
-    required this.onLockCurrentLayout,
+    required this.onToggleScreenLock,
     required this.onPlacementChanged,
     required this.onModulePlacementChanged,
   });
@@ -899,14 +951,13 @@ class _EditorServicePanel extends StatefulWidget {
   onVisibilityChanged;
   final ValueChanged<ComponentInstance> onComponentChanged;
   final ValueChanged<Dashboard> onDashboardChanged;
-  final ValueChanged<double> onLayoutAspectChanged;
   final VoidCallback onBeginLayoutDraft;
+  final VoidCallback onBeginLayoutModification;
   final ValueChanged<double> onLayoutDraftAspectChanged;
   final VoidCallback onCancelLayoutDraft;
-  final VoidCallback onCreateLayout;
+  final VoidCallback onCommitLayoutDraft;
   final ValueChanged<String> onRemoveLayout;
-  final VoidCallback onSetAdaptiveScreen;
-  final VoidCallback onLockCurrentLayout;
+  final VoidCallback onToggleScreenLock;
   final void Function(String id, Placement placement) onPlacementChanged;
   final void Function(String id, Placement placement) onModulePlacementChanged;
 
@@ -1328,16 +1379,10 @@ class _RackItem {
   }
 }
 
-class _DesignPanel extends StatefulWidget {
+class _DesignPanel extends StatelessWidget {
   const _DesignPanel({required this.host});
 
   final _EditorServicePanel host;
-
-  @override
-  State<_DesignPanel> createState() => _DesignPanelState();
-}
-
-class _DesignPanelState extends State<_DesignPanel> {
   static const _commonAspects = <double>[
     9 / 20,
     9 / 16,
@@ -1356,10 +1401,10 @@ class _DesignPanelState extends State<_DesignPanel> {
     '16:9',
     '20:9',
   ];
-
-  bool _screenSetupOpen = false;
-
-  _EditorServicePanel get host => widget.host;
+  static const _dangerPalette = VfdPalette(
+    lit: Color(0xFFFF4A3D),
+    unlit: Color(0xFF783D38),
+  );
 
   @override
   Widget build(BuildContext context) => PrismPanel(
@@ -1367,133 +1412,15 @@ class _DesignPanelState extends State<_DesignPanel> {
     padding: EdgeInsets.fromLTRB(8, 8, 8, 8 + host.safeInsets.bottom),
     child: switch (host.layoutDraft) {
       final draft? => _layoutDraft(draft),
-      null when _screenSetupOpen => _screenSetup(),
-      null => _currentFrame(),
+      null => _layoutBrowser(),
     },
   );
 
-  Widget _currentFrame() {
-    final layout = host.dashboard.layout(host.layoutId);
-    final ratio = _RatioPair.fromAspect(layout.aspect);
-    final setup = host.dashboard.screenSetup;
-    final summary = setup.behavior == ScreenBehavior.lock
-        ? 'Rotation locked · ${layoutShapeLabel(layout.aspect)} layout'
-        : host.dashboard.layouts.length == 1
-        ? 'Fits all screens'
-        : '${host.dashboard.layouts.length} screen layouts';
+  Widget _layoutBrowser() {
+    final locked = host.dashboard.screenSetup.behavior == ScreenBehavior.lock;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        VfdLegend('Current frame', palette: host.palette, lit: true, size: 12),
-        const SizedBox(height: 6),
-        VfdLegend(
-          '${layoutShapeLabel(layout.aspect)} · ${formatLayoutRatio(layout.aspect)}',
-          palette: host.palette,
-          size: 10,
-        ),
-        const Spacer(),
-        _ratioFields(
-          ratio,
-          onChanged: host.onLayoutAspectChanged,
-          keyPrefix: 'current-frame',
-        ),
-        const Spacer(),
-        VfdLegend(summary, palette: host.palette, size: 9),
-        const SizedBox(height: 6),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: PrismButton(
-            key: const ValueKey('open-screen-setup'),
-            label: 'Screen setup',
-            palette: host.palette,
-            role: PrismRole.compact,
-            span: PrismSpan.three,
-            style: host.dashboard.settings.prismStyle,
-            onPressed: () => setState(() => _screenSetupOpen = true),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _screenSetup() {
-    final setup = host.dashboard.screenSetup;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: VfdLegend(
-                'Screen setup',
-                palette: host.palette,
-                lit: true,
-                size: 12,
-              ),
-            ),
-            PrismButton(
-              key: const ValueKey('close-screen-setup'),
-              label: 'Done',
-              palette: host.palette,
-              role: PrismRole.micro,
-              style: host.dashboard.settings.prismStyle,
-              onPressed: () => setState(() => _screenSetupOpen = false),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        VfdLegend(
-          'Adapt selects the closest frame for each screen.',
-          palette: host.palette,
-          size: 9,
-          maxLines: 2,
-        ),
-        const SizedBox(height: 7),
-        PrismSelectorBank<ScreenBehavior>(
-          key: const ValueKey('screen-behavior-selector'),
-          choices: <PrismSelectorChoice<ScreenBehavior>>[
-            PrismSelectorChoice<ScreenBehavior>(
-              value: ScreenBehavior.adapt,
-              label: 'Adapt',
-              lit: setup.behavior == ScreenBehavior.adapt,
-            ),
-            PrismSelectorChoice<ScreenBehavior>(
-              value: ScreenBehavior.lock,
-              label: 'Lock this',
-              lit:
-                  setup.behavior == ScreenBehavior.lock &&
-                  setup.lockedLayoutId == host.layoutId,
-            ),
-          ],
-          selected: setup.behavior,
-          palette: host.palette,
-          prismStyle: host.dashboard.settings.prismStyle,
-          rows: 1,
-          columns: 2,
-          role: PrismRole.compact,
-          soundEnabled: host.soundEnabled,
-          hapticsEnabled: host.hapticsEnabled,
-          semanticLabel: 'Screen behavior',
-          onSelected: (value) => value == ScreenBehavior.adapt
-              ? host.onSetAdaptiveScreen()
-              : host.onLockCurrentLayout(),
-        ),
-        const SizedBox(height: 8),
-        VfdLegend('Layouts', palette: host.palette, size: 10),
-        const SizedBox(height: 4),
-        Expanded(
-          key: const ValueKey('screen-layout-rail'),
-          child: ListView.separated(
-            padding: EdgeInsets.zero,
-            itemCount: host.dashboard.layouts.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 4),
-            itemBuilder: (context, index) {
-              final layout = host.dashboard.layouts[index];
-              return _layoutRailItem(layout, index);
-            },
-          ),
-        ),
-        const SizedBox(height: 6),
         Row(
           children: <Widget>[
             PrismButton(
@@ -1507,11 +1434,40 @@ class _DesignPanelState extends State<_DesignPanel> {
               onPressed: host.onBeginLayoutDraft,
             ),
             const Spacer(),
+            PrismButton(
+              key: const ValueKey('screen-lock'),
+              label: 'Lock',
+              value: locked ? 'On' : 'Off',
+              palette: host.palette,
+              lit: locked,
+              selected: locked,
+              role: PrismRole.compact,
+              style: host.dashboard.settings.prismStyle,
+              onPressed: host.onToggleScreenLock,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Expanded(child: _layoutGrid(locked)),
+        const SizedBox(height: 8),
+        Row(
+          children: <Widget>[
+            PrismButton(
+              key: const ValueKey('modify-layout'),
+              label: 'Modify',
+              palette: host.palette,
+              role: PrismRole.compact,
+              span: PrismSpan.two,
+              style: host.dashboard.settings.prismStyle,
+              onPressed: host.onBeginLayoutModification,
+            ),
+            const Spacer(),
             if (host.layoutId != host.dashboard.baseLayoutId)
               PrismButton(
                 key: const ValueKey('remove-layout'),
                 label: 'Remove',
-                palette: host.palette,
+                palette: _dangerPalette,
+                lit: true,
                 role: PrismRole.compact,
                 style: host.dashboard.settings.prismStyle,
                 onPressed: () => host.onRemoveLayout(host.layoutId),
@@ -1522,80 +1478,78 @@ class _DesignPanelState extends State<_DesignPanel> {
     );
   }
 
-  Widget _layoutRailItem(DesignLayout layout, int index) {
+  Widget _layoutGrid(bool locked) => LayoutBuilder(
+    builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 600 ? 4 : 2;
+      return GridView.builder(
+        key: const ValueKey('screen-layout-grid'),
+        padding: EdgeInsets.zero,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns,
+          mainAxisExtent: PrismMetrics.height(PrismRole.standard),
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+        ),
+        itemCount: host.dashboard.layouts.length,
+        itemBuilder: (context, index) {
+          final layout = host.dashboard.layouts[index];
+          return Center(child: _layoutButton(layout, locked));
+        },
+      );
+    },
+  );
+
+  Widget _layoutButton(DesignLayout layout, bool locked) {
     final selected = layout.id == host.layoutId;
     final base = layout.id == host.dashboard.baseLayoutId;
-    final locked = host.dashboard.screenSetup.lockedLayoutId == layout.id;
-    return SizedBox(
-      height: 44,
-      child: Row(
-        children: <Widget>[
-          SizedBox(
-            width: 56,
-            child: CustomPaint(
-              key: ValueKey('layout-shape-${layout.id}'),
-              painter: _LayoutShapePainter(
-                aspect: layout.aspect,
-                color: selected ? host.palette.lit : host.palette.unlit,
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Semantics(
-              button: true,
-              selected: selected,
-              label:
-                  'Layout ${index + 1}, ${layoutShapeLabel(layout.aspect)}, ${formatLayoutRatio(layout.aspect)}',
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => host.onSelectLayout(layout.id),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: VfdLegend(
-                        '${index + 1} · ${layoutShapeLabel(layout.aspect)}',
-                        palette: host.palette,
-                        lit: selected,
-                        size: 10,
-                      ),
-                    ),
-                    VfdLegend(
-                      formatLayoutRatio(layout.aspect),
-                      palette: host.palette,
-                      lit: selected,
-                      size: 9,
-                    ),
-                    if (base || locked) ...<Widget>[
-                      const SizedBox(width: 6),
-                      VfdLegend(
-                        locked ? 'Lock' : 'Base',
-                        palette: host.palette,
-                        size: 8,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
+    final enabled = !locked || selected;
+    final ratio = formatLayoutRatio(layout.aspect);
+    return PrismButton(
+      key: ValueKey('screen-layout-${layout.id}'),
+      label: '$ratio layout${base ? ', base' : ''}',
+      value: selected ? 'Selected' : null,
+      face: _LayoutPrismFace(
+        layoutId: layout.id,
+        aspect: layout.aspect,
+        ratio: ratio,
+        palette: host.palette,
+        style: host.dashboard.settings.prismStyle,
+        selected: selected,
+        enabled: enabled,
       ),
+      palette: host.palette,
+      lit: selected,
+      selected: selected,
+      enabled: enabled,
+      role: PrismRole.standard,
+      span: PrismSpan.two,
+      style: host.dashboard.settings.prismStyle,
+      onPressed: enabled ? () => host.onSelectLayout(layout.id) : null,
     );
   }
 
   Widget _layoutDraft(_LayoutDraft draft) {
+    final modifying = draft.mode == _LayoutDraftMode.modify;
     final ratio = _RatioPair.fromAspect(draft.aspect);
     final duplicate = host.dashboard.layouts.any(
-      (layout) => (math.log(layout.aspect / draft.aspect)).abs() < 0.001,
+      (layout) =>
+          (!modifying || layout.id != draft.id) &&
+          (math.log(layout.aspect / draft.aspect)).abs() < 0.001,
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        VfdLegend('Add layout', palette: host.palette, lit: true, size: 12),
+        VfdLegend(
+          modifying ? 'Modify layout' : 'Add layout',
+          palette: host.palette,
+          lit: true,
+          size: 12,
+        ),
         const SizedBox(height: 4),
         VfdLegend(
-          'Select a frame ratio. Parts keep their size and position.',
+          modifying
+              ? 'Set the frame ratio. Parts keep their size and position.'
+              : 'Select a frame ratio. Parts keep their size and position.',
           palette: host.palette,
           size: 9,
           maxLines: 2,
@@ -1619,7 +1573,7 @@ class _DesignPanelState extends State<_DesignPanel> {
         _ratioFields(
           ratio,
           onChanged: host.onLayoutDraftAspectChanged,
-          keyPrefix: 'new-layout',
+          keyPrefix: modifying ? 'modify-layout' : 'new-layout',
         ),
         if (duplicate) ...<Widget>[
           const SizedBox(height: 4),
@@ -1642,15 +1596,15 @@ class _DesignPanelState extends State<_DesignPanel> {
             ),
             const Spacer(),
             PrismButton(
-              key: const ValueKey('create-layout'),
-              label: 'Create layout',
+              key: ValueKey(modifying ? 'apply-layout' : 'create-layout'),
+              label: modifying ? 'Apply' : 'Create layout',
               palette: host.palette,
               lit: !duplicate,
               enabled: !duplicate,
               role: PrismRole.compact,
               span: PrismSpan.two,
               style: host.dashboard.settings.prismStyle,
-              onPressed: duplicate ? null : host.onCreateLayout,
+              onPressed: duplicate ? null : host.onCommitLayoutDraft,
             ),
           ],
         ),
@@ -1732,6 +1686,56 @@ class _RatioPair {
 
   final double width;
   final double height;
+}
+
+class _LayoutPrismFace extends StatelessWidget {
+  const _LayoutPrismFace({
+    required this.layoutId,
+    required this.aspect,
+    required this.ratio,
+    required this.palette,
+    required this.style,
+    required this.selected,
+    required this.enabled,
+  });
+
+  final String layoutId;
+  final double aspect;
+  final String ratio;
+  final VfdPalette palette;
+  final PrismStyle style;
+  final bool selected;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisAlignment: MainAxisAlignment.center,
+    mainAxisSize: MainAxisSize.min,
+    children: <Widget>[
+      SizedBox(
+        width: 48,
+        height: 20,
+        child: CustomPaint(
+          key: ValueKey('layout-ratio-frame-$layoutId'),
+          painter: _LayoutShapePainter(
+            aspect: aspect,
+            color: (selected ? palette.lit : palette.unlit).withValues(
+              alpha: enabled ? 1 : 0.32,
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 1),
+      PrismLegend(
+        ratio,
+        palette: palette,
+        lit: selected,
+        enabled: enabled,
+        inactiveLuminosity: style.inactiveLuminosity,
+        size: 8,
+      ),
+    ],
+  );
 }
 
 class _LayoutShapePainter extends CustomPainter {

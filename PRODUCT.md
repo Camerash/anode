@@ -49,23 +49,22 @@ purpose-built.
 
 ## Screen Layouts
 
-Normal editing shows one current frame. Screen adaptation stays out of the main
-workflow. Users open `SCREEN SETUP` only when they need more control.
-
 A design has one or more named layouts. Each layout has an authored frame ratio
 and independent placements. Layouts are not device models and are not limited
-to portrait and landscape. `ADAPT` selects the layout with the closest frame
-ratio to the current viewport. If one layout exists, Anode contain-fits that
-layout on every screen.
+to portrait and landscape. DESIGN shows these layouts directly as a ratio grid.
+Selecting a tile changes the editable canvas.
 
-`LOCK THIS` fixes runtime to the selected layout. On phones, it also requests
-the matching app orientation. On large or resizable screens that do not accept
-orientation lock, Anode keeps the selected layout while the system can rotate
-the window.
+With `LOCK` off, Anode selects the layout with the closest frame ratio to the
+current viewport. If one layout exists, Anode contain-fits it on every screen.
+With `LOCK` on, Anode fixes runtime to the selected layout and disables the
+other layout tiles. On phones, it also requests the matching app orientation.
+On large or resizable screens that do not accept orientation lock, Anode keeps
+the selected layout while the system can rotate the window.
 
-`ADD LAYOUT` copies the visible source layout into a new frame ratio. Component
-size, position, and VFD optical scale stay unchanged. Users select a common
-ratio or enter a custom width-to-height ratio through the Aspect Map.
+`ADD LAYOUT` copies the visible source layout into a new frame ratio. `MODIFY`
+changes the selected frame ratio. Both actions use the Aspect Map. Component
+size, position, and VFD optical scale stay unchanged. `REMOVE` is available for
+non-base layouts only.
 
 Future background bleed and hardware cutout artwork belong to a separate cover
 layer. They must not change layout frames, component coordinates, or VFD optical

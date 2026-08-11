@@ -408,13 +408,17 @@ orientation through `SystemChrome`. Before Library or editor entry, runtime
 clears the request. Large and resizable displays can reject orientation lock;
 the selected layout stays fixed while the system can rotate the window.
 
-Normal DESIGN controls show only the current frame ratio and a secondary
-`SCREEN SETUP` entry. Screen Setup is progressive disclosure. It exposes the
-layout rail, `ADAPT`, `LOCK THIS`, add, and remove actions. `ADD LAYOUT` opens
-the Aspect Map with common detents and custom W:H input. It copies the visible
-source placement and module regions verbatim. The target frame grows on one
-axis to reach the new ratio. No component size, position, or optical unit is
-rescaled.
+DESIGN opens layout setup directly. Its top row contains `ADD LAYOUT` and
+`LOCK`. A responsive Prism grid shows each frame as an aspect rectangle with a
+ratio label. The selected tile controls the editable canvas. With `LOCK` off,
+runtime adapts to the closest layout. With `LOCK` on, runtime uses the selected
+layout and disables the other layout tiles. Lock does not disable authoring.
+
+`ADD LAYOUT` and `MODIFY` open the same Aspect Map with common detents and
+custom W:H input. Add copies the visible source placements and module regions
+verbatim. Modify changes only the selected frame ratio. No component size,
+position, or optical unit is rescaled. `REMOVE` exists only for non-base
+layouts. Removing a locked layout clears the lock and selects the base layout.
 
 The device rect is `MediaQuery.size`, never size minus safe padding. Safe
 padding belongs to chrome. Flutter rectangular insets do not describe a Dynamic
@@ -683,8 +687,8 @@ depth already rules out accidental entry.
 
 Editing needs persistent chrome that tuning does not, so it gets a dedicated
 screen: a contain-fit authored canvas plus a contextual inspector. On entry,
-the base layout is editable. DESIGN shows its current frame. Advanced layout
-selection and runtime adaptation live behind `SCREEN SETUP`.
+the base layout is editable. DESIGN shows the direct layout grid, authoring
+actions, and optional runtime lock.
 
 The editor canvas is the one place visible frame edges are correct. Its outer
 boundary is the complete runtime device envelope; the fixed authored frame is
