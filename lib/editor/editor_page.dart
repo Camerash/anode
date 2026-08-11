@@ -1383,6 +1383,7 @@ class _DesignPanel extends StatelessWidget {
   const _DesignPanel({required this.host});
 
   final _EditorServicePanel host;
+  static const _layoutTileScale = 2.0;
   static const _commonAspects = <double>[
     9 / 20,
     9 / 16,
@@ -1482,7 +1483,8 @@ class _DesignPanel extends StatelessWidget {
     padding: EdgeInsets.zero,
     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
       crossAxisCount: 3,
-      mainAxisExtent: PrismMetrics.height(PrismRole.standard),
+      mainAxisExtent:
+          PrismMetrics.height(PrismRole.standard) * _layoutTileScale,
       crossAxisSpacing: 8,
       mainAxisSpacing: 8,
     ),
@@ -1498,27 +1500,36 @@ class _DesignPanel extends StatelessWidget {
     final base = layout.id == host.dashboard.baseLayoutId;
     final enabled = !locked || selected;
     final ratio = formatLayoutRatio(layout.aspect);
-    return PrismButton(
-      key: ValueKey('screen-layout-${layout.id}'),
-      label: '$ratio layout${base ? ', base' : ''}',
-      value: selected ? 'Selected' : null,
-      face: _LayoutPrismFace(
-        layoutId: layout.id,
-        aspect: layout.aspect,
-        ratio: ratio,
-        palette: host.palette,
-        style: host.dashboard.settings.prismStyle,
-        selected: selected,
-        enabled: enabled,
+    return SizedBox.square(
+      key: ValueKey('layout-tile-${layout.id}'),
+      dimension: PrismMetrics.height(PrismRole.standard) * _layoutTileScale,
+      child: Center(
+        child: Transform.scale(
+          scale: _layoutTileScale,
+          child: PrismButton(
+            key: ValueKey('screen-layout-${layout.id}'),
+            label: '$ratio layout${base ? ', base' : ''}',
+            value: selected ? 'Selected' : null,
+            face: _LayoutPrismFace(
+              layoutId: layout.id,
+              aspect: layout.aspect,
+              ratio: ratio,
+              palette: host.palette,
+              style: host.dashboard.settings.prismStyle,
+              selected: selected,
+              enabled: enabled,
+            ),
+            palette: host.palette,
+            lit: selected,
+            selected: selected,
+            enabled: enabled,
+            role: PrismRole.standard,
+            square: true,
+            style: host.dashboard.settings.prismStyle,
+            onPressed: enabled ? () => host.onSelectLayout(layout.id) : null,
+          ),
+        ),
       ),
-      palette: host.palette,
-      lit: selected,
-      selected: selected,
-      enabled: enabled,
-      role: PrismRole.standard,
-      square: true,
-      style: host.dashboard.settings.prismStyle,
-      onPressed: enabled ? () => host.onSelectLayout(layout.id) : null,
     );
   }
 

@@ -47,13 +47,13 @@ void main() {
     expect(delegate.crossAxisCount, 3);
 
     final wideButton = tester.getRect(
-      find.byKey(const ValueKey('screen-layout-wide')),
+      find.byKey(const ValueKey('layout-tile-wide')),
     );
     final squareButton = tester.getRect(
-      find.byKey(const ValueKey('screen-layout-square')),
+      find.byKey(const ValueKey('layout-tile-square')),
     );
-    expect(wideButton.size, const Size.square(54));
-    expect(squareButton.size, const Size.square(54));
+    expect(wideButton.size, const Size.square(108));
+    expect(squareButton.size, const Size.square(108));
 
     final gridRect = tester.getRect(
       find.byKey(const ValueKey('screen-layout-grid')),
@@ -68,10 +68,10 @@ void main() {
       closeTo(columnWidth * 1.5 + 8, 0.01),
     );
 
-    final frame = tester.getSize(
+    final frame = tester.getRect(
       find.byKey(const ValueKey('layout-ratio-frame-wide')),
     );
-    expect(frame, const Size(30, 14));
+    expect(frame.size, const Size(60, 28));
   });
 
   testWidgets('Lock fixes selected layout and removal restores base', (
