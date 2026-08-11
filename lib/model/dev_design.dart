@@ -2,6 +2,7 @@ import 'dart:ui' show Offset, Size;
 
 import 'component_instance.dart';
 import 'component_type.dart';
+import 'design_layout.dart';
 import 'design_preset.dart';
 import 'placement.dart';
 
@@ -27,32 +28,27 @@ DesignPreset developmentPreset() {
     id: 'dev.classic',
     name: 'Classic',
     version: 1,
-    frameSpecs: const <DesignOrientation, FrameSpec>{
-      DesignOrientation.landscape: FrameSpec(width: 2.6, height: 1),
-    },
+    baseLayoutId: 'wide',
+    layouts: const <DesignLayout>[
+      DesignLayout(id: 'wide', frame: FrameSpec(width: 2.6, height: 1)),
+    ],
     components: <ComponentInstance>[
       ComponentInstance(
         id: 'speed',
         typeId: ComponentTypes.speedDigits,
         params: const <String, Object?>{'digits': 3, 'unit': 'kph'},
-        placements: <DesignOrientation, Placement>{
-          DesignOrientation.landscape: digitsPlacement,
-        },
+        placements: const <String, Placement>{'wide': digitsPlacement},
       ),
       ComponentInstance(
         id: 'bar',
         typeId: ComponentTypes.speedBar,
         params: const <String, Object?>{'cells': 20, 'maxKph': 260.0},
-        placements: <DesignOrientation, Placement>{
-          DesignOrientation.landscape: barPlacement,
-        },
+        placements: const <String, Placement>{'wide': barPlacement},
       ),
       ComponentInstance(
         id: 'legend',
         typeId: ComponentTypes.unitLegend,
-        placements: <DesignOrientation, Placement>{
-          DesignOrientation.landscape: legendPlacement,
-        },
+        placements: const <String, Placement>{'wide': legendPlacement},
       ),
     ],
   );

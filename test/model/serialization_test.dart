@@ -35,18 +35,12 @@ void main() {
     expect(back.forkedAt, DateTime.utc(2026, 7, 27, 9, 30));
   });
 
-  test('per-orientation placements survive independently', () {
+  test('per-layout placements survive independently', () {
     final back = DesignPreset.fromJson(reencode(preset().toJson()));
     final d = back.components.firstWhere((c) => c.id == 'digits');
 
-    expect(
-      d.placements[DesignOrientation.portrait]!.center,
-      const Offset(0, 0.20),
-    );
-    expect(
-      d.placements[DesignOrientation.landscape]!.center,
-      const Offset(0, 0.11),
-    );
+    expect(d.placements[tallLayoutId]!.center, const Offset(0, 0.20));
+    expect(d.placements[wideLayoutId]!.center, const Offset(0, 0.11));
   });
 
   test('a component type this build does not know is preserved', () {
@@ -72,7 +66,7 @@ void main() {
     expect(back.components.last.typeId, 'gauge.from.the.future');
   });
 
-  test('an unknown orientation key is ignored, known ones survive', () {
+  test('layout placement keys survive without an enum filter', () {
     final json = preset().toJson();
     final first = (json['components'] as List).first as Map<String, Object?>;
     (first['placements'] as Map)['skewLeft'] = const Placement(
@@ -82,9 +76,10 @@ void main() {
 
     final back = DesignPreset.fromJson(reencode(json));
     final d = back.components.first;
-    expect(d.placements.keys.map((o) => o.name).toSet(), <String>{
-      'landscape',
-      'portrait',
+    expect(d.placements.keys.toSet(), <String>{
+      wideLayoutId,
+      tallLayoutId,
+      'skewLeft',
     });
   });
 

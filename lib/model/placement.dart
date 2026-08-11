@@ -1,21 +1,6 @@
 import 'dart:ui' show Offset, Size;
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-
-/// A design always has one primary layout and may author one opposite-
-/// orientation override.
-enum DesignOrientation {
-  portrait,
-  landscape;
-
-  static DesignOrientation? byName(String name) {
-    for (final o in DesignOrientation.values) {
-      if (o.name == name) return o;
-    }
-    return null;
-  }
-}
 
 /// The authored extent of one physical tube face, in design units.
 ///
@@ -46,13 +31,9 @@ class FrameSpec {
   FrameSpec copyWith({double? width, double? height}) =>
       FrameSpec(width: width ?? this.width, height: height ?? this.height);
 
-  /// `referenceAspect` is written as well as the extent. It is redundant for
-  /// this build and lets an older one degrade to an aspect-only frame instead
-  /// of falling back to a default it never authored.
   Map<String, Object?> toJson() => <String, Object?>{
     'width': width,
     'height': height,
-    'referenceAspect': referenceAspect,
   };
 
   factory FrameSpec.fromJson(
@@ -65,105 +46,8 @@ class FrameSpec {
       final spec = FrameSpec(width: width, height: height);
       if (spec.isValid) return spec;
     }
-    final aspect = (json['referenceAspect'] as num?)?.toDouble();
-    if (aspect != null && aspect.isFinite && aspect > 0) {
-      return FrameSpec.aspect(aspect);
-    }
     return fallback;
   }
-}
-
-/// Development defaults for payloads written before frame extents were stored.
-///
-/// New designs explicitly author their primary and any optional alternate.
-/// Tolerant defaults keep malformed/imported payloads usable, so their numbers
-/// must not drift: changing one would rescale every legacy payload that fell
-/// back to it.
-const Map<DesignOrientation, FrameSpec> kDefaultFrameSpecs =
-    <DesignOrientation, FrameSpec>{
-      DesignOrientation.portrait: FrameSpec.aspect(1 / 2.6),
-      DesignOrientation.landscape: FrameSpec.aspect(2.6),
-    };
-
-/// The extent an explicitly created alternate layout takes, such that the
-/// design renders at exactly the fit scale it already had.
-///
-/// [deviceViewport] is the device's full viewport. Its axes are swapped when
-/// [target] disagrees with the device's current orientation, because the
-/// viewport selector is independent of how the phone happens to be held.
-///
-/// Both `CREATE` and the read-only preview of an unauthored orientation call
-/// this, which is what makes "no runtime visual jump" structural rather than
-/// something a test has to keep honest.
-Size viewportFrameExtent(
-  DesignOrientation target,
-  Size deviceViewport,
-  FrameSpec primary,
-) {
-  final viewport =
-      (deviceViewport.height >= deviceViewport.width) ==
-          (target == DesignOrientation.portrait)
-      ? deviceViewport
-      : Size(deviceViewport.height, deviceViewport.width);
-  final scale = math.min(
-    viewport.width / primary.width,
-    viewport.height / primary.height,
-  );
-  if (!scale.isFinite || scale <= 0) return primary.extent;
-  return Size(viewport.width / scale, viewport.height / scale);
-}
-
-Map<DesignOrientation, FrameSpec> normaliseFrameSpecs(
-  DesignOrientation primary, {
-  Map<DesignOrientation, FrameSpec>? specs,
-  Map<DesignOrientation, double>? legacyAspects,
-}) {
-  final resolved = <DesignOrientation, FrameSpec>{
-    for (final entry in (specs ?? const {}).entries)
-      if (entry.value.isValid) entry.key: entry.value,
-  };
-  for (final entry in (legacyAspects ?? const {}).entries) {
-    if (resolved.containsKey(entry.key) ||
-        !entry.value.isFinite ||
-        entry.value <= 0) {
-      continue;
-    }
-    resolved[entry.key] = FrameSpec.aspect(entry.value);
-  }
-  resolved.putIfAbsent(primary, () => kDefaultFrameSpecs[primary]!);
-  return Map<DesignOrientation, FrameSpec>.unmodifiable(resolved);
-}
-
-Map<String, Object?> frameSpecsToJson(
-  Map<DesignOrientation, FrameSpec> specs,
-) => <String, Object?>{
-  for (final entry in specs.entries) entry.key.name: entry.value.toJson(),
-};
-
-Map<DesignOrientation, FrameSpec> parseFrameSpecs(Object? raw) {
-  final values = <DesignOrientation, FrameSpec>{};
-  for (final entry
-      in ((raw as Map?)?.cast<String, Object?>() ?? const {}).entries) {
-    final orientation = DesignOrientation.byName(entry.key);
-    if (orientation == null || entry.value is! Map) continue;
-    values[orientation] = FrameSpec.fromJson(
-      (entry.value as Map).cast<String, Object?>(),
-      fallback: kDefaultFrameSpecs[orientation]!,
-    );
-  }
-  return values;
-}
-
-Map<DesignOrientation, double> parseFrameAspects(Object? raw) {
-  final values = <DesignOrientation, double>{};
-  for (final entry
-      in ((raw as Map?)?.cast<String, Object?>() ?? const {}).entries) {
-    final orientation = DesignOrientation.byName(entry.key);
-    final value = (entry.value as num?)?.toDouble();
-    if (orientation == null || value == null) continue;
-    values[orientation] = value;
-  }
-  return values;
 }
 
 /// Design space is the shader's space: y-up, origin at the centre of the frame,

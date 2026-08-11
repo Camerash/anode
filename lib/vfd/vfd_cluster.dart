@@ -9,7 +9,6 @@ import '../model/component_type.dart';
 import '../model/component_instance.dart';
 import '../model/design.dart';
 import '../model/optical_profile.dart';
-import '../model/placement.dart';
 import '../model/vfd_module.dart';
 import 'component_data.dart';
 import 'prism_glyphs.dart';
@@ -84,21 +83,21 @@ class VfdController extends ChangeNotifier {
   VfdController({
     required TickerProvider vsync,
     required Design design,
-    DesignOrientation orientation = DesignOrientation.landscape,
+    Size viewportSize = const Size(1, 1),
   }) : _design = design,
-       _viewportOrientation = orientation,
-       _orientation = design.layoutForViewport(orientation) {
+       _viewportSize = viewportSize,
+       _layoutId = design.layoutForViewport(viewportSize) {
     _ticker = vsync.createTicker(_onTick)..start();
   }
 
-  DesignOrientation _viewportOrientation;
-  DesignOrientation _orientation;
-  DesignOrientation get orientation => _orientation;
-  set orientation(DesignOrientation value) {
-    _viewportOrientation = value;
+  Size _viewportSize;
+  String _layoutId;
+  String get layoutId => _layoutId;
+  set viewportSize(Size value) {
+    _viewportSize = value;
     final next = _design.layoutForViewport(value);
-    if (next == _orientation) return;
-    _orientation = next;
+    if (next == _layoutId) return;
+    _layoutId = next;
     _banks.clear();
     _authoredRevision++;
     _rebuild(0);
@@ -106,8 +105,8 @@ class VfdController extends ChangeNotifier {
 
   /// The authored frame extent in design units. Geometry resolves against
   /// this; [aspect] survives for readouts only.
-  Size get frameExtent => _design.frameExtent(_orientation);
-  double get aspect => _design.frameAspect(_orientation);
+  Size get frameExtent => _design.frameExtent(_layoutId);
+  double get aspect => _design.frameAspect(_layoutId);
 
   late final Ticker _ticker;
   Duration _last = Duration.zero;
@@ -126,7 +125,7 @@ class VfdController extends ChangeNotifier {
   set design(Design value) {
     if (identical(value, _design)) return;
     _design = value;
-    _orientation = value.layoutForViewport(_viewportOrientation);
+    _layoutId = value.layoutForViewport(_viewportSize);
     // Placement editing may update faster than the animation ticker. Rebuild
     // authored data now so shader geometry and Flutter selection chrome commit
     // in the same widget frame. Segment banks survive geometry-only edits;
@@ -152,7 +151,7 @@ class VfdController extends ChangeNotifier {
   /// The unit the first speed readout is bound to. Per-component, not global —
   /// this reads it back off the data rather than holding a second copy.
   SpeedUnit get unit {
-    for (final c in _design.componentsIn(orientation)) {
+    for (final c in _design.componentsIn(layoutId)) {
       if (c.typeId == ComponentTypes.speedDigits) {
         return c.effectiveParams['unit'] == 'mph'
             ? SpeedUnit.mph
@@ -192,10 +191,10 @@ class VfdController extends ChangeNotifier {
     final activeBankIds = <String>{};
     final litUnit = unit;
 
-    for (final c in _design.componentsIn(orientation)) {
+    for (final c in _design.componentsIn(layoutId)) {
       if (frames.length >= ComponentData.maxComponents) break;
       final type = ComponentTypes.byId(c.typeId);
-      final placement = c.placements[orientation];
+      final placement = c.placements[layoutId];
       if (type == null || placement == null) continue;
 
       final center = placement.center;
@@ -362,7 +361,7 @@ class VfdController extends ChangeNotifier {
     ComponentInstance component,
   ) {
     final module = _design.moduleFor(component);
-    final placement = module.regionIn(orientation);
+    final placement = module.regionIn(layoutId);
     if (module.id == kMainVfdModuleId || placement == null) {
       return (center: Offset.zero, size: frameExtent, isMain: true);
     }

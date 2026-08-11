@@ -1,6 +1,7 @@
 import 'dart:ui' show Size;
 
 import 'component_instance.dart';
+import 'design_layout.dart';
 import 'placement.dart';
 import 'settings.dart';
 import 'vfd_module.dart';
@@ -12,21 +13,34 @@ import 'vfd_module.dart';
 abstract interface class Design {
   String get id;
   String get name;
-  DesignOrientation get primaryOrientation;
-  Set<DesignOrientation> get authoredOrientations;
+  String get baseLayoutId;
+  List<DesignLayout> get layouts;
+  ScreenSetup get screenSetup;
   List<ComponentInstance> get components;
   List<VfdModule> get modules;
-  Map<DesignOrientation, FrameSpec> get frameSpecs;
   DashboardSettings get renderSettings;
 
-  bool hasAuthoredLayout(DesignOrientation orientation);
-  DesignOrientation layoutForViewport(DesignOrientation orientation);
-  FrameSpec frameSpec(DesignOrientation orientation);
-  double frameAspect(DesignOrientation orientation);
-
-  /// The authored extent in design units. Prefer this over [frameAspect] for
-  /// anything geometric — aspect alone no longer determines scale.
-  Size frameExtent(DesignOrientation orientation);
-  List<ComponentInstance> componentsIn(DesignOrientation orientation);
   VfdModule moduleFor(ComponentInstance component);
+}
+
+extension DesignGeometry on Design {
+  DesignLayout layout(String id) =>
+      designLayoutById(layouts, id, fallbackId: baseLayoutId);
+
+  String layoutForViewport(Size viewport) {
+    final lockedId = screenSetup.lockedLayoutId;
+    if (screenSetup.behavior == ScreenBehavior.lock &&
+        lockedId != null &&
+        layouts.any((layout) => layout.id == lockedId)) {
+      return lockedId;
+    }
+    return nearestLayoutId(layouts, viewport, fallbackId: baseLayoutId);
+  }
+
+  FrameSpec frameSpec(String layoutId) => layout(layoutId).frame;
+  double frameAspect(String layoutId) => layout(layoutId).aspect;
+  Size frameExtent(String layoutId) => layout(layoutId).frame.extent;
+
+  List<ComponentInstance> componentsIn(String layoutId) =>
+      components.where((component) => component.appearsIn(layoutId)).toList();
 }

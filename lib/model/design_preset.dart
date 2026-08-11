@@ -1,38 +1,34 @@
-import 'dart:ui' show Size;
-
 import 'package:flutter/foundation.dart';
 
 import 'component_instance.dart';
 import 'design.dart';
-import 'placement.dart';
+import 'design_layout.dart';
 import 'settings.dart';
 import 'vfd_module.dart';
 
-/// Bumped when the stored shape changes in a way older builds cannot read.
-const int kSchemaVersion = 5;
+/// Bumped when stored shape changes. Prototyping builds do not migrate data.
+const int kSchemaVersion = 6;
 
-/// A shipped design: immutable, versioned, and never edited in place. Editing
-/// one forks it into a [Dashboard].
 @immutable
 class DesignPreset implements Design {
   DesignPreset({
     required this.id,
     required this.name,
     required this.version,
+    required this.baseLayoutId,
+    required List<DesignLayout> layouts,
     required List<ComponentInstance> components,
-    this.primaryOrientation = DesignOrientation.landscape,
+    this.screenSetup = const ScreenSetup.adapt(),
     List<VfdModule>? modules,
-    Map<DesignOrientation, FrameSpec>? frameSpecs,
-    Map<DesignOrientation, double>? frameAspects,
     DashboardSettings? defaults,
-  }) : components = List<ComponentInstance>.unmodifiable(components),
+  }) : layouts = normaliseDesignLayouts(layouts),
+       components = List<ComponentInstance>.unmodifiable(components),
        modules = normaliseVfdModules(modules),
-       frameSpecs = normaliseFrameSpecs(
-         primaryOrientation,
-         specs: frameSpecs,
-         legacyAspects: frameAspects,
-       ),
-       defaults = defaults ?? DashboardSettings();
+       defaults = defaults ?? DashboardSettings() {
+    if (!this.layouts.any((layout) => layout.id == baseLayoutId)) {
+      throw ArgumentError.value(baseLayoutId, 'baseLayoutId');
+    }
+  }
 
   @override
   final String id;
@@ -40,51 +36,19 @@ class DesignPreset implements Design {
   final String name;
   final int version;
   @override
-  final DesignOrientation primaryOrientation;
+  final String baseLayoutId;
   @override
-  Set<DesignOrientation> get authoredOrientations =>
-      Set<DesignOrientation>.unmodifiable(frameSpecs.keys);
+  final List<DesignLayout> layouts;
+  @override
+  final ScreenSetup screenSetup;
   @override
   final List<ComponentInstance> components;
   @override
   final List<VfdModule> modules;
-  @override
-  final Map<DesignOrientation, FrameSpec> frameSpecs;
-  Map<DesignOrientation, double> get frameAspects =>
-      Map<DesignOrientation, double>.unmodifiable(<DesignOrientation, double>{
-        for (final entry in frameSpecs.entries)
-          entry.key: entry.value.referenceAspect,
-      });
   final DashboardSettings defaults;
 
   @override
   DashboardSettings get renderSettings => defaults;
-
-  @override
-  bool hasAuthoredLayout(DesignOrientation orientation) =>
-      frameSpecs.containsKey(orientation);
-
-  @override
-  DesignOrientation layoutForViewport(DesignOrientation orientation) =>
-      hasAuthoredLayout(orientation) ? orientation : primaryOrientation;
-
-  @override
-  FrameSpec frameSpec(DesignOrientation orientation) =>
-      frameSpecs[orientation] ?? frameSpecs[primaryOrientation]!;
-
-  @override
-  double frameAspect(DesignOrientation orientation) =>
-      frameSpec(orientation).referenceAspect;
-
-  @override
-  Size frameExtent(DesignOrientation orientation) =>
-      frameSpec(orientation).extent;
-
-  @override
-  List<ComponentInstance> componentsIn(DesignOrientation orientation) =>
-      components
-          .where((c) => c.appearsIn(layoutForViewport(orientation)))
-          .toList();
 
   @override
   VfdModule moduleFor(ComponentInstance component) => modules.firstWhere(
@@ -97,28 +61,25 @@ class DesignPreset implements Design {
     'id': id,
     'name': name,
     'version': version,
-    'primaryOrientation': primaryOrientation.name,
-    'frameSpecs': frameSpecsToJson(frameSpecs),
-    'components': components.map((c) => c.toJson()).toList(),
+    'baseLayoutId': baseLayoutId,
+    'layouts': layouts.map((layout) => layout.toJson()).toList(),
+    'screenSetup': screenSetup.toJson(),
+    'components': components.map((component) => component.toJson()).toList(),
     'modules': modules.map((module) => module.toJson()).toList(),
     'defaults': defaults.toJson(),
   };
 
   factory DesignPreset.fromJson(Map<String, Object?> json) {
-    final specs = parseFrameSpecs(json['frameSpecs']);
-    final legacyAspects = parseFrameAspects(json['frameAspects']);
+    if (json['schemaVersion'] != kSchemaVersion) {
+      throw const FormatException('Unsupported design preset schema');
+    }
     return DesignPreset(
       id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? '',
       version: (json['version'] as num?)?.toInt() ?? 1,
-      primaryOrientation: parsePrimaryOrientation(
-        json['primaryOrientation'],
-        specs: specs,
-        legacyAspects: legacyAspects,
-        legacySupported: json['supportedOrientations'],
-      ),
-      frameSpecs: specs,
-      frameAspects: legacyAspects,
+      baseLayoutId: json['baseLayoutId'] as String? ?? '',
+      layouts: parseDesignLayouts(json['layouts']),
+      screenSetup: ScreenSetup.fromJson(json['screenSetup']),
       components: parseComponents(json['components']),
       modules: parseVfdModules(json['modules']),
       defaults: DashboardSettings.fromJson(
@@ -129,37 +90,12 @@ class DesignPreset implements Design {
   }
 }
 
-DesignOrientation parsePrimaryOrientation(
-  Object? raw, {
-  required Map<DesignOrientation, FrameSpec> specs,
-  required Map<DesignOrientation, double> legacyAspects,
-  Object? legacySupported,
-}) {
-  final explicit = DesignOrientation.byName(raw as String? ?? '');
-  if (explicit != null) return explicit;
-  if (specs.containsKey(DesignOrientation.landscape) ||
-      legacyAspects.containsKey(DesignOrientation.landscape)) {
-    return DesignOrientation.landscape;
-  }
-  for (final value in (legacySupported as List?) ?? const <Object?>[]) {
-    final parsed = DesignOrientation.byName(value as String? ?? '');
-    if (parsed != null) return parsed;
-  }
-  return specs.keys.firstOrNull ??
-      legacyAspects.keys.firstOrNull ??
-      DesignOrientation.landscape;
-}
+List<DesignLayout> parseDesignLayouts(Object? raw) => <DesignLayout>[
+  for (final value in (raw as List?) ?? const <Object?>[])
+    if (value is Map) DesignLayout.fromJson(value.cast<String, Object?>()),
+];
 
-/// Unknown types survive so imported designs from newer builds round-trip
-/// without data loss. Rendering skips them and the editor presents their stable
-/// type id as unavailable.
-List<ComponentInstance> parseComponents(Object? raw) {
-  final out = <ComponentInstance>[];
-  for (final v in (raw as List?) ?? const <Object?>[]) {
-    final instance = ComponentInstance.fromJson(
-      (v as Map).cast<String, Object?>(),
-    );
-    out.add(instance);
-  }
-  return out;
-}
+List<ComponentInstance> parseComponents(Object? raw) => <ComponentInstance>[
+  for (final value in (raw as List?) ?? const <Object?>[])
+    if (value is Map) ComponentInstance.fromJson(value.cast<String, Object?>()),
+];

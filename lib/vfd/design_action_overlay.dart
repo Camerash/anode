@@ -5,7 +5,6 @@ import 'package:flutter/widgets.dart';
 import '../actions/action_registry.dart';
 import '../model/component_instance.dart';
 import '../model/design.dart';
-import '../model/placement.dart';
 import 'vfd_cluster.dart';
 
 /// Non-painting hit regions for explicit interactive design components.
@@ -16,14 +15,14 @@ class DesignActionOverlay extends StatelessWidget {
   const DesignActionOverlay({
     super.key,
     required this.design,
-    required this.orientation,
+    required this.layoutId,
     required this.controller,
     required this.registry,
     this.frameInsets = EdgeInsets.zero,
   });
 
   final Design design;
-  final DesignOrientation orientation;
+  final String layoutId;
   final VfdController controller;
   final ActionRegistry registry;
   final EdgeInsets frameInsets;
@@ -38,7 +37,7 @@ class DesignActionOverlay extends StatelessWidget {
         size.width - frameInsets.right,
         size.height - frameInsets.bottom,
       );
-      final frame = design.frameExtent(orientation);
+      final frame = design.frameExtent(layoutId);
       final fitScale = math.min(
         frameRect.width / frame.width,
         frameRect.height / frame.height,
@@ -46,7 +45,7 @@ class DesignActionOverlay extends StatelessWidget {
       final frameCenter = frameRect.center;
       return Stack(
         children: <Widget>[
-          for (final component in design.componentsIn(orientation))
+          for (final component in design.componentsIn(layoutId))
             if (component.actionBinding != null)
               _hitRegion(component, frame, fitScale, frameCenter),
         ],
@@ -60,7 +59,7 @@ class DesignActionOverlay extends StatelessWidget {
     double scale,
     Offset frameCenter,
   ) {
-    final placement = component.placements[orientation]!;
+    final placement = component.placements[layoutId]!;
     final center = placement.center;
     final extent = placement.size;
     final binding = component.actionBinding!;

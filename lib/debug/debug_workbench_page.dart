@@ -7,7 +7,6 @@ import '../app_state.dart';
 import '../model/component_type.dart';
 import '../model/dashboard.dart';
 import '../model/design_preset.dart';
-import '../model/placement.dart';
 import '../vfd/prism_widgets.dart';
 import '../vfd/speed_source.dart';
 import '../vfd/vfd_cluster.dart';
@@ -35,7 +34,7 @@ class _DebugWorkbenchPageState extends State<DebugWorkbenchPage>
   late final VfdController _controller = VfdController(
     vsync: this,
     design: _design,
-    orientation: DesignOrientation.landscape,
+    viewportSize: const Size(2.6, 1),
   );
   final SimulatedSpeedSource _simulated = SimulatedSpeedSource();
   StreamSubscription<double>? _subscription;

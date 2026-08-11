@@ -6,6 +6,8 @@ import 'package:flutter/widgets.dart';
 import '../model/component_instance.dart';
 import '../model/component_type.dart';
 import '../model/dashboard.dart';
+import '../model/design.dart';
+import '../model/design_layout.dart';
 import '../model/placement.dart';
 import '../model/vfd_module.dart';
 import '../vfd/vfd_render_assets.dart';
@@ -18,7 +20,7 @@ class EditorCanvas extends StatefulWidget {
   const EditorCanvas({
     super.key,
     required this.dashboard,
-    required this.orientation,
+    required this.layoutId,
     required this.selectedId,
     required this.onSelect,
     required this.onPlacementChanged,
@@ -28,7 +30,6 @@ class EditorCanvas extends StatefulWidget {
     this.selectedModuleId,
     this.onModulePlacementChanged,
     this.renderAssets,
-    this.previewOrientation,
     this.editable = true,
     this.frameInset = EdgeInsets.zero,
     this.onAddDropped,
@@ -37,7 +38,7 @@ class EditorCanvas extends StatefulWidget {
   });
 
   final Dashboard dashboard;
-  final DesignOrientation orientation;
+  final String layoutId;
   final String? selectedId;
   final ValueChanged<String?> onSelect;
   final void Function(String componentId, Placement placement)
@@ -51,7 +52,6 @@ class EditorCanvas extends StatefulWidget {
   final void Function(String moduleId, Placement placement)?
   onModulePlacementChanged;
   final VfdRenderAssets? renderAssets;
-  final DesignOrientation? previewOrientation;
   final bool editable;
   final EdgeInsets frameInset;
   final void Function(EditorAddRequest request, Offset center)? onAddDropped;
@@ -85,13 +85,11 @@ class EditorCanvasDropPreview extends StatelessWidget {
   const EditorCanvasDropPreview({
     super.key,
     required this.dashboard,
-    required this.orientation,
     required this.request,
     required this.renderAssets,
   });
 
   final Dashboard dashboard;
-  final DesignOrientation orientation;
   final EditorAddRequest request;
   final VfdRenderAssets? renderAssets;
 
@@ -105,7 +103,7 @@ class EditorCanvasDropPreview extends StatelessWidget {
           EditorLiveVfdPreview(
             renderAssets: renderAssets!,
             dashboard: _previewDashboard(),
-            orientation: orientation,
+            layoutId: 'preview',
             transparentBackground: true,
           ),
         DecoratedBox(
@@ -125,18 +123,21 @@ class EditorCanvasDropPreview extends StatelessWidget {
     return Dashboard(
       id: 'editor.add.canvas-preview',
       name: request.label,
-      primaryOrientation: orientation,
-      frameSpecs: <DesignOrientation, FrameSpec>{
-        orientation: FrameSpec(width: size.width, height: size.height),
-      },
+      baseLayoutId: 'preview',
+      layouts: <DesignLayout>[
+        DesignLayout(
+          id: 'preview',
+          frame: FrameSpec(width: size.width, height: size.height),
+        ),
+      ],
       settings: dashboard.settings,
       components: <ComponentInstance>[
         ComponentInstance(
           id: 'editor.add.canvas-preview.component',
           typeId: type.id,
           params: type.defaults,
-          placements: <DesignOrientation, Placement>{
-            orientation: Placement(center: Offset.zero, size: size),
+          placements: <String, Placement>{
+            'preview': Placement(center: Offset.zero, size: size),
           },
         ),
       ],
@@ -200,8 +201,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
   @override
   void didUpdateWidget(covariant EditorCanvas oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.orientation != widget.orientation ||
-        oldWidget.previewOrientation != widget.previewOrientation ||
+    if (oldWidget.layoutId != widget.layoutId ||
         oldWidget.dashboard.id != widget.dashboard.id) {
       _center();
     }
@@ -231,29 +231,19 @@ class _EditorCanvasState extends State<EditorCanvas> {
             math.max(1, constraints.maxWidth),
             math.max(1, constraints.maxHeight),
           );
-          final layoutExtent = widget.dashboard.frameExtent(widget.orientation);
-
-          // Outer boundary is always the complete runtime viewport. Authored
-          // geometry remains inside its fixed contained frame.
-          final previewOrientation =
-              widget.previewOrientation ?? widget.orientation;
-          final boundaryExtent = viewportFrameExtent(
-            previewOrientation,
-            widget.deviceViewportSize,
-            widget.dashboard.frameSpec(widget.orientation),
-          );
+          final layoutExtent = widget.dashboard.frameExtent(widget.layoutId);
 
           final bounds = widget.frameInset.deflateRect(Offset.zero & sceneSize);
-          final boundary = _containRect(
+          final content = _containRect(
             Rect.fromLTWH(
               bounds.left,
               bounds.top,
               math.max(1, bounds.width),
               math.max(1, bounds.height),
             ),
-            boundaryExtent,
+            layoutExtent,
           );
-          final content = _containRect(boundary, layoutExtent);
+          final boundary = content;
           _layoutExtent = layoutExtent;
           _designScale = content.height / layoutExtent.height;
           _items = _buildItems(content);
@@ -328,7 +318,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
           EditorLiveVfdPreview(
             renderAssets: widget.renderAssets!,
             dashboard: widget.dashboard,
-            orientation: widget.orientation,
+            layoutId: widget.layoutId,
             // The boundary, not the content rect: the shader performs the
             // same contain fit the runtime does. Painter-level clipping keeps
             // shader coordinates intact while limiting its opaque substrate
@@ -396,22 +386,22 @@ class _EditorCanvasState extends State<EditorCanvas> {
   );
 
   String _frameLabel() {
-    if (!widget.editable) return 'Inherited · read only';
-    final aspect = widget.dashboard.frameAspect(widget.orientation);
-    return '${widget.orientation.name} · ${aspect.toStringAsFixed(3)}:1';
+    if (!widget.editable) return 'New layout · preview';
+    final aspect = widget.dashboard.frameAspect(widget.layoutId);
+    return '${layoutShapeLabel(aspect)} · ${formatLayoutRatio(aspect)}';
   }
 
   // --- geometry -------------------------------------------------------------
 
   List<_CanvasItem> _buildItems(Rect content) {
     final items = <_CanvasItem>[];
-    final visible = widget.dashboard.componentsIn(widget.orientation);
+    final visible = widget.dashboard.componentsIn(widget.layoutId);
     final ordered = <ComponentInstance>[
       ...visible.where((component) => component.id != widget.selectedId),
       ...visible.where((component) => component.id == widget.selectedId),
     ];
     for (final component in ordered) {
-      final placement = component.placements[widget.orientation];
+      final placement = component.placements[widget.layoutId];
       if (placement == null) continue;
       final type = ComponentTypes.byId(component.typeId);
       final size = placement.size;
@@ -434,7 +424,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
         widget.onModulePlacementChanged != null) {
       for (final module in widget.dashboard.modules) {
         if (module.id != moduleId) continue;
-        final placement = module.regionIn(widget.orientation);
+        final placement = module.regionIn(widget.layoutId);
         if (placement == null) continue;
         final size = placement.size;
         items.add(

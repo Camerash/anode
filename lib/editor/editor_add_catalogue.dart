@@ -6,6 +6,7 @@ import '../mechanical/prism_selector_bank.dart';
 import '../model/component_instance.dart';
 import '../model/component_type.dart';
 import '../model/dashboard.dart';
+import '../model/design_layout.dart';
 import '../model/optical_profile.dart';
 import '../model/placement.dart';
 import '../model/vfd_module.dart';
@@ -361,7 +362,7 @@ class _CataloguePreview extends StatelessWidget {
               : EditorLiveVfdPreview(
                   renderAssets: renderAssets!,
                   dashboard: _previewDashboard(),
-                  orientation: DesignOrientation.landscape,
+                  layoutId: 'preview',
                 ),
         ),
         Positioned(
@@ -379,7 +380,6 @@ class _CataloguePreview extends StatelessWidget {
   );
 
   Dashboard _previewDashboard() {
-    const orientation = DesignOrientation.landscape;
     const frame = FrameSpec(width: 2.6, height: 1);
     final type =
         request.componentType ??
@@ -390,8 +390,8 @@ class _CataloguePreview extends StatelessWidget {
     return Dashboard(
       id: 'catalogue.preview',
       name: request.label,
-      primaryOrientation: orientation,
-      frameSpecs: const <DesignOrientation, FrameSpec>{orientation: frame},
+      baseLayoutId: 'preview',
+      layouts: const <DesignLayout>[DesignLayout(id: 'preview', frame: frame)],
       settings: dashboard.settings,
       modules: moduleRequest
           ? <VfdModule>[
@@ -399,8 +399,8 @@ class _CataloguePreview extends StatelessWidget {
               VfdModule(
                 id: previewModuleId,
                 name: 'Preview module',
-                regions: const <DesignOrientation, Placement>{
-                  orientation: Placement(
+                regions: const <String, Placement>{
+                  'preview': Placement(
                     center: Offset.zero,
                     size: Size(1.9, 0.72),
                   ),
@@ -413,8 +413,8 @@ class _CataloguePreview extends StatelessWidget {
           id: 'catalogue.preview.part',
           typeId: type.id,
           moduleId: moduleRequest ? previewModuleId : kMainVfdModuleId,
-          placements: <DesignOrientation, Placement>{
-            orientation: Placement(center: Offset.zero, size: size),
+          placements: <String, Placement>{
+            'preview': Placement(center: Offset.zero, size: size),
           },
         ),
       ],

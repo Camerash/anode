@@ -6,6 +6,7 @@ import 'package:anode/model/action_binding.dart';
 import 'package:anode/model/component_instance.dart';
 import 'package:anode/model/component_type.dart';
 import 'package:anode/model/dashboard.dart';
+import 'package:anode/model/design_layout.dart';
 import 'package:anode/model/optical_profile.dart';
 import 'package:anode/model/placement.dart';
 import 'package:anode/model/settings.dart';
@@ -221,11 +222,8 @@ void main() {
     final component = ComponentInstance(
       id: 'digits',
       typeId: ComponentTypes.speedDigits,
-      placements: const <DesignOrientation, Placement>{
-        DesignOrientation.landscape: Placement(
-          center: Offset.zero,
-          size: Size(1.4, 0.7),
-        ),
+      placements: const <String, Placement>{
+        'wide': Placement(center: Offset.zero, size: Size(1.4, 0.7)),
       },
     );
 
@@ -233,10 +231,7 @@ void main() {
       variant: const VariantReference(id: 'digits.round', revision: 3),
     );
 
-    expect(
-      switched.placements[DesignOrientation.landscape]!.size,
-      const Size(1.4, 0.7),
-    );
+    expect(switched.placements['wide']!.size, const Size(1.4, 0.7));
   });
 
   test('module normalization is flat and always provides implicit main', () {
@@ -252,6 +247,10 @@ void main() {
     final dashboard = Dashboard(
       id: 'modules',
       name: 'Modules',
+      baseLayoutId: 'wide',
+      layouts: const <DesignLayout>[
+        DesignLayout(id: 'wide', frame: FrameSpec.aspect(2.6)),
+      ],
       modules: <VfdModule>[VfdModule(id: 'secondary', name: 'Secondary')],
       components: <ComponentInstance>[
         ComponentInstance(
@@ -316,30 +315,18 @@ void main() {
     expect(registry['media.playPause']?.unavailableReason, isNotEmpty);
   });
 
-  test('module regions remain independently authored per orientation', () {
+  test('module regions remain independently authored per layout', () {
     final module = VfdModule(
       id: 'secondary',
       name: 'Secondary',
-      regions: const <DesignOrientation, Placement>{
-        DesignOrientation.landscape: Placement(
-          center: Offset(0.4, 0),
-          size: Size(0.8, 0.3),
-        ),
-        DesignOrientation.portrait: Placement(
-          center: Offset(0, -0.2),
-          size: Size(0.3, 0.8),
-        ),
+      regions: const <String, Placement>{
+        'wide': Placement(center: Offset(0.4, 0), size: Size(0.8, 0.3)),
+        'tall': Placement(center: Offset(0, -0.2), size: Size(0.3, 0.8)),
       },
     );
     final back = VfdModule.fromJson(_reencode(module.toJson()));
 
-    expect(
-      back.regions[DesignOrientation.landscape]?.size,
-      const Size(0.8, 0.3),
-    );
-    expect(
-      back.regions[DesignOrientation.portrait]?.size,
-      const Size(0.3, 0.8),
-    );
+    expect(back.regions['wide']?.size, const Size(0.8, 0.3));
+    expect(back.regions['tall']?.size, const Size(0.3, 0.8));
   });
 }

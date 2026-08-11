@@ -4,6 +4,7 @@ import 'dart:ui' show Tristate;
 import 'package:anode/editor/editor_canvas.dart';
 import 'package:anode/editor/editor_page.dart';
 import 'package:anode/model/dashboard.dart';
+import 'package:anode/model/design.dart';
 import 'package:anode/model/dev_design.dart';
 import 'package:anode/model/placement.dart';
 import 'package:anode/model/settings.dart';
@@ -14,38 +15,13 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+abstract final class DesignOrientation {
+  static const String landscape = 'wide';
+  static const String portrait = 'tall';
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  testWidgets('preview falls back to primary until alternate is authored', (
-    tester,
-  ) async {
-    await _setViewport(tester, const Size(1200, 900));
-    var dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
-    await tester.pumpWidget(
-      MaterialApp(
-        home: EditorPage(
-          dashboard: dashboard,
-          onChanged: (value) => dashboard = value,
-        ),
-      ),
-    );
-
-    expect(_canvasAspect(tester), closeTo(1200 / 900, 0.001));
-    expect(
-      _canvasAspect(tester, key: const ValueKey('editor-authored-frame')),
-      closeTo(2.6, 0.001),
-    );
-    await tester.tap(find.byKey(const ValueKey('editor-console')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 180));
-    await tester.tap(find.byKey(const ValueKey('orientation-portrait')));
-    await tester.pump();
-    // The fallback preview draws the device envelope the runtime would fill,
-    // not the inherited landscape frame, so the boundary takes the portrait
-    // viewport shape of a 1200x900 window turned on its side.
-    expect(_canvasAspect(tester), closeTo(900 / 1200, 0.001));
-  });
 
   testWidgets('drawer pushes canvas and selection does not open it', (
     tester,
@@ -92,7 +68,6 @@ void main() {
       ),
     );
 
-    expect(find.text('INHERITED · READ ONLY'), findsOneWidget);
     final frame = find.byKey(const ValueKey('editor-canvas'));
     final before = tester.getCenter(frame);
     final dockBefore = tester.getCenter(
@@ -104,15 +79,15 @@ void main() {
     final add = tester.widget<PrismButton>(
       find.byKey(const ValueKey('console-add')),
     );
-    expect(add.enabled, isFalse);
-    expect(add.onPressed, isNull);
+    expect(add.enabled, isTrue);
+    expect(add.onPressed, isNotNull);
     final after = tester.getCenter(frame);
     final dockAfter = tester.getCenter(
       find.byKey(const ValueKey('editor-command-dock')),
     );
 
     expect(after.dy, lessThan(before.dy));
-    expect(_canvasAspect(tester), closeTo(393 / 852, 0.002));
+    expect(_canvasAspect(tester), closeTo(2.6, 0.002));
     expect(dockAfter.dy, lessThan(dockBefore.dy));
   });
 
@@ -134,7 +109,7 @@ void main() {
                 rebuild = setState;
                 return EditorCanvas(
                   dashboard: dashboard,
-                  orientation: DesignOrientation.landscape,
+                  layoutId: DesignOrientation.landscape,
                   deviceViewportSize: const Size(900, 500),
                   selectedId: 'speed',
                   snapEnabled: false,
@@ -230,7 +205,7 @@ void main() {
                 rebuild = setState;
                 return EditorCanvas(
                   dashboard: dashboard,
-                  orientation: DesignOrientation.landscape,
+                  layoutId: DesignOrientation.landscape,
                   deviceViewportSize: const Size(900, 500),
                   selectedId: 'speed',
                   snapEnabled: false,
@@ -306,7 +281,7 @@ void main() {
                 rebuild = setState;
                 return EditorCanvas(
                   dashboard: dashboard,
-                  orientation: DesignOrientation.landscape,
+                  layoutId: DesignOrientation.landscape,
                   deviceViewportSize: const Size(900, 500),
                   selectedId: component.id,
                   snapEnabled: false,
@@ -351,81 +326,6 @@ void main() {
     final moved =
         dashboard.components.first.placements[DesignOrientation.landscape]!;
     expect(moved.center.dx, closeTo(-1 + 30 / designUnitPx, 0.002));
-  });
-
-  testWidgets('portrait preview contains inherited landscape layout', (
-    tester,
-  ) async {
-    await _setViewport(tester, const Size(393, 852));
-    final dashboard = Dashboard.forkFrom(
-      developmentPreset(),
-      id: 'primary-only',
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: EditorPage(dashboard: dashboard, onChanged: (_) {}),
-      ),
-    );
-
-    // The preview boundary is the device envelope, dimmed and read-only. It is
-    // the same envelope CREATE bakes, so pressing CREATE changes nothing on
-    // screen.
-    expect(_canvasAspect(tester), closeTo(393 / 852, 0.002));
-    expect(find.text('INHERITED · READ ONLY'), findsOneWidget);
-  });
-
-  testWidgets('creating and resetting portrait alternate is explicit', (
-    tester,
-  ) async {
-    const viewport = Size(393, 852);
-    await _setViewport(tester, viewport);
-    var dashboard = Dashboard.forkFrom(developmentPreset(), id: 'primary-only');
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: EditorPage(
-          dashboard: dashboard,
-          onChanged: (value) => dashboard = value,
-        ),
-      ),
-    );
-    await tester.tap(find.byKey(const ValueKey('editor-console')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 180));
-    await tester.tap(find.byKey(const ValueKey('create-layout')));
-    await tester.pump();
-
-    final expectedAspect = viewport.width / viewport.height;
-    final sourcePlacement = developmentPreset()
-        .components
-        .first
-        .placements[DesignOrientation.landscape]!;
-    final bakedPlacement =
-        dashboard.components.first.placements[DesignOrientation.portrait]!;
-    final bakedExtent = dashboard.frameExtent(DesignOrientation.portrait);
-    expect(dashboard.hasAuthoredLayout(DesignOrientation.portrait), isTrue);
-    expect(
-      dashboard.frameAspect(DesignOrientation.portrait),
-      closeTo(expectedAspect, 0.001),
-    );
-    // The envelope grows; the geometry inside it is untouched. Nothing is
-    // rescaled, so a design unit still means the same thing and the optical
-    // stack does not move either.
-    expect(bakedExtent.width, closeTo(2.6, 1e-9));
-    expect(bakedPlacement.center, _offsetCloseTo(sourcePlacement.center));
-    expect(_canvasAspect(tester), closeTo(expectedAspect, 0.001));
-
-    await tester.tap(find.byKey(const ValueKey('remove-layout')));
-    await tester.pump();
-
-    expect(dashboard.hasAuthoredLayout(DesignOrientation.portrait), isFalse);
-    expect(
-      dashboard.layoutForViewport(DesignOrientation.portrait),
-      DesignOrientation.landscape,
-    );
-    // Back to the read-only device envelope, which is what it was before.
-    expect(_canvasAspect(tester), closeTo(393 / 852, 0.001));
   });
 
   group('canvas gestures', () {
@@ -870,7 +770,9 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 90));
     expect(
-      tester.getRect(find.byKey(const ValueKey('orientation-landscape'))).right,
+      tester
+          .getRect(find.byKey(const ValueKey('editor-service-section-design')))
+          .right,
       lessThanOrEqualTo(viewport.width),
     );
     final openLeftFrame = tester.getRect(
@@ -1000,7 +902,7 @@ void main() {
       MaterialApp(
         home: EditorCanvas(
           dashboard: dashboard,
-          orientation: DesignOrientation.landscape,
+          layoutId: DesignOrientation.landscape,
           deviceViewportSize: const Size(900, 500),
           frameInset: EdgeInsets.zero,
           selectedId: 'speed',
@@ -1253,7 +1155,7 @@ void main() {
       MaterialApp(
         home: EditorCanvas(
           dashboard: dashboard,
-          orientation: DesignOrientation.landscape,
+          layoutId: DesignOrientation.landscape,
           deviceViewportSize: const Size(900, 500),
           selectedId: null,
           onSelect: (_) {},
@@ -1262,7 +1164,7 @@ void main() {
       ),
     );
 
-    expect(find.text('LANDSCAPE · 2.600:1'), findsOneWidget);
+    expect(find.text('WIDE · 2.600:1'), findsOneWidget);
     expect(find.byType(CustomPaint), findsWidgets);
   });
 
@@ -1274,7 +1176,7 @@ void main() {
       MaterialApp(
         home: EditorCanvas(
           dashboard: dashboard,
-          orientation: DesignOrientation.landscape,
+          layoutId: DesignOrientation.landscape,
           deviceViewportSize: const Size(900, 500),
           selectedId: 'speed',
           onSelect: (_) {},
@@ -1295,7 +1197,7 @@ void main() {
       MaterialApp(
         home: EditorCanvas(
           dashboard: dashboard,
-          orientation: DesignOrientation.landscape,
+          layoutId: DesignOrientation.landscape,
           deviceViewportSize: const Size(900, 500),
           selectedId: null,
           onSelect: (_) {},
@@ -1463,8 +1365,6 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('editor-console')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
-    await tester.tap(find.byKey(const ValueKey('orientation-portrait')));
-    await tester.pump();
     expect(find.byKey(const ValueKey('canvas-full')), findsNothing);
     expect(
       tester
@@ -1577,7 +1477,7 @@ void main() {
   testWidgets('drawer edge follows window shape, never preview orientation', (
     tester,
   ) async {
-    Future<Size> openFor(Size viewport, DesignOrientation preview) async {
+    Future<Size> openFor(Size viewport, String _) async {
       await _setViewport(tester, viewport);
       final dashboard = Dashboard.forkFrom(
         developmentPreset(),
@@ -1597,8 +1497,6 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('editor-console')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 180));
-      await tester.tap(find.byKey(ValueKey('orientation-${preview.name}')));
-      await tester.pump();
       final after = tester.getSize(content);
       return Size(before.width - after.width, before.height - after.height);
     }
@@ -1688,7 +1586,7 @@ Future<_CanvasHarness> _pumpCanvas(
           rebuild = setState;
           return EditorCanvas(
             dashboard: harness.dashboard,
-            orientation: DesignOrientation.landscape,
+            layoutId: DesignOrientation.landscape,
             deviceViewportSize: const Size(900, 500),
             controller: harness.controller,
             selectedId: selectedId,

@@ -1,129 +1,123 @@
 import 'dart:convert';
+import 'dart:ui' show Offset, Size;
 
 import 'package:anode/model/component_instance.dart';
 import 'package:anode/model/dashboard.dart';
+import 'package:anode/model/design.dart';
+import 'package:anode/model/design_layout.dart';
 import 'package:anode/model/design_preset.dart';
 import 'package:anode/model/placement.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fixtures.dart';
 
 void main() {
-  test('opposite viewport falls back wholesale to primary layout', () {
+  test('one layout contain-fits all viewport shapes', () {
     final source = DesignPreset(
-      id: 'primary',
-      name: 'Primary',
+      id: 'single',
+      name: 'Single',
       version: 1,
-      frameSpecs: const <DesignOrientation, FrameSpec>{
-        DesignOrientation.landscape: FrameSpec.aspect(2.4),
-      },
+      baseLayoutId: wideLayoutId,
+      layouts: const <DesignLayout>[
+        DesignLayout(id: wideLayoutId, frame: FrameSpec.aspect(2.4)),
+      ],
       components: <ComponentInstance>[digits()],
     );
 
-    expect(source.primaryOrientation, DesignOrientation.landscape);
-    expect(source.authoredOrientations, <DesignOrientation>{
-      DesignOrientation.landscape,
-    });
-    expect(
-      source.layoutForViewport(DesignOrientation.portrait),
-      DesignOrientation.landscape,
-    );
-    expect(source.frameAspect(DesignOrientation.portrait), 2.4);
-    expect(
-      source.componentsIn(DesignOrientation.portrait).single.id,
-      source.components.single.id,
-    );
+    expect(source.layoutForViewport(const Size(390, 844)), wideLayoutId);
+    expect(source.frameAspect(wideLayoutId), 2.4);
+    expect(source.componentsIn(wideLayoutId).single.id, 'digits');
   });
 
-  test(
-    'explicit alternate layout and primary identity survive json and fork',
-    () {
-      final source = DesignPreset(
-        id: 'aspects',
-        name: 'Aspects',
-        version: 1,
-        primaryOrientation: DesignOrientation.portrait,
-        frameSpecs: const <DesignOrientation, FrameSpec>{
-          DesignOrientation.landscape: FrameSpec.aspect(2.4),
-          DesignOrientation.portrait: FrameSpec.aspect(0.6),
-        },
-        components: <ComponentInstance>[digits()],
-      );
-      final encoded = (jsonDecode(jsonEncode(source.toJson())) as Map)
-          .cast<String, Object?>();
-      final roundTrip = DesignPreset.fromJson(encoded);
-      final dashboard = Dashboard.forkFrom(roundTrip, id: 'fork');
+  test('adapt selects nearest layout ratio', () {
+    final source = preset();
 
-      expect(roundTrip.primaryOrientation, DesignOrientation.portrait);
-      expect(dashboard.primaryOrientation, DesignOrientation.portrait);
-      expect(dashboard.frameAspect(DesignOrientation.landscape), 2.4);
-      expect(dashboard.frameAspect(DesignOrientation.portrait), 0.6);
-    },
-  );
+    expect(source.layoutForViewport(const Size(844, 390)), wideLayoutId);
+    expect(source.layoutForViewport(const Size(390, 844)), tallLayoutId);
+  });
 
-  test('creating alternate bakes contained primary appearance', () {
-    final component = ComponentInstance(
-      id: 'placed',
-      typeId: 'unknown',
-      placements: const <DesignOrientation, Placement>{
-        DesignOrientation.landscape: Placement(
-          center: Offset(0.4, 0.2),
-          size: Size(0.8, 0.4),
-        ),
-      },
+  test('lock selects one layout for all viewport shapes', () {
+    final source = Dashboard.forkFrom(preset(), id: 'locked').copyWith(
+      screenSetup: const ScreenSetup.lock(
+        layoutId: wideLayoutId,
+        orientation: ViewportOrientation.landscape,
+      ),
     );
+
+    expect(source.layoutForViewport(const Size(390, 844)), wideLayoutId);
+    expect(source.layoutForViewport(const Size(844, 390)), wideLayoutId);
+  });
+
+  test('layouts and screen setup survive JSON and fork', () {
+    final source = DesignPreset(
+      id: 'layouts',
+      name: 'Layouts',
+      version: 1,
+      baseLayoutId: tallLayoutId,
+      layouts: const <DesignLayout>[
+        DesignLayout(id: wideLayoutId, frame: FrameSpec.aspect(2.4)),
+        DesignLayout(id: tallLayoutId, frame: FrameSpec.aspect(0.6)),
+      ],
+      screenSetup: const ScreenSetup.lock(
+        layoutId: tallLayoutId,
+        orientation: ViewportOrientation.portrait,
+      ),
+      components: <ComponentInstance>[digits()],
+    );
+    final encoded = (jsonDecode(jsonEncode(source.toJson())) as Map)
+        .cast<String, Object?>();
+    final roundTrip = DesignPreset.fromJson(encoded);
+    final dashboard = Dashboard.forkFrom(roundTrip, id: 'fork');
+
+    expect(roundTrip.baseLayoutId, tallLayoutId);
+    expect(dashboard.screenSetup.lockedLayoutId, tallLayoutId);
+    expect(dashboard.frameAspect(wideLayoutId), 2.4);
+    expect(dashboard.frameAspect(tallLayoutId), 0.6);
+  });
+
+  test('new layout copies geometry without changing optical scale', () {
+    const placement = Placement(center: Offset(0.4, 0.2), size: Size(0.8, 0.4));
     final source = Dashboard(
       id: 'source',
       name: 'Source',
-      frameSpecs: const <DesignOrientation, FrameSpec>{
-        DesignOrientation.landscape: FrameSpec.aspect(2),
-      },
-      components: <ComponentInstance>[component],
+      baseLayoutId: wideLayoutId,
+      layouts: const <DesignLayout>[
+        DesignLayout(id: wideLayoutId, frame: FrameSpec.aspect(2)),
+      ],
+      components: <ComponentInstance>[
+        ComponentInstance(
+          id: 'placed',
+          typeId: 'unknown',
+          placements: const <String, Placement>{wideLayoutId: placement},
+        ),
+      ],
     );
-    final baked = source.withBakedLayout(
-      DesignOrientation.portrait,
-      extent: const Size(2, 4),
+    final created = source.withLayout(
+      id: tallLayoutId,
+      aspect: 0.5,
+      sourceLayoutId: wideLayoutId,
     );
-    final placement =
-        baked.components.single.placements[DesignOrientation.portrait]!;
 
-    expect(baked.hasAuthoredLayout(DesignOrientation.portrait), isTrue);
-    expect(baked.frameExtent(DesignOrientation.portrait), const Size(2, 4));
-    // Verbatim. The envelope grows; the geometry inside it does not move or
-    // shrink, which is what keeps the optical layer at the same scale too.
-    expect(placement.center, const Offset(0.4, 0.2));
-    expect(placement.size, const Size(0.8, 0.4));
+    expect(created.frameExtent(tallLayoutId), const Size(2, 4));
+    expect(created.components.single.placements[tallLayoutId], same(placement));
   });
 
-  test('resetting alternate removes its placements and restores fallback', () {
-    final source = Dashboard.forkFrom(preset(), id: 'source');
-    final reset = source.withoutLayout(DesignOrientation.portrait);
-
-    expect(reset.hasAuthoredLayout(DesignOrientation.portrait), isFalse);
-    expect(
-      reset.layoutForViewport(DesignOrientation.portrait),
-      DesignOrientation.landscape,
+  test('removing layout removes placements and clears its lock', () {
+    final source = Dashboard.forkFrom(preset(), id: 'source').copyWith(
+      screenSetup: const ScreenSetup.lock(
+        layoutId: tallLayoutId,
+        orientation: ViewportOrientation.portrait,
+      ),
     );
+    final reset = source.withoutLayout(tallLayoutId);
+
+    expect(reset.layouts.map((layout) => layout.id), <String>[wideLayoutId]);
+    expect(reset.screenSetup.behavior, ScreenBehavior.adapt);
     expect(
       reset.components.any(
-        (component) =>
-            component.placements.containsKey(DesignOrientation.portrait),
+        (component) => component.placements.containsKey(tallLayoutId),
       ),
       isFalse,
     );
-  });
-
-  test('legacy frame aspects decode as explicit fixed layouts', () {
-    final legacy = preset().toJson()
-      ..remove('primaryOrientation')
-      ..remove('frameSpecs')
-      ..['supportedOrientations'] = <String>['landscape', 'portrait']
-      ..['frameAspects'] = <String, Object?>{'landscape': 2.4, 'portrait': 0.6};
-    final decoded = DesignPreset.fromJson(legacy);
-
-    expect(decoded.primaryOrientation, DesignOrientation.landscape);
-    expect(decoded.frameAspect(DesignOrientation.landscape), 2.4);
-    expect(decoded.frameAspect(DesignOrientation.portrait), 0.6);
   });
 }

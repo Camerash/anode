@@ -15,7 +15,7 @@ import 'interface/interface_audio_mixer.dart';
 import 'library/library_page.dart';
 import 'mechanical/hard_cut_route.dart';
 import 'model/dev_design.dart';
-import 'model/placement.dart';
+import 'model/design_layout.dart';
 import 'vfd/speed_source.dart';
 import 'vfd/design_action_overlay.dart';
 import 'vfd/prism_widgets.dart';
@@ -150,6 +150,7 @@ class _ClusterPageState extends State<ClusterPage>
   final SimulatedSpeedSource _sim = SimulatedSpeedSource();
   StreamSubscription<double>? _sub;
   late final ActionRegistry _actions;
+  String? _orientationLockSignature;
 
   @override
   void initState() {
@@ -157,11 +158,11 @@ class _ClusterPageState extends State<ClusterPage>
     _controller = VfdController(
       vsync: this,
       design: widget.state.activeDesign,
-      orientation: DesignOrientation.landscape,
+      viewportSize: const Size(1, 1),
     );
     _syncAppState();
     _actions = ActionRegistry.forCluster(
-      onOpenLibrary: _openLibrary,
+      onOpenLibrary: () => unawaited(_openLibrary()),
       onToggleDemo: () => widget.state.updateGlobalSettings(
         widget.state.globalSettings.copyWith(
           demoMode: !widget.state.globalSettings.demoMode,
@@ -180,6 +181,7 @@ class _ClusterPageState extends State<ClusterPage>
     _sub?.cancel();
     _sim.dispose();
     _controller.dispose();
+    unawaited(SystemChrome.setPreferredOrientations(const []));
     super.dispose();
   }
 
@@ -188,13 +190,17 @@ class _ClusterPageState extends State<ClusterPage>
     if (mounted) setState(() {});
   }
 
-  void _openLibrary() => Navigator.of(
-    context,
-  ).pushNamed<void>('/library', arguments: LibrarySection.templates);
+  Future<void> _openLibrary() => _openLibrarySection(LibrarySection.templates);
 
-  void _openSettings() => Navigator.of(
-    context,
-  ).pushNamed<void>('/library', arguments: LibrarySection.settings);
+  Future<void> _openSettings() => _openLibrarySection(LibrarySection.settings);
+
+  Future<void> _openLibrarySection(LibrarySection section) async {
+    _orientationLockSignature = null;
+    await SystemChrome.setPreferredOrientations(const []);
+    if (!mounted) return;
+    await Navigator.of(context).pushNamed<void>('/library', arguments: section);
+    if (mounted) setState(() => _orientationLockSignature = null);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -205,10 +211,8 @@ class _ClusterPageState extends State<ClusterPage>
     // temporarily hides its bars. Authored VFD content stays full-bleed.
     final windowPadding = MediaQuery.viewPaddingOf(context);
     final windowSize = MediaQuery.sizeOf(context);
-    final currentOrientation = windowSize.width >= windowSize.height
-        ? DesignOrientation.landscape
-        : DesignOrientation.portrait;
-    _controller.orientation = currentOrientation;
+    _controller.viewportSize = windowSize;
+    _applyRuntimeOrientationLock(context);
 
     return ColoredBox(
       color: const Color(0xFF000000),
@@ -237,7 +241,7 @@ class _ClusterPageState extends State<ClusterPage>
           ),
           DesignActionOverlay(
             design: widget.state.activeDesign,
-            orientation: _controller.orientation,
+            layoutId: _controller.layoutId,
             controller: _controller,
             registry: _actions,
             frameInsets: EdgeInsets.zero,
@@ -256,7 +260,7 @@ class _ClusterPageState extends State<ClusterPage>
                   role: PrismRole.compact,
                   span: PrismSpan.one,
                   style: widget.state.activeDesign.renderSettings.prismStyle,
-                  onPressed: _openSettings,
+                  onPressed: () => unawaited(_openSettings()),
                 ),
               ),
             ),
@@ -264,5 +268,29 @@ class _ClusterPageState extends State<ClusterPage>
         ],
       ),
     );
+  }
+
+  void _applyRuntimeOrientationLock(BuildContext context) {
+    final design = widget.state.activeDesign;
+    final setup = design.screenSetup;
+    final display = View.of(context).display;
+    final logicalDisplay = display.size / display.devicePixelRatio;
+    final phone = logicalDisplay.shortestSide < 600;
+    final orientation = setup.lockedOrientation;
+    final signature = '${setup.behavior.name}:${orientation?.name}:$phone';
+    if (_orientationLockSignature == signature) return;
+    _orientationLockSignature = signature;
+    final preferences = setup.behavior != ScreenBehavior.lock || !phone
+        ? const <DeviceOrientation>[]
+        : orientation == ViewportOrientation.landscape
+        ? const <DeviceOrientation>[
+            DeviceOrientation.landscapeLeft,
+            DeviceOrientation.landscapeRight,
+          ]
+        : const <DeviceOrientation>[
+            DeviceOrientation.portraitUp,
+            DeviceOrientation.portraitDown,
+          ];
+    unawaited(SystemChrome.setPreferredOrientations(preferences));
   }
 }

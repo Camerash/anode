@@ -43,30 +43,29 @@ class VfdModule {
   VfdModule({
     required this.id,
     required this.name,
-    Map<DesignOrientation, Placement> regions =
-        const <DesignOrientation, Placement>{},
+    Map<String, Placement> regions = const <String, Placement>{},
     this.filamentVariant = const VariantReference(
       id: 'filament.straight',
       revision: 1,
     ),
     OpticalOverrides? opticalOverrides,
-  }) : regions = Map<DesignOrientation, Placement>.unmodifiable(regions),
+  }) : regions = Map<String, Placement>.unmodifiable(regions),
        opticalOverrides = opticalOverrides ?? OpticalOverrides();
 
   factory VfdModule.main() => VfdModule(id: kMainVfdModuleId, name: 'Main VFD');
 
   final String id;
   final String name;
-  final Map<DesignOrientation, Placement> regions;
+  final Map<String, Placement> regions;
   final VariantReference filamentVariant;
   final OpticalOverrides opticalOverrides;
 
-  Placement? regionIn(DesignOrientation orientation) => regions[orientation];
+  Placement? regionIn(String layoutId) => regions[layoutId];
 
   VfdModule copyWith({
     String? id,
     String? name,
-    Map<DesignOrientation, Placement>? regions,
+    Map<String, Placement>? regions,
     VariantReference? filamentVariant,
     OpticalOverrides? opticalOverrides,
   }) => VfdModule(
@@ -81,20 +80,19 @@ class VfdModule {
     'id': id,
     'name': name,
     'regions': <String, Object?>{
-      for (final entry in regions.entries) entry.key.name: entry.value.toJson(),
+      for (final entry in regions.entries) entry.key: entry.value.toJson(),
     },
     'filamentVariant': filamentVariant.toJson(),
     'opticalOverrides': opticalOverrides.toJson(),
   };
 
   factory VfdModule.fromJson(Map<String, Object?> json) {
-    final regions = <DesignOrientation, Placement>{};
+    final regions = <String, Placement>{};
     for (final entry
         in ((json['regions'] as Map?)?.cast<String, Object?>() ?? const {})
             .entries) {
-      final orientation = DesignOrientation.byName(entry.key);
-      if (orientation == null || entry.value is! Map) continue;
-      regions[orientation] = Placement.fromJson(
+      if (entry.key.isEmpty || entry.value is! Map) continue;
+      regions[entry.key] = Placement.fromJson(
         (entry.value as Map).cast<String, Object?>(),
       );
     }

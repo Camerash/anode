@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../model/dashboard.dart';
-import '../model/placement.dart';
+import '../model/design.dart';
 import '../vfd/vfd_cluster.dart';
 import '../vfd/vfd_render_assets.dart';
 
@@ -14,7 +14,7 @@ class EditorLiveVfdPreview extends StatefulWidget {
     super.key,
     required this.renderAssets,
     required this.dashboard,
-    required this.orientation,
+    required this.layoutId,
     this.frameInsets = EdgeInsets.zero,
     this.clipRect,
     this.transparentBackground = false,
@@ -22,7 +22,7 @@ class EditorLiveVfdPreview extends StatefulWidget {
 
   final VfdRenderAssets renderAssets;
   final Dashboard dashboard;
-  final DesignOrientation orientation;
+  final String layoutId;
   final EdgeInsets frameInsets;
 
   /// Optional local viewport for an otherwise full-size VFD render.
@@ -38,7 +38,7 @@ class _EditorLiveVfdPreviewState extends State<EditorLiveVfdPreview>
   late final VfdController _controller = VfdController(
     vsync: this,
     design: widget.dashboard,
-    orientation: widget.orientation,
+    viewportSize: widget.dashboard.frameExtent(widget.layoutId),
   )..speedKph = 95;
 
   @override
@@ -46,7 +46,7 @@ class _EditorLiveVfdPreviewState extends State<EditorLiveVfdPreview>
     super.didUpdateWidget(oldWidget);
     _controller
       ..design = widget.dashboard
-      ..orientation = widget.orientation;
+      ..viewportSize = widget.dashboard.frameExtent(widget.layoutId);
   }
 
   @override

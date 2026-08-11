@@ -153,14 +153,13 @@ unobscured canvas pane; closing the panel restores the full-viewport preview.
 This presentation-only fit never mutates authored frame extent or component
 coordinates. System UI is hidden.
 
-Every design owns a primary fixed `FrameSpec` and may own one explicit
-opposite-orientation alternate. A `FrameSpec` stores an **extent** — width and
-height in design units — not a bare aspect. The authored extent is
+Every design owns one or more named `DesignLayout` values. Each layout owns a
+fixed `FrameSpec`. A `FrameSpec` stores an **extent** — width and height in
+design units — not a bare aspect. The selected authored extent is
 **contain-fitted inside the full viewport**, picking the tighter axis and centring
-the frame. A missing alternate uses the primary unchanged; content never
-rotates. Contain fit never crops or clamps component placement. Halo, sheen,
-and grain keep evaluating across the full fragment bounds and spill past both
-the authored frame and screen edge.
+the frame. Content never rotates inside the frame. Contain fit never crops or
+clamps component placement. Halo, sheen, and grain keep evaluating across the
+full fragment bounds and spill past both the authored frame and screen edge.
 
 **A design unit is frame-independent.** It is a physical unit of the tube face,
 roughly the height of the module in the reference photographs — it is not "the
@@ -169,11 +168,11 @@ is expressed in design units: halo lobe falloff, control-grid pitch, filament
 diameter and spacing, phosphor coating grain, segment edge softness, tilt shift.
 If the meaning of a unit varied with the shape of the frame, changing a frame's
 aspect would silently rescale the entire optical stack. It did: a frame once
-carried only an aspect and was implicitly one unit tall, so creating a portrait
-alternate from a landscape primary raised px-per-design-unit about 4.6× and
-bloomed every effect while the geometry, shrunk to compensate, held still. The
-absence of this paragraph is what allowed that. Do not reintroduce a frame
-whose height is assumed.
+carried only an aspect and was implicitly one unit tall, so creating a tall
+layout from a wide base raised px-per-design-unit about 4.6× and bloomed every
+effect while the geometry, shrunk to compensate, held still. The absence of
+this paragraph is what allowed that. Do not reintroduce a frame whose height is
+assumed.
 
 Halo compounding is already correct — `glow` accumulates additively. Brightness
 is governed by the tonemap, which is deliberately compressive so overlapping
@@ -237,7 +236,7 @@ These cost real time to rediscover:
 
 Optical appearance is part of a design's identity, not an app-wide preference.
 The old boolean `VfdLayers` implementation has been removed. The unreleased app
-uses schema 5 and deliberately rejects old dashboard payloads rather than
+uses schema 6 and deliberately rejects old dashboard payloads rather than
 carrying migration code; global settings contain device preferences only.
 
 An effect is declared once through generic metadata: stable id, label,
@@ -387,56 +386,41 @@ Changing a component's variant preserves `Placement.size`. Different intrinsic
 proportions fit inside that authored box. An explicit `RESET TO VARIANT SIZE`
 action applies the recommended size; switching variants never moves or resizes
 the layout silently. Variant choice is component-wide, like other params; only
-placement currently varies by orientation. Two orientation-specific variants
-therefore require two component ids until the broader per-orientation param gap
-is solved.
+placement currently varies by layout. Two layout-specific variants therefore
+require two component ids until the broader per-layout param gap is solved.
 
-### Orientation
+### Screen layouts
 
-Every design has one fixed-aspect primary authored layout. Landscape is the
-default because physical automotive faces are normally landscape, though the
-model retains explicit primary identity for intentionally portrait designs.
-`frameSpecs` entries mean authored layouts; they are not a list of device
-orientations the app supports.
+Every design has one base layout and can have any number of additional layouts.
+A layout is an authored frame ratio with independent component and module
+placements. Layout identity is a stable string. It does not encode a device or
+an orientation.
 
-Runtime chooses an explicitly authored layout matching the current viewport
-orientation. When none exists, it renders the primary layout unchanged and
-contain-fits it in the viewport. It never rotates content, reflows elements, or
-synthesizes a portrait arrangement. A landscape primary therefore remains a
-horizontal landscape face centred inside a portrait window.
+`ScreenSetup.adapt` selects the layout whose aspect has the smallest logarithmic
+distance from the current viewport aspect. One layout therefore covers all
+screens through contain fit. Runtime never rotates content, reflows elements,
+or creates geometry. A wide layout remains a wide face centred inside a tall
+window when it is the closest or only choice.
 
-The editor previews the current window orientation first. A fallback preview is
-read-only, and it draws the **device envelope** the runtime would fill, with the
-inherited primary contained and dimmed inside it. That is what the runtime
-actually shows, so `CREATE` is visibly a promotion of exactly what is on screen.
+`ScreenSetup.lock` selects one layout at all viewport sizes. On compact phone
+displays, runtime also requests the stored portrait or landscape interface
+orientation through `SystemChrome`. Before Library or editor entry, runtime
+clears the request. Large and resizable displays can reject orientation lock;
+the selected layout stays fixed while the system can rotate the window.
 
-`CREATE PORTRAIT` or `CREATE LANDSCAPE` explicitly adds an independent
-alternate. Its extent comes from the **full device viewport measured at the current
-fit scale**: given a primary of extent `(pw, ph)` and a device rect `(W, H)`
-oriented to the target, `s = min(W/pw, H/ph)` and the new extent is `(W/s, H/s)`.
-Placements are then copied **verbatim** — nothing is rescaled. This is what makes
-"no runtime visual jump" structural rather than something a test has to police:
-the geometry does not move, and because a design unit still means the same
-thing, neither does the optical layer. Both the read-only preview and the bake
-call one shared function, so they cannot disagree.
+Normal DESIGN controls show only the current frame ratio and a secondary
+`SCREEN SETUP` entry. Screen Setup is progressive disclosure. It exposes the
+layout rail, `ADAPT`, `LOCK THIS`, add, and remove actions. `ADD LAYOUT` opens
+the Aspect Map with common detents and custom W:H input. It copies the visible
+source placement and module regions verbatim. The target frame grows on one
+axis to reach the new ratio. No component size, position, or optical unit is
+rescaled.
 
-The device rect is `MediaQuery.size`, never size minus safe padding. A cramped
-editor, an open service bay, or a full-screen session must never bake a
-different envelope. Safe padding is a dim, non-rendering editor guide only.
-Flutter's rectangular insets do not describe a Dynamic Island silhouette;
-precise portable cutout guides belong to future device-profile metadata, not
-component placement.
-
-The alternate can then diverge freely or be reset to primary fallback.
-Export/import preserves primary identity, every authored frame extent, and every
-authored placement.
-
-There is no orientation lock and no adaptive frame mode. The app itself remains
-fully resizable and supports iPad orientations and Split View; contain fitting
-absorbs window changes without mutating design data. Adaptive responsive
-authoring is deferred until a concrete same-orientation instrument needs it.
-Placement stores only absolute centre and size; no anchor or span metadata
-participates in runtime fitting.
+The device rect is `MediaQuery.size`, never size minus safe padding. Safe
+padding belongs to chrome. Flutter rectangular insets do not describe a Dynamic
+Island silhouette; precise cutout artwork belongs to future cover metadata,
+not layout geometry. Future oversized backgrounds and hardware cutouts must use
+a separate cover layer and must not change `FrameSpec`, placement, or VFD units.
 
 ### Authored and device settings
 
@@ -444,8 +428,8 @@ participates in runtime fitting.
   and sparse component optical overrides.
 - Per-module: authored region, filament variant, glass grain, and sparse module
   optical overrides.
-- Per-dashboard: primary/alternate layouts, baseline `OpticalProfile`, and
-  `PrismStyle`.
+- Per-dashboard: named screen layouts, screen behavior, baseline
+  `OpticalProfile`, and `PrismStyle`.
 - App-wide: sound, haptics, accessibility, demo mode, renderer quality, and
   portrait/landscape editor dock placement.
 
@@ -698,10 +682,9 @@ depth already rules out accidental entry.
 ### The editor is its own route
 
 Editing needs persistent chrome that tuning does not, so it gets a dedicated
-screen: a contain-fit authored canvas plus a contextual inspector. On
-entry, current window orientation is previewed. Portrait/landscape selection
-lives in Console's DESIGN section. If no matching alternate exists, it shows
-the contained primary read-only and offers explicit creation.
+screen: a contain-fit authored canvas plus a contextual inspector. On entry,
+the base layout is editable. DESIGN shows its current frame. Advanced layout
+selection and runtime adaptation live behind `SCREEN SETUP`.
 
 The editor canvas is the one place visible frame edges are correct. Its outer
 boundary is the complete runtime device envelope; the fixed authored frame is
@@ -768,7 +751,7 @@ to the canvas. Releasing commits only when the canvas drag target accepts the
 drop; release elsewhere clears the ghost without changing the dashboard. The
 ghost never enters dashboard state and disappears on drop, cancel, or drag end.
 Dropping a module creates an independently placeable tube region. The drag
-target remains disabled for inherited read-only layouts.
+target is disabled only while a new layout draft is open.
 
 `SNAP` is illuminated and active by default and lives only for the editor
 session. It affects component and module drag/resize only. A gesture quantizes
@@ -838,10 +821,10 @@ step position.
 The editor exists to expose these. Keep unresolved findings visible rather than
 special-casing controls around them:
 
-- **Resolved during Stage 4 follow-up:** one primary fixed layout always exists;
-  an optional opposite-orientation layout is explicit. Missing alternates
-  render the primary through contain fit with no content rotation. Creating an
-  alternate bakes that contained appearance before independent editing.
+- **Resolved during Stage 4 follow-up:** one base fixed layout always exists;
+  any number of additional ratio layouts can be explicit. Adapt selects the
+  nearest ratio. Lock fixes one layout and requests phone orientation. Creating
+  a layout copies visible geometry without changing physical scale.
 - **Resolved by schema 5 simplification:** anchors and span axes were removed.
   Fixed authored frames need only absolute centre and size; contain-fit handles
   viewport mismatch without layout alignment metadata.
@@ -849,11 +832,11 @@ special-casing controls around them:
   serialized instead of being silently dropped. Renderer/editor availability is
   separate from lossless design transport.
 - **Unresolved:** params are global to a component id. Only placement varies by
-  orientation. A three-digit landscape readout and two-digit portrait readout
-  therefore require two component ids with mutually exclusive placements.
+  layout. A three-digit wide readout and two-digit tall readout therefore need
+  two component ids with mutually exclusive placements.
 - **Confirmed acceptable for current faces:** runtime z-order remains component
   list order. Editor reordering edits that list globally; it did not need a
-  separate layer field or a per-orientation order. If overlapping instrument
+  separate layer field or a per-layout order. If overlapping instrument
   geometry becomes a real design requirement, revisit this decision.
 - **Resolved during the extension:** `ParamSpec` now declares option labels,
   numeric step/precision, and unit suffix, including variant-specific params.
@@ -863,8 +846,8 @@ special-casing controls around them:
   expressible without adding another grouping relation.
 - **Resolved during the extension:** `OpticalProfile` and sparse overrides
   express calibrated dashboard, module, and component appearance. Optical
-  values remain component-wide, not per-orientation; different portrait and
-  landscape optics require separate component ids just like different params.
+  values remain component-wide, not per-layout; layouts with different optics
+  require separate component ids just like different params.
 - **Resolved during the extension:** component instances carry stable,
   revisioned variant references. Unknown references and params survive and show
   a missing fallback. No handcrafted shipped variants were authored in this
@@ -1069,7 +1052,7 @@ spec and the code never disagree about what was decided.
 Near term, roughly in order:
 
 - **Component data model.** Components as data with capability declarations;
-  preset/instance split; per-orientation authored layouts.
+  preset/instance split; named aspect-ratio layouts.
 - **Single-pass composable renderer.** See "Rendering architecture".
 - **Dashboard editor as a developer tool.** Built before the shipped presets are
   authored. See "Build order".
@@ -1113,4 +1096,5 @@ Later:
 - Flutter web. The landing page demo should be the standalone WebGL build, which
   will be smaller and faster than anything Flutter compiles to web and does not
   need to share a codepath with the app.
-- Responsive layouts. See "Orientation".
+- Constraint-based responsive reflow. Named screen layouts handle explicit
+  aspect variants; components still use fixed centre and size.

@@ -4,6 +4,7 @@ import 'dart:ui' show Size;
 import 'package:anode/model/component_instance.dart';
 import 'package:anode/model/component_type.dart';
 import 'package:anode/model/dashboard.dart';
+import 'package:anode/model/design.dart';
 import 'package:anode/model/placement.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -15,8 +16,11 @@ void main() {
     final d = Dashboard.forkFrom(p, id: 'dash.1');
 
     expect(d.components.map((c) => c.id), p.components.map((c) => c.id));
-    expect(d.primaryOrientation, p.primaryOrientation);
-    expect(d.authoredOrientations, p.authoredOrientations);
+    expect(d.baseLayoutId, p.baseLayoutId);
+    expect(
+      d.layouts.map((layout) => layout.id),
+      p.layouts.map((layout) => layout.id),
+    );
     expect(d.settings.phosphorName, 'Amber');
   });
 
@@ -47,32 +51,32 @@ void main() {
 
     final moved = d.withComponent(
       d.components.first.withPlacement(
-        DesignOrientation.portrait,
+        tallLayoutId,
         const Placement(center: Offset(0.4, -0.1), size: Size(1.035, 0.588)),
       ),
     );
 
     expect(
-      moved.components.first.placements[DesignOrientation.portrait]!.center,
+      moved.components.first.placements[tallLayoutId]!.center,
       const Offset(0.4, -0.1),
     );
     expect(
-      p.components.first.placements[DesignOrientation.portrait]!.center,
+      p.components.first.placements[tallLayoutId]!.center,
       const Offset(0, 0.20),
     );
   });
 
-  test('dropping a component from one orientation keeps the other', () {
+  test('dropping a component from one layout keeps the other', () {
     final d = Dashboard.forkFrom(preset(), id: 'dash.1');
     final edited = d.withComponent(
-      d.components.first.withPlacement(DesignOrientation.portrait, null),
+      d.components.first.withPlacement(tallLayoutId, null),
     );
 
     final c = edited.components.first;
-    expect(c.appearsIn(DesignOrientation.portrait), isFalse);
-    expect(c.appearsIn(DesignOrientation.landscape), isTrue);
-    expect(edited.componentsIn(DesignOrientation.portrait), isEmpty);
-    expect(edited.componentsIn(DesignOrientation.landscape), hasLength(2));
+    expect(c.appearsIn(tallLayoutId), isFalse);
+    expect(c.appearsIn(wideLayoutId), isTrue);
+    expect(edited.componentsIn(tallLayoutId), isEmpty);
+    expect(edited.componentsIn(wideLayoutId), hasLength(2));
   });
 
   test('reordering is stable and does not lose components', () {
