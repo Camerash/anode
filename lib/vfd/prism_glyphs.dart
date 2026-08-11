@@ -4,7 +4,7 @@
 /// deterministic visual fallback in the two Prism renderers.
 abstract final class PrismGlyphs {
   static const String characters =
-      ' ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/.-+%?';
+      ' ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/.-+%?:';
   static const int maxVisibleGlyphs = 24;
   static const int atlasColumns = 8;
   static const int atlasRows = 6;

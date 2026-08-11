@@ -1437,7 +1437,6 @@ class _DesignPanel extends StatelessWidget {
             PrismButton(
               key: const ValueKey('screen-lock'),
               label: 'Lock',
-              value: locked ? 'On' : 'Off',
               palette: host.palette,
               lit: locked,
               selected: locked,
@@ -1478,24 +1477,19 @@ class _DesignPanel extends StatelessWidget {
     );
   }
 
-  Widget _layoutGrid(bool locked) => LayoutBuilder(
-    builder: (context, constraints) {
-      final columns = constraints.maxWidth >= 600 ? 4 : 2;
-      return GridView.builder(
-        key: const ValueKey('screen-layout-grid'),
-        padding: EdgeInsets.zero,
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: columns,
-          mainAxisExtent: PrismMetrics.height(PrismRole.standard),
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-        ),
-        itemCount: host.dashboard.layouts.length,
-        itemBuilder: (context, index) {
-          final layout = host.dashboard.layouts[index];
-          return Center(child: _layoutButton(layout, locked));
-        },
-      );
+  Widget _layoutGrid(bool locked) => GridView.builder(
+    key: const ValueKey('screen-layout-grid'),
+    padding: EdgeInsets.zero,
+    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount: 3,
+      mainAxisExtent: PrismMetrics.height(PrismRole.standard),
+      crossAxisSpacing: 8,
+      mainAxisSpacing: 8,
+    ),
+    itemCount: host.dashboard.layouts.length,
+    itemBuilder: (context, index) {
+      final layout = host.dashboard.layouts[index];
+      return Center(child: _layoutButton(layout, locked));
     },
   );
 
@@ -1522,7 +1516,7 @@ class _DesignPanel extends StatelessWidget {
       selected: selected,
       enabled: enabled,
       role: PrismRole.standard,
-      span: PrismSpan.two,
+      square: true,
       style: host.dashboard.settings.prismStyle,
       onPressed: enabled ? () => host.onSelectLayout(layout.id) : null,
     );
@@ -1713,8 +1707,8 @@ class _LayoutPrismFace extends StatelessWidget {
     mainAxisSize: MainAxisSize.min,
     children: <Widget>[
       SizedBox(
-        width: 48,
-        height: 20,
+        width: 30,
+        height: 14,
         child: CustomPaint(
           key: ValueKey('layout-ratio-frame-$layoutId'),
           painter: _LayoutShapePainter(

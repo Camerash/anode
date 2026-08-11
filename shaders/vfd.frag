@@ -49,7 +49,7 @@ const float MODULE_FLAG_SCALE = 8.0;
 // tall on the Dart side, so this preserves that geometry now that its size is
 // the authored frame extent.
 const float MAIN_TUBE_HEIGHT = 1.0;
-const float PRISM_GLYPH_COUNT = 43.0;
+const float PRISM_GLYPH_COUNT = 44.0;
 const vec2 PRISM_ATLAS_GRID = vec2(8.0, 6.0);
 
 float decodePackedScalar(float highByte, float lowByte) {

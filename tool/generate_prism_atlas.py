@@ -18,7 +18,7 @@ from scipy.ndimage import distance_transform_edt
 ROOT = Path(__file__).resolve().parents[1]
 FONT = ROOT / "assets/fonts/BarlowCondensed-MediumItalic.ttf"
 OUTPUT = ROOT / "assets/shaders/prism_glyph_sdf.png"
-GLYPHS = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/.-+%?"
+GLYPHS = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/.-+%?:"
 CELL = 64
 SCALE = 4
 COLUMNS = 8

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:anode/editor/effect_pictogram.dart';
@@ -25,6 +26,7 @@ void main() {
 
   test('Prism glyph codec preserves ASCII and degrades safely', () {
     expect(PrismGlyphs.displayText('Play/Pause 50%'), 'PLAY/PAUSE 50%');
+    expect(PrismGlyphs.displayText('2.600:1'), '2.600:1');
     expect(PrismGlyphs.displayText('café 🔊'), 'CAF? ?');
     expect(
       PrismGlyphs.displayText('abcdefghijklmnopqrstuvwxyz12345'),
@@ -33,6 +35,15 @@ void main() {
     expect(
       PrismGlyphs.encode('A').single,
       PrismGlyphs.characters.indexOf('A') / (PrismGlyphs.characters.length - 1),
+    );
+    expect(PrismGlyphs.characters, hasLength(44));
+    expect(
+      File('shaders/vfd.frag').readAsStringSync(),
+      contains('const float PRISM_GLYPH_COUNT = 44.0;'),
+    );
+    expect(
+      File('tool/generate_prism_atlas.py').readAsStringSync(),
+      contains('GLYPHS = "${PrismGlyphs.characters}"'),
     );
   });
 

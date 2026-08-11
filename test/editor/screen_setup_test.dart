@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:anode/editor/editor_page.dart';
 import 'package:anode/model/dashboard.dart';
 import 'package:anode/model/design.dart';
@@ -8,9 +10,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('Design opens direct two-column layout grid', (tester) async {
+  testWidgets('Design opens direct three-column square layout grid', (
+    tester,
+  ) async {
     _setView(tester, const Size(1200, 700));
-    var dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
+    var dashboard = Dashboard.forkFrom(
+      developmentPreset(),
+      id: 'editor',
+    ).withLayout(id: 'square', aspect: 1, sourceLayoutId: 'wide');
 
     await _pumpEditor(
       tester,
@@ -37,12 +44,34 @@ void main() {
     );
     final delegate =
         grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-    expect(delegate.crossAxisCount, 2);
+    expect(delegate.crossAxisCount, 3);
+
+    final wideButton = tester.getRect(
+      find.byKey(const ValueKey('screen-layout-wide')),
+    );
+    final squareButton = tester.getRect(
+      find.byKey(const ValueKey('screen-layout-square')),
+    );
+    expect(wideButton.size, const Size.square(54));
+    expect(squareButton.size, const Size.square(54));
+
+    final gridRect = tester.getRect(
+      find.byKey(const ValueKey('screen-layout-grid')),
+    );
+    final columnWidth = (gridRect.width - 16) / 3;
+    expect(
+      squareButton.center.dx - wideButton.center.dx,
+      closeTo(columnWidth + 8, 0.01),
+    );
+    expect(
+      gridRect.right - squareButton.center.dx,
+      closeTo(columnWidth * 1.5 + 8, 0.01),
+    );
 
     final frame = tester.getSize(
       find.byKey(const ValueKey('layout-ratio-frame-wide')),
     );
-    expect(frame, const Size(48, 20));
+    expect(frame, const Size(30, 14));
   });
 
   testWidgets('Lock fixes selected layout and removal restores base', (
@@ -68,6 +97,18 @@ void main() {
 
     expect(dashboard.screenSetup.behavior, ScreenBehavior.lock);
     expect(dashboard.screenSetup.lockedLayoutId, 'square');
+    final lock = tester.widget<PrismButton>(
+      find.byKey(const ValueKey('screen-lock')),
+    );
+    expect(lock.value, isNull);
+    expect(lock.lit, isTrue);
+    expect(
+      tester
+          .getSemantics(find.byKey(const ValueKey('screen-lock')))
+          .flagsCollection
+          .isToggled,
+      ui.Tristate.isTrue,
+    );
     expect(
       tester
           .widget<PrismButton>(find.byKey(const ValueKey('screen-layout-wide')))
@@ -166,7 +207,7 @@ void main() {
     );
   });
 
-  testWidgets('Bottom Console uses four layout columns', (tester) async {
+  testWidgets('Bottom Console uses three layout columns', (tester) async {
     _setView(tester, const Size(700, 1200));
     var dashboard = Dashboard.forkFrom(developmentPreset(), id: 'editor');
 
@@ -182,7 +223,7 @@ void main() {
     );
     final delegate =
         grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-    expect(delegate.crossAxisCount, 4);
+    expect(delegate.crossAxisCount, 3);
   });
 }
 

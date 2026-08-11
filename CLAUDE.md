@@ -409,10 +409,12 @@ clears the request. Large and resizable displays can reject orientation lock;
 the selected layout stays fixed while the system can rotate the window.
 
 DESIGN opens layout setup directly. Its top row contains `ADD LAYOUT` and
-`LOCK`. A responsive Prism grid shows each frame as an aspect rectangle with a
-ratio label. The selected tile controls the editable canvas. With `LOCK` off,
-runtime adapts to the closest layout. With `LOCK` on, runtime uses the selected
-layout and disables the other layout tiles. Lock does not disable authoring.
+`LOCK`. A fixed three-column Prism grid shows each frame as an aspect rectangle
+with a ratio label. Layout controls use square housings and stay centered in
+equal-width columns. The selected tile controls the editable canvas. With
+`LOCK` off, runtime adapts to the closest layout. With `LOCK` on, runtime uses
+the selected layout and disables the other layout tiles. Lock does not disable
+authoring.
 
 `ADD LAYOUT` and `MODIFY` open the same Aspect Map with common detents and
 custom W:H input. Add copies the visible source placements and module regions
