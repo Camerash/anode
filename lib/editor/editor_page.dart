@@ -26,6 +26,7 @@ import 'editor_canvas.dart';
 import 'editor_chrome_skin.dart';
 import 'editor_command_dock.dart';
 import 'editor_live_preview.dart';
+import 'editor_layout_specimen.dart';
 import 'effect_panel.dart';
 import 'param_editor.dart';
 import 'placement_transform.dart';
@@ -347,6 +348,7 @@ class _EditorPageState extends State<EditorPage> {
     selectedId: _selectedId,
     selectedModuleId: _selectedModuleId,
     palette: _palette,
+    chromeSkin: _chromeSkin,
     soundEnabled: widget.soundEnabled,
     hapticsEnabled: widget.hapticsEnabled,
     actionRegistry: widget.actionRegistry ?? ActionRegistry.forAuthoring(),
@@ -899,6 +901,7 @@ class _EditorServicePanel extends StatefulWidget {
     required this.selectedId,
     required this.selectedModuleId,
     required this.palette,
+    required this.chromeSkin,
     required this.soundEnabled,
     required this.hapticsEnabled,
     required this.actionRegistry,
@@ -933,6 +936,7 @@ class _EditorServicePanel extends StatefulWidget {
   final String? selectedId;
   final String? selectedModuleId;
   final VfdPalette palette;
+  final EditorChromeSkin chromeSkin;
   final bool soundEnabled;
   final bool hapticsEnabled;
   final ActionRegistry actionRegistry;
@@ -1383,7 +1387,7 @@ class _DesignPanel extends StatelessWidget {
   const _DesignPanel({required this.host});
 
   final _EditorServicePanel host;
-  static const _layoutTileScale = 2.0;
+  static const _layoutSpecimenExtent = 128.0;
   static const _commonAspects = <double>[
     9 / 20,
     9 / 16,
@@ -1483,51 +1487,42 @@ class _DesignPanel extends StatelessWidget {
     padding: EdgeInsets.zero,
     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
       crossAxisCount: 3,
-      mainAxisExtent:
-          PrismMetrics.height(PrismRole.standard) * _layoutTileScale,
+      mainAxisExtent: _layoutSpecimenExtent,
       crossAxisSpacing: 8,
       mainAxisSpacing: 8,
     ),
     itemCount: host.dashboard.layouts.length,
     itemBuilder: (context, index) {
       final layout = host.dashboard.layouts[index];
-      return Center(child: _layoutButton(layout, locked));
+      return Center(child: _layoutSpecimen(layout, locked));
     },
   );
 
-  Widget _layoutButton(DesignLayout layout, bool locked) {
+  Widget _layoutSpecimen(DesignLayout layout, bool locked) {
     final selected = layout.id == host.layoutId;
     final base = layout.id == host.dashboard.baseLayoutId;
     final enabled = !locked || selected;
     final ratio = formatLayoutRatio(layout.aspect);
-    return SizedBox.square(
+    return ConstrainedBox(
       key: ValueKey('layout-tile-${layout.id}'),
-      dimension: PrismMetrics.height(PrismRole.standard) * _layoutTileScale,
-      child: Center(
-        child: Transform.scale(
-          scale: _layoutTileScale,
-          child: PrismButton(
-            key: ValueKey('screen-layout-${layout.id}'),
-            label: '$ratio layout${base ? ', base' : ''}',
-            value: selected ? 'Selected' : null,
-            face: _LayoutPrismFace(
-              layoutId: layout.id,
-              aspect: layout.aspect,
-              ratio: ratio,
-              palette: host.palette,
-              style: host.dashboard.settings.prismStyle,
-              selected: selected,
-              enabled: enabled,
-            ),
-            palette: host.palette,
-            lit: selected,
-            selected: selected,
-            enabled: enabled,
-            role: PrismRole.standard,
-            square: true,
-            style: host.dashboard.settings.prismStyle,
-            onPressed: enabled ? () => host.onSelectLayout(layout.id) : null,
-          ),
+      constraints: const BoxConstraints(
+        minWidth: 44,
+        minHeight: 44,
+        maxWidth: _layoutSpecimenExtent,
+        maxHeight: _layoutSpecimenExtent,
+      ),
+      child: AspectRatio(
+        aspectRatio: 1,
+        child: EditorLayoutSpecimen(
+          key: ValueKey('screen-layout-${layout.id}'),
+          skin: host.chromeSkin,
+          diagramKey: ValueKey('layout-ratio-frame-${layout.id}'),
+          aspect: layout.aspect,
+          ratio: ratio,
+          semanticLabel: '$ratio layout${base ? ', base' : ''}',
+          selected: selected,
+          enabled: enabled,
+          onSelected: enabled ? () => host.onSelectLayout(layout.id) : null,
         ),
       ),
     );
@@ -1691,87 +1686,6 @@ class _RatioPair {
 
   final double width;
   final double height;
-}
-
-class _LayoutPrismFace extends StatelessWidget {
-  const _LayoutPrismFace({
-    required this.layoutId,
-    required this.aspect,
-    required this.ratio,
-    required this.palette,
-    required this.style,
-    required this.selected,
-    required this.enabled,
-  });
-
-  final String layoutId;
-  final double aspect;
-  final String ratio;
-  final VfdPalette palette;
-  final PrismStyle style;
-  final bool selected;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    mainAxisAlignment: MainAxisAlignment.center,
-    mainAxisSize: MainAxisSize.min,
-    children: <Widget>[
-      SizedBox(
-        width: 30,
-        height: 14,
-        child: CustomPaint(
-          key: ValueKey('layout-ratio-frame-$layoutId'),
-          painter: _LayoutShapePainter(
-            aspect: aspect,
-            color: (selected ? palette.lit : palette.unlit).withValues(
-              alpha: enabled ? 1 : 0.32,
-            ),
-          ),
-        ),
-      ),
-      const SizedBox(height: 1),
-      PrismLegend(
-        ratio,
-        palette: palette,
-        lit: selected,
-        enabled: enabled,
-        inactiveLuminosity: style.inactiveLuminosity,
-        size: 8,
-      ),
-    ],
-  );
-}
-
-class _LayoutShapePainter extends CustomPainter {
-  const _LayoutShapePainter({required this.aspect, required this.color});
-
-  final double aspect;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final available = Size(
-      math.max(0, size.width - 12),
-      math.max(0, size.height - 12),
-    );
-    final fitted = applyBoxFit(BoxFit.contain, Size(aspect, 1), available);
-    final rect = Alignment.center.inscribe(
-      fitted.destination,
-      Offset.zero & size,
-    );
-    canvas.drawRect(
-      rect,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5
-        ..color = color.withValues(alpha: 0.8),
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _LayoutShapePainter oldDelegate) =>
-      oldDelegate.aspect != aspect || oldDelegate.color != color;
 }
 
 class _AspectMapPainter extends CustomPainter {

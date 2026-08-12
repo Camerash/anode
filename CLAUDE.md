@@ -409,9 +409,12 @@ clears the request. Large and resizable displays can reject orientation lock;
 the selected layout stays fixed while the system can rotate the window.
 
 DESIGN opens layout setup directly. Its top row contains `ADD LAYOUT` and
-`LOCK`. A fixed three-column Prism grid shows each frame as an aspect rectangle
-with a ratio label. Layout controls use square housings and stay centered in
-equal-width columns. The selected tile controls the editable canvas. With
+`LOCK`. A fixed three-column specimen grid shows each frame as an aspect
+rectangle with a ratio label. Specimens are passive selection surfaces, not
+Prism command buttons. Skin owns specimen material and selected-state visuals;
+shared editor code owns input, focus, and semantics. Square specimens stay
+centered in equal-width columns and stop growing at 128 logical pixels. The
+selected specimen controls the editable canvas. With
 `LOCK` off, runtime adapts to the closest layout. With `LOCK` on, runtime uses
 the selected layout and disables the other layout tiles. Lock does not disable
 authoring.

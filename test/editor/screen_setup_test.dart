@@ -1,6 +1,8 @@
 import 'dart:ui' as ui;
 
 import 'package:anode/editor/editor_page.dart';
+import 'package:anode/editor/editor_layout_specimen.dart';
+import 'package:anode/interface/button_actuation_feedback.dart';
 import 'package:anode/model/dashboard.dart';
 import 'package:anode/model/design.dart';
 import 'package:anode/model/design_layout.dart';
@@ -52,8 +54,17 @@ void main() {
     final squareButton = tester.getRect(
       find.byKey(const ValueKey('layout-tile-square')),
     );
-    expect(wideButton.size, const Size.square(108));
-    expect(squareButton.size, const Size.square(108));
+    expect(wideButton.width, wideButton.height);
+    expect(squareButton.width, squareButton.height);
+    expect(wideButton.width, inInclusiveRange(44, 128));
+    expect(squareButton.width, inInclusiveRange(44, 128));
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('layout-tile-wide')),
+        matching: find.byType(PrismButton),
+      ),
+      findsNothing,
+    );
 
     final gridRect = tester.getRect(
       find.byKey(const ValueKey('screen-layout-grid')),
@@ -71,7 +82,8 @@ void main() {
     final frame = tester.getRect(
       find.byKey(const ValueKey('layout-ratio-frame-wide')),
     );
-    expect(frame.size, const Size(60, 28));
+    expect(frame.size.width, greaterThan(60));
+    expect(frame.size.height, greaterThan(28));
   });
 
   testWidgets('Lock fixes selected layout and removal restores base', (
@@ -111,13 +123,15 @@ void main() {
     );
     expect(
       tester
-          .widget<PrismButton>(find.byKey(const ValueKey('screen-layout-wide')))
+          .widget<EditorLayoutSpecimen>(
+            find.byKey(const ValueKey('screen-layout-wide')),
+          )
           .enabled,
       isFalse,
     );
     expect(
       tester
-          .widget<PrismButton>(
+          .widget<EditorLayoutSpecimen>(
             find.byKey(const ValueKey('screen-layout-square')),
           )
           .selected,
@@ -131,7 +145,9 @@ void main() {
     expect(dashboard.screenSetup.behavior, ScreenBehavior.adapt);
     expect(
       tester
-          .widget<PrismButton>(find.byKey(const ValueKey('screen-layout-wide')))
+          .widget<EditorLayoutSpecimen>(
+            find.byKey(const ValueKey('screen-layout-wide')),
+          )
           .selected,
       isTrue,
     );
@@ -167,13 +183,15 @@ void main() {
     expect(dashboard.screenSetup.lockedLayoutId, 'wide');
     expect(
       tester
-          .widget<PrismButton>(find.byKey(const ValueKey('screen-layout-wide')))
+          .widget<EditorLayoutSpecimen>(
+            find.byKey(const ValueKey('screen-layout-wide')),
+          )
           .selected,
       isTrue,
     );
     expect(
       tester
-          .widget<PrismButton>(
+          .widget<EditorLayoutSpecimen>(
             find.byKey(const ValueKey('screen-layout-layout-1')),
           )
           .enabled,
@@ -224,6 +242,34 @@ void main() {
     final delegate =
         grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
     expect(delegate.crossAxisCount, 3);
+    final tile = tester.getSize(find.byKey(const ValueKey('layout-tile-wide')));
+    expect(tile.width, tile.height);
+    expect(tile.width, lessThanOrEqualTo(128));
+  });
+
+  testWidgets('Layout specimen selects without Prism feedback', (tester) async {
+    _setView(tester, const Size(1200, 700));
+    var dashboard = Dashboard.forkFrom(
+      developmentPreset(),
+      id: 'editor',
+    ).withLayout(id: 'square', aspect: 1, sourceLayoutId: 'wide');
+    final events = <String>[];
+
+    await _pumpEditor(
+      tester,
+      dashboard,
+      feedback: _RecordingButtonFeedback(events),
+      onChanged: (value) => dashboard = value,
+    );
+    await _openConsole(tester);
+    events.clear();
+
+    final square = find.byKey(const ValueKey('screen-layout-square'));
+    await tester.tap(square);
+    await tester.pump();
+
+    expect(events, isEmpty);
+    expect(tester.widget<EditorLayoutSpecimen>(square).selected, isTrue);
   });
 }
 
@@ -238,9 +284,13 @@ Future<void> _pumpEditor(
   WidgetTester tester,
   Dashboard dashboard, {
   required ValueChanged<Dashboard> onChanged,
+  ButtonActuationFeedback feedback = SilentButtonActuationFeedback.instance,
 }) => tester.pumpWidget(
-  MaterialApp(
-    home: EditorPage(dashboard: dashboard, onChanged: onChanged),
+  ButtonFeedbackScope(
+    feedback: feedback,
+    child: MaterialApp(
+      home: EditorPage(dashboard: dashboard, onChanged: onChanged),
+    ),
   ),
 );
 
@@ -248,4 +298,36 @@ Future<void> _openConsole(WidgetTester tester) async {
   await tester.tap(find.byKey(const ValueKey('editor-console')));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 180));
+}
+
+class _RecordingButtonFeedback implements ButtonActuationFeedback {
+  _RecordingButtonFeedback(this.events);
+
+  final List<String> events;
+
+  @override
+  ButtonPressSession beginPress() {
+    events.add('down');
+    return _RecordingPressSession(events);
+  }
+
+  @override
+  void activate() => events.add('activate');
+
+  @override
+  Future<void> dispose() async {}
+}
+
+class _RecordingPressSession implements ButtonPressSession {
+  _RecordingPressSession(this.events);
+
+  final List<String> events;
+  bool _released = false;
+
+  @override
+  void release() {
+    if (_released) return;
+    _released = true;
+    events.add('up');
+  }
 }
