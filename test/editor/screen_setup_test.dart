@@ -44,6 +44,12 @@ void main() {
     final add = tester.getRect(find.byKey(const ValueKey('add-layout')));
     final modify = tester.getRect(find.byKey(const ValueKey('modify-layout')));
     final lock = tester.getRect(find.byKey(const ValueKey('screen-lock')));
+    expect(
+      tester
+          .widget<PrismButton>(find.byKey(const ValueKey('modify-layout')))
+          .lit,
+      isTrue,
+    );
     expect(add.center.dy, modify.center.dy);
     expect(modify.center.dy, lock.center.dy);
     expect(add.right, lessThan(modify.left));

@@ -1442,6 +1442,7 @@ class _DesignPanel extends StatelessWidget {
               key: const ValueKey('modify-layout'),
               label: 'Modify',
               palette: host.palette,
+              lit: true,
               role: PrismRole.compact,
               style: host.dashboard.settings.prismStyle,
               onPressed: host.onBeginLayoutModification,
