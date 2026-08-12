@@ -1430,13 +1430,21 @@ class _DesignPanel extends StatelessWidget {
           children: <Widget>[
             PrismButton(
               key: const ValueKey('add-layout'),
-              label: 'Add layout',
+              label: 'Add',
               palette: host.palette,
               lit: true,
               role: PrismRole.compact,
-              span: PrismSpan.two,
               style: host.dashboard.settings.prismStyle,
               onPressed: host.onBeginLayoutDraft,
+            ),
+            const SizedBox(width: 6),
+            PrismButton(
+              key: const ValueKey('modify-layout'),
+              label: 'Modify',
+              palette: host.palette,
+              role: PrismRole.compact,
+              style: host.dashboard.settings.prismStyle,
+              onPressed: host.onBeginLayoutModification,
             ),
             const Spacer(),
             PrismButton(
@@ -1453,31 +1461,21 @@ class _DesignPanel extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Expanded(child: _layoutGrid(locked)),
-        const SizedBox(height: 8),
-        Row(
-          children: <Widget>[
-            PrismButton(
-              key: const ValueKey('modify-layout'),
-              label: 'Modify',
-              palette: host.palette,
+        if (host.layoutId != host.dashboard.baseLayoutId) ...<Widget>[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: PrismButton(
+              key: const ValueKey('remove-layout'),
+              label: 'Remove',
+              palette: _dangerPalette,
+              lit: true,
               role: PrismRole.compact,
-              span: PrismSpan.two,
               style: host.dashboard.settings.prismStyle,
-              onPressed: host.onBeginLayoutModification,
+              onPressed: () => host.onRemoveLayout(host.layoutId),
             ),
-            const Spacer(),
-            if (host.layoutId != host.dashboard.baseLayoutId)
-              PrismButton(
-                key: const ValueKey('remove-layout'),
-                label: 'Remove',
-                palette: _dangerPalette,
-                lit: true,
-                role: PrismRole.compact,
-                style: host.dashboard.settings.prismStyle,
-                onPressed: () => host.onRemoveLayout(host.layoutId),
-              ),
-          ],
-        ),
+          ),
+        ],
       ],
     );
   }

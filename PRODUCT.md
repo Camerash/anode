@@ -59,6 +59,9 @@ specimen shows its frame shape and ratio. Skin supplies its material and
 selection treatment. Theme-specific buttons remain reserved for explicit
 commands such as Add, Lock, Modify, and Remove.
 
+DESIGN groups `ADD`, `MODIFY`, and `LOCK` in one row above the specimen grid.
+Remove stays a selected-layout action below the grid.
+
 With `LOCK` off, Anode selects the layout with the closest frame ratio to the
 current viewport. If one layout exists, Anode contain-fits it on every screen.
 With `LOCK` on, Anode fixes runtime to the selected layout and disables the

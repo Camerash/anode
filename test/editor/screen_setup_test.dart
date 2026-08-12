@@ -41,6 +41,14 @@ void main() {
     );
     expect(find.byKey(const ValueKey('remove-layout')), findsNothing);
 
+    final add = tester.getRect(find.byKey(const ValueKey('add-layout')));
+    final modify = tester.getRect(find.byKey(const ValueKey('modify-layout')));
+    final lock = tester.getRect(find.byKey(const ValueKey('screen-lock')));
+    expect(add.center.dy, modify.center.dy);
+    expect(modify.center.dy, lock.center.dy);
+    expect(add.right, lessThan(modify.left));
+    expect(modify.right, lessThan(lock.left));
+
     final grid = tester.widget<GridView>(
       find.byKey(const ValueKey('screen-layout-grid')),
     );
